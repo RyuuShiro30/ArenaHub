@@ -81,7 +81,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
         _promoError = null;
       } else {
         _promoAktif = null;
-        _promoError = 'Kode promo tidak valid atau sudah kadaluarsa';
+        _promoError = 'Kode promo tidak valid';
       }
     });
   }
@@ -122,24 +122,6 @@ class _FormBookingPageState extends State<FormBookingPage> {
     setState(() => _isLoading = false);
 
     if (!mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _DialogSukses(
-        namaLapangan: widget.booking.namaLapangan,
-        total: _formatRupiah(_total),
-        onKembali: () {
-          // Tutup dialog lalu kembali ke home via named route
-          // Sesuaikan '/home' dengan nama route yang ada di routes/
-          Navigator.of(context).pop();
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            '/home',
-            (route) => false,
-          );
-        },
-      ),
-    );
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -181,11 +163,11 @@ class _FormBookingPageState extends State<FormBookingPage> {
         'Detail Booking',
         style: TextStyle(
           color: _primaryColor,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w900,
           fontSize: 18,
         ),
       ),
-      centerTitle: true,
+      centerTitle: false,
     );
   }
 
@@ -730,82 +712,6 @@ class _PlaceholderGambar extends StatelessWidget {
       child: const Center(
         child: Icon(Icons.sports_soccer_rounded,
             size: 48, color: Color(0xFF1B4E82)),
-      ),
-    );
-  }
-}
-
-class _DialogSukses extends StatelessWidget {
-  final String namaLapangan;
-  final String total;
-  final VoidCallback onKembali;
-
-  const _DialogSukses({
-    required this.namaLapangan,
-    required this.total,
-    required this.onKembali,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      contentPadding: const EdgeInsets.all(24),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF4CAF50).withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.check_circle_rounded,
-                color: Color(0xFF4CAF50), size: 48),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Booking Berhasil!',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$namaLapangan telah berhasil dipesan.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, color: Color(0xFF666666)),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Total: $total',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1B4E82),
-            ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onKembali,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B4E82),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                elevation: 0,
-              ),
-              child: const Text('Kembali ke Beranda',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-            ),
-          ),
-        ],
       ),
     );
   }
