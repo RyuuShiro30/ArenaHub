@@ -9,8 +9,8 @@ dependencies:
     sdk: flutter
   crypto: ^3.0.3
   google_fonts: ^8.0.2
-  intl: ^0.18.0
-
+  webview_flutter: ^4.13.1
+  intl: ^0.19.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
