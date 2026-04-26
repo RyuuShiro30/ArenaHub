@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'konfirmasi_booking.dart';
 
 import '../../../data/model/booking_model.dart';
 
@@ -96,32 +97,34 @@ class _FormBookingPageState extends State<FormBookingPage> {
 
   // ─── Submit booking ───────────────────────────────────────────────────────
 
+  // ─── Submit booking ───────────────────────────────────────────────────────
+
   Future<void> _konfirmasiBooking() async {
-    // Tutup keyboard
     FocusScope.of(context).unfocus();
 
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-
-    // TODO: Kirim data ke Supabase / backend
-    // Contoh payload yang dikirim:
-    // {
-    //   'nama': _namaController.text.trim(),
-    //   'telepon': _teleponController.text.trim(),
-    //   'catatan': _catatanController.text.trim(),
-    //   'lapangan': widget.booking.namaLapangan,
-    //   'tanggal': widget.booking.tanggal.toIso8601String(),
-    //   'jam_mulai': widget.booking.jamMulai.toString(),
-    //   'jam_selesai': widget.booking.jamSelesai.toString(),
-    //   'total': _total,
-    //   'kode_promo': _promoAktif?.kode,
-    // }
-    await Future.delayed(const Duration(seconds: 1)); // simulasi loading
-
+    await Future.delayed(const Duration(seconds: 1));
     setState(() => _isLoading = false);
 
     if (!mounted) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => KonfirmasiBookingPage(
+          data: KonfirmasiData(
+            booking: widget.booking,
+            namaPemesan: _namaController.text.trim(),
+            nomorTelepon: _teleponController.text.trim(),
+            catatan: _catatanController.text.trim(),
+            promo: _promoAktif,
+            biayaLayanan: 5000,
+          ),
+        ),
+      ),
+    );
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
