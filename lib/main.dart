@@ -24,6 +24,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       initialRoute: AppRoutes.pilihJadwal, // 👈 UBAH DI SINI
+      initialRoute: AppRoutes.splash, refs/rewritten/resolve-conflict-merge-main
       routes: AppRoutes.routes,
     );
   }
