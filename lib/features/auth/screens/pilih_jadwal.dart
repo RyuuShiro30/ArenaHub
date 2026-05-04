@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class PilihJadwalPage extends StatefulWidget {
+  const PilihJadwalPage({super.key});
+
   @override
   _PilihJadwalPageState createState() => _PilihJadwalPageState();
 }
 
 class _PilihJadwalPageState extends State<PilihJadwalPage> {
-  DateTime selectedDate = DateTime(2026, 3, 24);
-  String? selectedTime;
+  DateTime selectedDate = DateTime.now();
+  
+  // Perubahan 1: Gunakan List untuk menampung banyak pilihan
+  List<String> selectedTimes = [];
 
   final Color primaryBlue = Color(0xFF0B4E89);
   final Color primaryGreen = Color(0xFF1A8C6A);
-  final Color fullGrey = Color(0xFFE2E8F0); // Kode Figma E2E8F0
+  final Color fullGrey = Color(0xFFE2E8F0);
+  final int pricePerHour = 150000;
 
   List<String> times = [
     "06.00 - 07.00", "07.00 - 08.00", "08.00 - 09.00",
@@ -22,8 +27,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
     "18.00 - 19.00", "19.00 - 20.00", "20.00 - 21.00",
   ];
 
-  // Contoh data jam yang sudah penuh
-  List<String> fullTimes = ["07.00 - 08.00", "09.00 - 10.00", "15.00 - 16.00"];
+  List<String> fullTimes = [];
 
   List<DateTime> getFiveDays() {
     return List.generate(5, (index) {
@@ -31,10 +35,22 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
     });
   }
 
+  // Perubahan 2: Fungsi formatter untuk harga Rupiah
+  String formatCurrency(int amount) {
+    return NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    ).format(amount);
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Perubahan 3: Hitung total harga berdasarkan jumlah pilihan
+    int totalAmount = selectedTimes.length * pricePerHour;
+
     return Scaffold(
-      backgroundColor: Color(0xffF5F6FA),
+      backgroundColor: const Color(0xffF5F6FA),
       body: SafeArea(
         child: Column(
           children: [
@@ -46,7 +62,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                     onTap: () => Navigator.pop(context),
                     child: Icon(Icons.arrow_back, color: primaryBlue),
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -55,7 +71,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                               color: primaryBlue)),
-                      Text("ArenaHub • Lapangan A",
+                      const Text("ArenaHub • Lapangan A",
                           style: TextStyle(fontSize: 12)),
                     ],
                   )
@@ -69,7 +85,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                   child: Column(
                     children: [
                       Container(
-                        padding: EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
@@ -85,16 +101,16 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                 fit: BoxFit.cover,
                               ),
                             ),
-                            SizedBox(width: 12),
+                            const SizedBox(width: 12),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text("Lapangan Futsal A",
+                                const Text("Lapangan Futsal A",
                                     style: TextStyle(
                                         fontWeight: FontWeight.bold)),
-                                Text("Futsal • Vinyl Floor"),
-                                SizedBox(height: 4),
-                                Text("IDR 150.000 /jam",
+                                const Text("Futsal • Vinyl Floor"),
+                                const SizedBox(height: 4),
+                                Text("${formatCurrency(pricePerHour)} /jam",
                                     style: TextStyle(
                                         color: primaryBlue,
                                         fontWeight: FontWeight.bold)),
@@ -103,16 +119,16 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                           ],
                         ),
                       ),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
                             DateFormat("MMMM yyyy").format(selectedDate),
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           IconButton(
-                            icon: Icon(Icons.calendar_month),
+                            icon: const Icon(Icons.calendar_month),
                             onPressed: () async {
                               DateTime? picked = await showDatePicker(
                                 context: context,
@@ -129,7 +145,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                           )
                         ],
                       ),
-                      SizedBox(height: 10),
+                      const SizedBox(height: 10),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -144,7 +160,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                               child: Container(
                                 width: 60,
                                 height: 80,
-                                margin: EdgeInsets.only(right: 10),
+                                margin: const EdgeInsets.only(right: 10),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(24),
@@ -154,7 +170,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                   ),
                                 ),
                                 child: Container(
-                                  margin: isSelected ? EdgeInsets.all(2.5) : EdgeInsets.zero,
+                                  margin: isSelected ? const EdgeInsets.all(2.5) : EdgeInsets.zero,
                                   padding: const EdgeInsets.only(left: 9.18, right: 9.19),
                                   decoration: BoxDecoration(
                                     color: isSelected ? primaryBlue : Colors.transparent,
@@ -187,8 +203,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                           }).toList(),
                         ),
                       ),
-                      SizedBox(height: 20),
-                      Align(
+                      const SizedBox(height: 20),
+                      const Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
                           "Slot Waktu Tersedia",
@@ -196,12 +212,12 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                               fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ),
-                      SizedBox(height: 10),
+                      const SizedBox(height: 10),
                       GridView.builder(
                         shrinkWrap: true,
-                        physics: NeverScrollableScrollPhysics(),
+                        physics: const NeverScrollableScrollPhysics(),
                         itemCount: times.length,
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 3,
                           childAspectRatio: 102.34 / 46,
                           crossAxisSpacing: 8,
@@ -209,15 +225,22 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                         ),
                         itemBuilder: (context, index) {
                           String time = times[index];
-                          bool isSelected = selectedTime == time;
+                          
+                          // Perubahan 4: Cek apakah jam ini ada di dalam list pilihan
+                          bool isSelected = selectedTimes.contains(time);
                           bool isFull = fullTimes.contains(time);
 
                           return GestureDetector(
                             onTap: isFull 
-                                ? null // Tidak bisa diklik jika penuh
+                                ? null 
                                 : () {
                                     setState(() {
-                                      selectedTime = time;
+                                      // Perubahan 5: Toggle pilihan (tambah jika belum ada, hapus jika sudah ada)
+                                      if (isSelected) {
+                                        selectedTimes.remove(time);
+                                      } else {
+                                        selectedTimes.add(time);
+                                      }
                                     });
                                   },
                             child: Container(
@@ -232,7 +255,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                 ),
                               ),
                               child: Container(
-                                margin: isSelected ? EdgeInsets.all(2) : EdgeInsets.zero,
+                                margin: isSelected ? const EdgeInsets.all(2) : EdgeInsets.zero,
                                 alignment: Alignment.center,
                                 padding: const EdgeInsets.only(
                                     left: 13.91, right: 13.9, top: 12, bottom: 12),
@@ -260,14 +283,14 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                           );
                         },
                       ),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           legend(primaryGreen.withOpacity(0.2), "Tersedia"),
-                          SizedBox(width: 10),
+                          const SizedBox(width: 10),
                           legend(primaryBlue, "Dipilih"),
-                          SizedBox(width: 10),
+                          const SizedBox(width: 10),
                           legend(fullGrey, "Penuh"),
                         ],
                       ),
@@ -276,9 +299,11 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                 ),
               ),
             ),
+            
+            // BOTTOM BAR DENGAN KALKULASI DINAMIS
             Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
@@ -293,9 +318,10 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Total Harga (1 Jam)",
-                          style: TextStyle(fontSize: 12)),
-                      Text("IDR 150.000",
+                      // Perubahan 6: Tampilkan jumlah jam yang dipilih
+                      Text("Total Harga (${selectedTimes.length} Jam)",
+                          style: const TextStyle(fontSize: 12)),
+                      Text(formatCurrency(totalAmount),
                           style: TextStyle(
                               fontWeight: FontWeight.w800,
                               color: primaryBlue,
@@ -308,11 +334,23 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
                       ),
-                      padding: EdgeInsets.symmetric(
+                      padding: const EdgeInsets.symmetric(
                           horizontal: 24, vertical: 14),
                     ),
-                    onPressed: () {},
-                    child: Text("Lanjut ke Booking",
+                    onPressed: selectedTimes.isEmpty ? null : () {
+                      Navigator.pushNamed(
+                      context,
+                      '/payment',
+                      arguments: {
+                        'totalHarga': totalAmount + 5000, // +5000 biaya layanan
+                        'namaLapangan': 'Lapangan Futsal A',
+                        'customerName': 'Nama Customer', // ganti dengan data user asli
+                        'email': 'email@example.com',    // ganti dengan data user asli
+                        'phone': '08123456789',          // ganti dengan data user asli
+                      },
+                    );
+                    },
+                    child: const Text("Lanjut ke Booking",
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Colors.white)),
@@ -335,7 +373,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
           decoration: BoxDecoration(
               color: color, borderRadius: BorderRadius.circular(3)),
         ),
-        SizedBox(width: 4),
+        const SizedBox(width: 4),
         Text(text)
       ],
     );

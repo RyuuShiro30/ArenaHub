@@ -1,8 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-// Adjust these imports to match your project structure
 import 'package:appbookinglapangan/data/service/midtrans_service.dart';
-import 'package:appbookinglapangan/features/booking/screens/payment_webview.dart';
-import 'package:appbookinglapangan/features/booking/screens/payment_webview.dart';
+import 'package:appbookinglapangan/routes/app_routes.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PaymentScreen extends StatefulWidget {
   final int totalHarga;
@@ -26,13 +26,109 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   final MidtransService midtransService = MidtransService();
-  bool isLoading = false;
+  
+  bool isLoading = true;
+  String? qrUrl;
+  String? currentOrderId;
 
-  // Custom colors based on the design
+  Timer? _timer;
+  int _remainingSeconds = 15 * 60;
+  String _bookingCode = '';
+
   final Color primaryDarkBlue = const Color(0xFF0F4C81);
   final Color backgroundColor = const Color(0xFFF4F6F9);
 
-  // Helper function to format currency
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+    _initializeBookingAndPayment();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  // Integrasi: Menggabungkan inisialisasi ID dan pemanggilan Midtrans
+  Future<void> _initializeBookingAndPayment() async {
+    await _generateSequentialBookingCode();
+    await payNow();
+  }
+
+ Future<void> _generateSequentialBookingCode() async {
+  try {
+    // 1. Ambil tanggal hari ini (Format: YYYYMMDD)
+    final now = DateTime.now();
+    final dateTag = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}";
+
+    // 2. Cari transaksi terakhir KHUSUS hari ini
+    final snapshot = await FirebaseFirestore.instance
+        .collection('bookings')
+        .where('order_id', isGreaterThanOrEqualTo: 'INV-$dateTag-')
+        .where('order_id', isLessThanOrEqualTo: 'INV-$dateTag-\uf8ff')
+        .orderBy('order_id', descending: true)
+        .limit(1)
+    .get();
+
+    if (snapshot.docs.isEmpty) {
+      // Jika booking pertama hari ini
+      _bookingCode = 'INV-$dateTag-001';
+    } else {
+      String lastId = snapshot.docs.first.data()['order_id'] ?? '';
+      
+      // Ambil 3 angka terakhir (setelah strip kedua)
+      List<String> parts = lastId.split('-');
+      int nextNumber = 1;
+      
+      if (parts.length >= 3) {
+        nextNumber = (int.tryParse(parts[2]) ?? 0) + 1;
+      }
+      
+      _bookingCode = 'INV-$dateTag-${nextNumber.toString().padLeft(3, '0')}';
+    }
+  } catch (e) {
+    // Fallback: Gunakan millisecond agar Midtrans tidak menolak karena ID Duplikat
+    _bookingCode = 'INV-${DateTime.now().millisecondsSinceEpoch}';
+    print("Error ID: $e");
+  }
+
+  if (mounted) setState(() {});
+}
+
+// Ini fungsi bantuan untuk simulasi (nanti hubungkan ke backend/provider kamu)
+Future<String> _fetchLastOrderId() async {
+  // Contoh: jika Rani sudah pernah buat INV-00001, 
+  // maka fungsi ini harusnya mengembalikan 'INV-00001'
+  return 'INV-00001'; 
+}
+
+  Future<String> _fetchLastBookingIdFromDatabase() async {
+    // Placeholder untuk integrasi database di masa depan
+    return ''; 
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingSeconds > 0) {
+        if (mounted) {
+          setState(() {
+            _remainingSeconds--;
+          });
+        }
+      } else {
+        _timer?.cancel();
+      }
+    });
+  }
+
+  String _getFormattedTimer() {
+    int minutes = _remainingSeconds ~/ 60;
+    int seconds = _remainingSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   String _formatRupiah(int amount) {
     String amountStr = amount.toString();
     String result = '';
@@ -48,35 +144,74 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> payNow() async {
-    setState(() {
-      isLoading = true;
-    });
+    if (_bookingCode.isEmpty) return;
+    
+    setState(() => isLoading = true);
 
-    final paymentUrl = await midtransService.createTransaction(
-      orderId: 'ORDER-${DateTime.now().millisecondsSinceEpoch}',
+    currentOrderId = _bookingCode;
+
+    final qr = await midtransService.createTransaction(
+      orderId: currentOrderId!,
       grossAmount: widget.totalHarga,
       customerName: widget.customerName,
       email: widget.email,
       phone: widget.phone,
     );
 
+    if (mounted) {
+      setState(() {
+        qrUrl = qr;
+        isLoading = false;
+      });
+
+      if (qr == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gagal membuat QR. Cek koneksi atau Server Key Midtrans kamu.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> handleConfirmPayment() async {
+    if (currentOrderId == null) return;
+
     setState(() {
-      isLoading = false;
+      isLoading = true;
     });
 
-    if (paymentUrl != null && mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PaymentWebView(url: paymentUrl),
-        ),
-      );
+    final status = await midtransService.checkStatus(currentOrderId!);
+
+    if (mounted) {
+      setState(() {
+        isLoading = false;
+      });
+
+      if (status == 'settlement' || status == 'pending') { 
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.paymentSucces,
+          (route) => false,
+          arguments: currentOrderId,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              status == null
+                  ? "Gagal cek status pembayaran"
+                  : "Status pembayaran: $status",
+            ),
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Assuming a fixed service fee of 5000 for the breakdown
     final int serviceFee = 5000;
     final int basePrice = widget.totalHarga - serviceFee;
 
@@ -112,7 +247,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   Icon(Icons.access_time, color: Colors.red.shade700, size: 16),
                   const SizedBox(width: 4),
                   Text(
-                    '29:59',
+                    _getFormattedTimer(),
                     style: TextStyle(
                       color: Colors.red.shade700,
                       fontWeight: FontWeight.bold,
@@ -130,7 +265,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. FIELD RENTAL INFO CARD
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -141,7 +275,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Placeholder for Field Image
                   Container(
                     height: 140,
                     width: double.infinity,
@@ -171,9 +304,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                 color: Colors.grey.shade100,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Text(
-                                '#INV-88291',
-                                style: TextStyle(
+                              child: Text(
+                                _bookingCode.isEmpty ? '#...' : '#$_bookingCode',
+                                style: const TextStyle(
                                   color: Colors.grey,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
@@ -215,7 +348,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             const SizedBox(height: 24),
 
-            // 2. PAYMENT METHOD HEADER
             Row(
               children: [
                 Icon(Icons.account_balance_wallet_outlined,
@@ -233,7 +365,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 3. QRIS CARD
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -242,7 +373,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
               child: Column(
                 children: [
-                  // Card Header
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
@@ -283,24 +413,76 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     ),
                   ),
                   const Divider(height: 1),
-                  // QR Code Image Box & Instructions
                   Padding(
                     padding: const EdgeInsets.all(24.0),
                     child: Column(
                       children: [
                         Container(
-                          height: 200,
-                          width: 200,
+                          height: 220,
+                          width: 220,
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade800,
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade300),
                           ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.qr_code_2,
-                              color: Colors.white,
-                              size: 150,
-                            ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: isLoading
+                                ? Center(
+                                    child: CircularProgressIndicator(
+                                      color: primaryDarkBlue,
+                                    ),
+                                  )
+                                : qrUrl != null
+                                    ? Image.network(
+                                        qrUrl!,
+                                        fit: BoxFit.contain,
+                                        loadingBuilder: (context, child, progress) {
+                                          if (progress == null) return child;
+                                          return const Center(
+                                            child: CircularProgressIndicator(),
+                                          );
+                                        },
+                                        errorBuilder: (context, error, stack) {
+                                          return const Center(
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.broken_image, color: Colors.grey),
+                                                SizedBox(height: 8),
+                                                Text(
+                                                  'Gagal memuat QR',
+                                                  style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      )
+                                    : Center(
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.error_outline,
+                                              size: 60,
+                                              color: Colors.red.shade300,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'QR gagal dimuat.\nCek koneksi kamu.',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: Colors.grey.shade500,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -320,7 +502,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             const SizedBox(height: 24),
 
-            // 4. SUMMARY SECTION
             const Text(
               'Ringkasan Pesanan',
               style: TextStyle(
@@ -397,8 +578,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ],
         ),
       ),
-      
-      // BOTTOM NAVIGATION AREA (Payment Action)
+
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -416,7 +596,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(20),
@@ -424,8 +605,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.shield_outlined,
-                        size: 16, color: primaryDarkBlue),
+                    Icon(Icons.shield_outlined, size: 16, color: primaryDarkBlue),
                     const SizedBox(width: 8),
                     Text(
                       'Pembayaran aman & terenkripsi',
@@ -439,11 +619,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: isLoading ? null : payNow,
+                  onPressed: isLoading ? null : handleConfirmPayment,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryDarkBlue,
                     shape: RoundedRectangleBorder(
@@ -453,23 +634,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ),
                   child: isLoading
                       ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
                       : const Text(
                           'Konfirmasi Pembayaran',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                 ),
               ),
+
+              const SizedBox(height: 12),
             ],
           ),
         ),
