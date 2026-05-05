@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class MidtransService {
-  final String serverKey = dotenv.env['DUMMY_KEY'] ?? '';
+  final String serverKey = dotenv.env['MIDTRANS_SERVER_KEY'] ?? '';
 
   static const String baseUrl =
       'https://api.sandbox.midtrans.com/v2/charge';
