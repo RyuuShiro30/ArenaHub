@@ -16,7 +16,7 @@ class PaymentSuccessPage extends StatelessWidget {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Color(0xFF004080)),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
         ),
         title: const Text(
           "Status Pembayaran",
@@ -173,13 +173,24 @@ class PaymentSuccessPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton(
-                  onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                  onPressed: () {
+                    // Fungsi ini akan menghapus semua halaman (Payment, Success, dll) 
+                    // dan menjadikan '/dashboard' sebagai halaman utama.
+                    Navigator.pushNamedAndRemoveUntil(
+                      context, 
+                      '/home', // <--- Ganti dengan nama route Dashboard/Beranda kamu
+                      (route) => false,
+                    );
+                  },
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
                     side: const BorderSide(color: Color(0xFF0D47A1)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                   ),
-                  child: const Text("Kembali ke Beranda", style: TextStyle(color: Color(0xFF0D47A1))),
+                  child: const Text(
+                    "Kembali ke Beranda", 
+                    style: TextStyle(color: Color(0xFF0D47A1), fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
