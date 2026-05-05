@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'register_screen.dart';
 import 'reset_password_screen.dart';
+import 'package:appbookinglapangan/features/home/screens/home_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,8 +17,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController passwordController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
-  // --- Konstanta Warna ---
   final Color backgroundColor = const Color(0xFFF3F4F7);
   final Color navyDark = const Color(0xFF1B2430);
   final Color primaryBlue = const Color(0xFF135B9D);
@@ -29,37 +32,67 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- LOGIKA VALIDASI (Mirip Register) ---
-  void _handleLogin(BuildContext context) {
-    String email = emailController.text.trim();
-    String password = passwordController.text; // Jangan di-trim agar spasi password terbaca
+  Future<void> _handleLogin(BuildContext context) async {
+    String input = emailController.text.trim();
+    String password = passwordController.text;
+    String emailToLogin = input; 
 
-    // 1. Validasi Kosong
-    if (email.isEmpty) {
-      _showSnackBar(context, "Email atau Nomor Telepon tidak boleh kosong");
-      return;
-    }
-    if (password.isEmpty) {
-      _showSnackBar(context, "Kata sandi tidak boleh kosong");
+    if (input.isEmpty || password.isEmpty) {
+      _showSnackBar(context, "Email/Nomor Telepon dan kata sandi tidak boleh kosong");
       return;
     }
 
-    // 2. Validasi Format Email (Hanya jika user input email, bukan nomor telp)
-    if (email.contains('@') && !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
-      _showSnackBar(context, "Format email tidak valid");
-      return;
-    }
+    setState(() => _isLoading = true);
 
-    // 3. Validasi Kekuatan Password (Samakan dengan kriteria Register)
-    RegExp passRegex = RegExp(r'^(?=.*?[0-9])(?=.*?[!@#\$&*~]).{8,}$');
-    if (!passRegex.hasMatch(password)) {
-      _showSnackBar(context, "Password minimal 8 karakter dengan kombinasi huruf besar, angka, dan simbol(!@#\$&*)");
-      return;
-    }
+    try {
+      if (RegExp(r'^[0-9]+$').hasMatch(input)) {
+        var userQuery = await FirebaseFirestore.instance
+            .collection('users')
+            .where('phone', isEqualTo: input)
+            .get();
 
-    // Jika semua lolos:
-    print("Login Berhasil ke ArenaHub: $email");
-    // Lanjut ke navigasi Dashboard/Home
+        if (userQuery.docs.isNotEmpty) {
+          emailToLogin = userQuery.docs.first.get('email');
+        } else {
+          _showSnackBar(context, "Nomor telepon tidak terdaftar");
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
+
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: emailToLogin,
+        password: password,
+      );
+
+      User? user = userCredential.user;
+
+      if (user != null) {
+        DocumentReference userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+        await userDoc.update({'lastLogin': FieldValue.serverTimestamp()});
+      }
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = "Terjadi kesalahan";
+      if (e.code == 'user-not-found' || e.code == 'invalid-email') {
+        errorMessage = "Akun tidak ditemukan atau format salah";
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        errorMessage = "Kata sandi salah";
+      } else {
+        errorMessage = e.message ?? "Login gagal";
+      }
+      
+      _showSnackBar(context, errorMessage);
+    } catch (e) {
+      _showSnackBar(context, "Error: ${e.toString()}");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   void _showSnackBar(BuildContext context, String message) {
@@ -79,7 +112,6 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 20),
-              
               // --- HEADER ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -108,58 +140,36 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 32),
 
               // --- BANNER IMAGE ---
-              // (Tetap menggunakan Placeholder jika asset belum ada)
               Padding(
                 padding: const EdgeInsets.only(bottom: 32),
-                child: Align(
-                  alignment: Alignment.topCenter,
+                child: Center(
                   child: Container(
-                    width: 342,
-                    height: 224,
+                    width: 342, height: 224,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10))],
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(24),
                       child: Image.asset(
-                        'assets/images/sports_collage.png', // <--- Pastikan nama file ini sesuai di pubspec.yaml
+                        'assets/images/sports_collage.png',
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            Container(
-                              height: 224, 
-                              color: Colors.grey[300], 
-                              child: const Icon(Icons.image, size: 50, color: Colors.grey)
-                            ),
+                        errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey[300], child: const Icon(Icons.image, size: 50, color: Colors.grey)),
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 32),
 
-              Center(
-                child: Text("Selamat Datang Kembali!", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: navyDark)),
-              ),
+              Center(child: Text("Selamat Datang!", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: navyDark))),
               const SizedBox(height: 8),
               Center(child: Text("Masuk ke akun ArenaHub Anda", style: TextStyle(color: textGrey, fontSize: 15))),
 
               const SizedBox(height: 32),
 
-              // --- FORM INPUT ---
               _buildLabel("Email atau Nomor Telepon"),
               const SizedBox(height: 8),
-              _buildShadowedInput(
-                controller: emailController,
-                hintText: "Contoh: user@email.com",
-                icon: Icons.email_outlined,
-              ),
+              _buildShadowedInput(controller: emailController, hintText: "Contoh: 0812XXXXXXXX atau user@email.com", icon: Icons.email_outlined),
 
               const SizedBox(height: 20),
 
@@ -175,40 +185,19 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               const SizedBox(height: 12),
-              /// --- NAVIGASI LUPA KATA SANDI ---
               Align(
                 alignment: Alignment.centerRight,
-                child: InkWell(
-                  onTap: () {
-                    // Navigasi ke halaman Lupa Kata Sandi
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                    child: Text(
-                      "Lupa Kata Sandi?",
-                      style: TextStyle(
-                        color: accentGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
+                child: TextButton(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ForgotPasswordScreen())),
+                  child: Text("Lupa Kata Sandi?", style: TextStyle(color: accentGreen, fontWeight: FontWeight.bold)),
                 ),
               ),
 
               const SizedBox(height: 32),
 
-              // --- LOGIN BUTTON ---
               _buildLoginButton(),
 
               const SizedBox(height: 32),
-
-              // --- DIVIDER ---
               Row(
                 children: [
                   Expanded(child: Divider(color: Colors.grey[300])),
@@ -218,19 +207,11 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               const SizedBox(height: 25),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _socialButton("G"),
-                  const SizedBox(width: 20),
-                  _socialButton("f"),
-                ],
-              ),
+              
+              // --- TOMBOL GOOGLE SESUAI GAMBAR ---
+              _googleLoginButton(),
 
               const SizedBox(height: 35),
-
-              // --- FOOTER ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -241,9 +222,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
               ),
-
-              const SizedBox(height: 40),
-              Center(child: Text("© 2026 ARENAHUB INDONESIA", style: TextStyle(color: Colors.grey[400], fontSize: 11, letterSpacing: 1.2))),
+              const SizedBox(height: 20),
+              Center(child: Text("© 2026 ARENAHUB", style: TextStyle(color: textGrey.withOpacity(0.6), fontSize: 12, letterSpacing: 1.2))),
               const SizedBox(height: 20),
             ],
           ),
@@ -252,36 +232,16 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // --- WIDGET HELPERS ---
+  Widget _buildLabel(String text) => Text(text, style: TextStyle(color: textGrey, fontWeight: FontWeight.w600, fontSize: 14));
 
-  Widget _buildLabel(String text) {
-    return Text(text, style: TextStyle(color: textGrey, fontWeight: FontWeight.w600, fontSize: 14));
-  }
-
-  Widget _buildShadowedInput({
-    required TextEditingController controller,
-    required String hintText,
-    required IconData icon,
-    bool obscure = false,
-    IconData? suffix,
-    VoidCallback? onSuffixPressed,
-  }) {
+  Widget _buildShadowedInput({required TextEditingController controller, required String hintText, required IconData icon, bool obscure = false, IconData? suffix, VoidCallback? onSuffixPressed}) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]),
       child: TextField(
         controller: controller,
         obscureText: obscure,
-        keyboardType: icon == Icons.email_outlined 
-            ? TextInputType.emailAddress 
-            : TextInputType.text,
-        style: const TextStyle(color: Colors.black),
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: TextStyle(color: textGrey.withOpacity(0.6)),
           prefixIcon: Icon(icon, color: textGrey),
           suffixIcon: suffix != null ? IconButton(icon: Icon(suffix, color: textGrey), onPressed: onSuffixPressed) : null,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
@@ -294,31 +254,45 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildLoginButton() {
     return Container(
       height: 55,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))]),
       child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryBlue,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          elevation: 0,
-        ),
-        onPressed: () => _handleLogin(context),
-        child: const Text("Masuk", style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
+        style: ElevatedButton.styleFrom(backgroundColor: primaryBlue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+        onPressed: _isLoading ? null : () => _handleLogin(context),
+        child: _isLoading 
+            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+            : const Text("Masuk", style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  Widget _socialButton(String label) {
-    return Container(
-      width: 60, height: 60,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))],
+  Widget _googleLoginButton() {
+    return InkWell(
+      onTap: () {
+        // Logika Google Sign In kamu di sini
+      },
+      child: Container(
+        height: 55,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(25), // Dibuat lebih membulat sesuai gambar
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.network(
+              'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Google_Favicon_2025.svg/1280px-Google_Favicon_2025.svg.png',
+              height: 24,
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              "Google",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+            ),
+          ],
+        ),
       ),
-      child: Center(child: Text(label, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
     );
   }
 }

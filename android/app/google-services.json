@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "721961424361",
+    "project_id": "arenahub-98b15",
+    "storage_bucket": "arenahub-98b15.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:721961424361:android:0c3a6e2c76b912a787a778",
+        "android_client_info": {
+          "package_name": "com.example.appbookinglapangan"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "721961424361-3s29g3lj3l2ecl67ngb9a3qsj6fm5k3f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDK1i7rJHBHZkANepvtG_628Hxtpz9ZYk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "721961424361-3s29g3lj3l2ecl67ngb9a3qsj6fm5k3f.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "721961424361-5qe1u50cb57e96riuldl09g30jus643q.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.appbookinglapangan"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

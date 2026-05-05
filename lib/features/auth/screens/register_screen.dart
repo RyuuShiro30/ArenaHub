@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:appbookinglapangan/features/auth/screens/login_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -58,7 +59,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // Helper untuk menampilkan pesan error
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+      SnackBar(content: Text(message), backgroundColor: Colors.greenAccent),
     );
   }
 
@@ -382,11 +383,57 @@ class _RegisterScreenState extends State<RegisterScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           elevation: 0,
         ),
-        onPressed: () {
-          if (_validateInputs()) {
-            // jika BERHASIL
-            print("Form Valid! Memproses pendaftaran...");
-            // Navigator.push(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
+        onPressed: () async {
+          if (!_validateInputs()) return;
+
+          try {
+            UserCredential userCredential =
+                await FirebaseAuth.instance.createUserWithEmailAndPassword(
+              email: emailController.text.trim(),
+              password: passwordController.text.trim(),
+            );
+
+            User? user = userCredential.user;
+
+            if (user != null) {
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .set({
+                'uid': user.uid,
+                'fullName': fullNameController.text.trim(),
+                'email': emailController.text.trim(),
+                'phone': phoneController.text.trim(),
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+            }
+
+            _showSnackBar("Registrasi berhasil");
+
+            Navigator.pop(context);
+          } on FirebaseAuthException catch (e) {
+            // Print tetap ada buat kamu cek di terminal VS Code
+            print("REGISTER ERROR CODE: ${e.code}"); 
+            
+            String pesanUser;
+            
+            // Mapping error code ke bahasa Indonesia yang ramah
+            switch (e.code) {
+              case 'email-already-in-use':
+                pesanUser = "Email sudah terdaftar. Yuk, langsung login aja!";
+                break;
+              case 'weak-password':
+                pesanUser = "Wah, password-mu terlalu lemah. Coba kombinasi lain ya.";
+                break;
+              case 'network-request-failed':
+                pesanUser = "Cek koneksi internetmu dulu ya.";
+                break;
+              default:
+                pesanUser = "Ups! Terjadi kesalahan: ${e.message}";
+            }
+
+            // Panggil snackbar (otomatis merah karena tidak isi parameter color)
+            _showSnackBar(pesanUser);
           }
         },
         child: const Text(
