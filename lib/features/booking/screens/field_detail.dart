@@ -33,6 +33,7 @@ class DetailLapanganData {
   final String jenisLapangan; // "FUTSAL"
   final String lokasi;
   final int hargaPerJam;
+  final String deskripsi;
   final double ratingRata;
   final int jumlahUlasan;
   final List<String> fotoPaths; // list URL atau asset
@@ -45,6 +46,7 @@ class DetailLapanganData {
     required this.jenisLapangan,
     required this.lokasi,
     required this.hargaPerJam,
+    required this.deskripsi,
     required this.ratingRata,
     required this.jumlahUlasan,
     required this.fotoPaths,
@@ -162,6 +164,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
               _buildGaleri(),
               SliverToBoxAdapter(child: _buildInfoUtama()),
               SliverToBoxAdapter(child: _buildFasilitas()),
+              SliverToBoxAdapter(child: _buildDeskripsi()), 
               SliverToBoxAdapter(child: _buildUlasan()),
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
@@ -394,6 +397,51 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Deskripsi
+  
+  Widget _buildDeskripsi() {
+    final deskripsi = widget.data.deskripsi;
+    if (deskripsi.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Deskripsi',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            deskripsi,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF555555),
+              height: 1.6,
             ),
           ),
         ],
