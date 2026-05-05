@@ -24,9 +24,8 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         useMaterial3: true,
       ),
-      // initialRoute: AppRoutes.login,
-      // routes: AppRoutes.routes,
-      home: ProfileScreen(), // ← ini
+      initialRoute: AppRoutes.login,
+      routes: AppRoutes.routes,
     );
   }
 }
