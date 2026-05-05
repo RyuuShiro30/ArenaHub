@@ -53,56 +53,59 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   // Integrasi: Menggabungkan inisialisasi ID dan pemanggilan Midtrans
   Future<void> _initializeBookingAndPayment() async {
+    setState(() {
+    currentOrderId = "ORD-${DateTime.now().millisecondsSinceEpoch}";
+  });
     await _generateSequentialBookingCode();
     await payNow();
   }
 
- Future<void> _generateSequentialBookingCode() async {
-  try {
-    // 1. Ambil tanggal hari ini (Format: YYYYMMDD)
-    final now = DateTime.now();
-    final dateTag = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}";
+  Future<void> _generateSequentialBookingCode() async {
+    try {
+      // 1. Ambil tanggal hari ini (Format: YYYYMMDD)
+      final now = DateTime.now();
+      final dateTag = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}";
 
-    // 2. Cari transaksi terakhir KHUSUS hari ini
-    final snapshot = await FirebaseFirestore.instance
-        .collection('bookings')
-        .where('order_id', isGreaterThanOrEqualTo: 'INV-$dateTag-')
-        .where('order_id', isLessThanOrEqualTo: 'INV-$dateTag-\uf8ff')
-        .orderBy('order_id', descending: true)
-        .limit(1)
-    .get();
+      // 2. Cari transaksi terakhir KHUSUS hari ini
+      final snapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('order_id', isGreaterThanOrEqualTo: 'INV-$dateTag-')
+          .where('order_id', isLessThanOrEqualTo: 'INV-$dateTag-\uf8ff')
+          .orderBy('order_id', descending: true)
+          .limit(1)
+          .get();
 
-    if (snapshot.docs.isEmpty) {
-      // Jika booking pertama hari ini
-      _bookingCode = 'INV-$dateTag-001';
-    } else {
-      String lastId = snapshot.docs.first.data()['order_id'] ?? '';
-      
-      // Ambil 3 angka terakhir (setelah strip kedua)
-      List<String> parts = lastId.split('-');
-      int nextNumber = 1;
-      
-      if (parts.length >= 3) {
-        nextNumber = (int.tryParse(parts[2]) ?? 0) + 1;
+      if (snapshot.docs.isEmpty) {
+        // Jika booking pertama hari ini
+        _bookingCode = 'INV-$dateTag-001';
+      } else {
+        String lastId = snapshot.docs.first.data()['order_id'] ?? '';
+        
+        // Ambil 3 angka terakhir (setelah strip kedua)
+        List<String> parts = lastId.split('-');
+        int nextNumber = 1;
+        
+        if (parts.length >= 3) {
+          nextNumber = (int.tryParse(parts[2]) ?? 0) + 1;
+        }
+        
+        _bookingCode = 'INV-$dateTag-${nextNumber.toString().padLeft(3, '0')}';
       }
-      
-      _bookingCode = 'INV-$dateTag-${nextNumber.toString().padLeft(3, '0')}';
+    } catch (e) {
+      // Fallback: Gunakan millisecond agar Midtrans tidak menolak karena ID Duplikat
+      _bookingCode = 'INV-${DateTime.now().millisecondsSinceEpoch}';
+      print("Error ID: $e");
     }
-  } catch (e) {
-    // Fallback: Gunakan millisecond agar Midtrans tidak menolak karena ID Duplikat
-    _bookingCode = 'INV-${DateTime.now().millisecondsSinceEpoch}';
-    print("Error ID: $e");
+
+    if (mounted) setState(() {});
   }
 
-  if (mounted) setState(() {});
-}
-
-// Ini fungsi bantuan untuk simulasi (nanti hubungkan ke backend/provider kamu)
-Future<String> _fetchLastOrderId() async {
-  // Contoh: jika Rani sudah pernah buat INV-00001, 
-  // maka fungsi ini harusnya mengembalikan 'INV-00001'
-  return 'INV-00001'; 
-}
+  // Ini fungsi bantuan untuk simulasi (nanti hubungkan ke backend/provider kamu)
+  Future<String> _fetchLastOrderId() async {
+    // Contoh: jika Rani sudah pernah buat INV-00001, 
+    // maka fungsi ini harusnya mengembalikan 'INV-00001'
+    return 'INV-00001'; 
+  }
 
   Future<String> _fetchLastBookingIdFromDatabase() async {
     // Placeholder untuk integrasi database di masa depan
@@ -144,14 +147,18 @@ Future<String> _fetchLastOrderId() async {
   }
 
   Future<void> payNow() async {
-    if (_bookingCode.isEmpty) return;
+    // 1. JANGAN gunakan _bookingCode sebagai orderId Midtrans jika tidak unik.
+    // Gunakan timestamp agar selalu baru dan tidak ditolak Midtrans.
+    String uniqueOrderId = "ORD-${DateTime.now().millisecondsSinceEpoch}";
     
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      currentOrderId = uniqueOrderId; // Simpan ID unik ini ke variabel class
+    });
 
-    currentOrderId = _bookingCode;
-
+    // 2. Panggil service Midtrans dengan ID yang benar-benar unik
     final qr = await midtransService.createTransaction(
-      orderId: currentOrderId!,
+      orderId: uniqueOrderId, // Gunakan ID unik di sini
       grossAmount: widget.totalHarga,
       customerName: widget.customerName,
       email: widget.email,
@@ -165,50 +172,75 @@ Future<String> _fetchLastOrderId() async {
       });
 
       if (qr == null) {
+        // Jika masih gagal, cek Debug Console untuk melihat pesan error dari API Midtrans
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Gagal membuat QR. Cek koneksi atau Server Key Midtrans kamu.'),
+            content: Text('Gagal membuat QR. ID mungkin duplikat atau Server Key salah.'),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
-  }
+}
 
   Future<void> handleConfirmPayment() async {
-    if (currentOrderId == null) return;
+  if (currentOrderId == null) return;
 
-    setState(() {
-      isLoading = true;
-    });
+  setState(() {
+    isLoading = true;
+  });
 
+  try {
+    // 1. Cek status pembayaran ke Midtrans
     final status = await midtransService.checkStatus(currentOrderId!);
 
     if (mounted) {
-      setState(() {
-        isLoading = false;
-      });
+      // Jika statusnya 'settlement' (berhasil) atau 'pending' (menunggu pembayaran)
+      if (status == 'settlement' || status == 'pending') {
+        
+        // 2. SIMPAN DATA KE FIRESTORE
+        // Bagian ini akan membuat koleksi 'bookings' secara otomatis di Firebase
+        await FirebaseFirestore.instance.collection('bookings').doc(currentOrderId).set({
+          'order_id': currentOrderId,
+          'nama_lapangan': widget.namaLapangan,
+          'customer_name': widget.customerName,
+          'email': widget.email,
+          'phone': widget.phone,
+          'total_harga': widget.totalHarga,
+          'status_pembayaran': status, // Menyimpan status dari Midtrans
+          'tanggal_booking': FieldValue.serverTimestamp(), // Waktu transaksi
+        }, SetOptions(merge: true));
 
-      if (status == 'settlement' || status == 'pending') { 
+        setState(() {
+          isLoading = false;
+        });
+
+        // 3. PINDAH KE HALAMAN SUKSES
+        // Kita kirim currentOrderId sebagai argumen agar bisa dibaca di halaman tujuan
         Navigator.pushNamedAndRemoveUntil(
           context,
           AppRoutes.paymentSucces,
           (route) => false,
-          arguments: currentOrderId,
+          arguments: currentOrderId, 
         );
       } else {
+        // Jika status selain settlement/pending (misal: expire atau deny)
+        setState(() => isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              status == null
-                  ? "Gagal cek status pembayaran"
-                  : "Status pembayaran: $status",
-            ),
-          ),
+          SnackBar(content: Text("Status pembayaran saat ini: $status")),
         );
       }
     }
+  } catch (e) {
+    // Menangani error jika koneksi atau proses simpan gagal
+    if (mounted) {
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Terjadi kesalahan: $e")),
+      );
+    }
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -298,8 +330,7 @@ Future<String> _fetchLastOrderId() async {
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 color: Colors.grey.shade100,
                                 borderRadius: BorderRadius.circular(12),
@@ -350,8 +381,7 @@ Future<String> _fetchLastOrderId() async {
 
             Row(
               children: [
-                Icon(Icons.account_balance_wallet_outlined,
-                    color: primaryDarkBlue),
+                Icon(Icons.account_balance_wallet_outlined, color: primaryDarkBlue),
                 const SizedBox(width: 8),
                 const Text(
                   'Metode Pembayaran',
@@ -383,8 +413,7 @@ Future<String> _fetchLastOrderId() async {
                             border: Border.all(color: Colors.grey.shade300),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Icon(Icons.qr_code_scanner,
-                              color: primaryDarkBlue),
+                          child: Icon(Icons.qr_code_scanner, color: primaryDarkBlue),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -500,6 +529,38 @@ Future<String> _fetchLastOrderId() async {
                 ],
               ),
             ),
+            
+            // --- BARIS KODE: INSTRUKSI PEMBAYARAN DROP DOWN ---
+            const SizedBox(height: 20),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  leading: Icon(Icons.list_alt_rounded, color: primaryDarkBlue),
+                  title: Text(
+                    'Langkah Pembayaran',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: primaryDarkBlue,
+                    ),
+                  ),
+                  childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  children: [
+                    _buildStepItem('1', 'Buka aplikasi pembayaran pilihan Anda (Gopay, OVO, Dana, atau Mobile Banking).'),
+                    _buildStepItem('2', 'Pilih menu Scan / Bayar dan arahkan kamera ke kode QR di atas.'),
+                    _buildStepItem('3', 'Pastikan jumlah sesuai yaitu ${_formatRupiah(widget.totalHarga)}.'),
+                    _buildStepItem('4', 'Selesaikan transaksi dan simpan bukti pembayaran Anda.'),
+                  ],
+                ),
+              ),
+            ),
+
             const SizedBox(height: 24),
 
             const Text(
@@ -596,8 +657,7 @@ Future<String> _fetchLastOrderId() async {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(20),
@@ -649,6 +709,33 @@ Future<String> _fetchLastOrderId() async {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // --- WIDGET HELPER ---
+  Widget _buildStepItem(String number, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 10,
+            backgroundColor: primaryDarkBlue.withOpacity(0.1),
+            child: Text(
+              number,
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: primaryDarkBlue),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.4),
+            ),
+          ),
+        ],
       ),
     );
   }

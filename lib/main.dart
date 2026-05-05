@@ -37,7 +37,7 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         useMaterial3: true,
       ),
-      initialRoute: AppRoutes.paymentInstruction,
+      initialRoute: AppRoutes.pilihJadwal,
       routes: AppRoutes.routes,
       onGenerateRoute: AppRoutes.generateRoute,
     );

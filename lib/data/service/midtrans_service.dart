@@ -91,34 +91,31 @@ class MidtransService {
   }
 
   Future<String?> checkStatus(String orderId) async {
-    try {
-      final String auth =
-          'Basic ${base64Encode(utf8.encode('$serverKey:'))}';
+  try {
+    final String auth = 'Basic ${base64Encode(utf8.encode('$serverKey:'))}';
 
-      final response = await http.get(
-        Uri.parse(
-          'https://api.sandbox.midtrans.com/v2/$orderId/status',
-        ),
-        headers: {
-          'Authorization': auth,
-          'Content-Type': 'application/json',
-        },
-      );
+    // URL yang benar: .../v2/$orderId/status
+    final response = await http.get(
+      Uri.parse('https://api.sandbox.midtrans.com/v2/$orderId/status'),
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json',
+      },
+    );
 
-      print('=== CHECK STATUS RESPONSE ===');
-      print('Status Code: ${response.statusCode}');
-      print('Body: ${response.body}');
+    print('=== CHECK STATUS RESPONSE ===');
+    print('Order ID: $orderId');
+    print('Status Code: ${response.statusCode}');
+    print('Body: ${response.body}');
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        return data['transaction_status'];
-      }
-
-      return null;
-    } catch (e) {
-      print('EXCEPTION checkStatus: $e');
-      return null;
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['transaction_status']; // 'settlement', 'pending', atau 'expire'
     }
+    return null;
+  } catch (e) {
+    print('EXCEPTION checkStatus: $e');
+    return null;
   }
+}
 }
