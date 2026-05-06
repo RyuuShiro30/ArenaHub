@@ -10,6 +10,7 @@ class PaymentScreen extends StatefulWidget {
   final String customerName;
   final String email;
   final String phone;
+  final String selectedDate;
 
   const PaymentScreen({
     super.key,
@@ -18,6 +19,7 @@ class PaymentScreen extends StatefulWidget {
     required this.customerName,
     required this.email,
     required this.phone,
+    required this.selectedDate,
   });
 
   @override
@@ -41,8 +43,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   void initState() {
     super.initState();
+    print("Tanggal yang diterima: ${widget.selectedDate}");
     _startTimer();
     _initializeBookingAndPayment();
+    
   }
 
   @override
@@ -64,7 +68,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     try {
       // 1. Ambil tanggal hari ini (Format: YYYYMMDD)
       final now = DateTime.now();
-      final dateTag = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}";
+      final dateTag = widget.selectedDate.replaceAll('-', '');
 
       // 2. Cari transaksi terakhir KHUSUS hari ini
       final snapshot = await FirebaseFirestore.instance
@@ -74,6 +78,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
           .orderBy('order_id', descending: true)
           .limit(1)
           .get();
+
+          int nextNumber = 1;
 
       if (snapshot.docs.isEmpty) {
         // Jika booking pertama hari ini

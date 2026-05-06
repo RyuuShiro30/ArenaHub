@@ -43,6 +43,7 @@ class AppRoutes {
               customerName: args['customerName'] ?? 'Guest',
               email: args['email'] ?? '',
               phone: args['phone'] ?? '',
+              selectedDate: args['selectedDate'] ?? '',
             ),
           );
         }

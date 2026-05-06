@@ -347,6 +347,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                         'customerName': 'Nama Customer', // ganti dengan data user asli
                         'email': 'email@example.com',    // ganti dengan data user asli
                         'phone': '08123456789',          // ganti dengan data user asli
+                        'selectedDate': DateFormat("ddMMyyyy").format(selectedDate),
                       },
                     );
                     },

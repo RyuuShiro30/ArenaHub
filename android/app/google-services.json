@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "721961424361-6vetooe0hsnknqjn9alcpvgbslsf7qgg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.appbookinglapangan",
+            "certificate_hash": "2ddd512a8127c9f97c3e6eed2cd8517ab8e489da"
+          }
+        },
+        {
           "client_id": "721961424361-3s29g3lj3l2ecl67ngb9a3qsj6fm5k3f.apps.googleusercontent.com",
           "client_type": 3
         }
