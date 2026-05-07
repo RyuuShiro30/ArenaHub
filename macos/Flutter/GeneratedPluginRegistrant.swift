@@ -5,6 +5,12 @@
 import FlutterMacOS
 import Foundation
 
+<<<<<<< HEAD
+import file_selector_macos
+
+func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+  FileSelectorPlugin.register(with: registry.registrar(forPlugin: "FileSelectorPlugin"))
+=======
 import cloud_firestore
 import firebase_auth
 import firebase_core
@@ -17,4 +23,5 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FLTFirebaseCorePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseCorePlugin"))
   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))
   WebViewFlutterPlugin.register(with: registry.registrar(forPlugin: "WebViewFlutterPlugin"))
+>>>>>>> 4e357daa80b65de305079d6903e89e5ba643aead
 }
