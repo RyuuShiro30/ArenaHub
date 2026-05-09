@@ -2,22 +2,30 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-// ─── Model ────────────────────────────────────────────────────────────────────
+// model
 
 class FasilitasItem {
   final String nama;
-  final IconData icon;
+  final String iconUrl;
 
-  const FasilitasItem({required this.nama, required this.icon});
+  const FasilitasItem({required this.nama, required this.iconUrl});
+
+  factory FasilitasItem.fromMap(Map<String, dynamic> map) {
+    return FasilitasItem(
+      nama: map['nama'] ?? '',
+      iconUrl: map['icon_url'] ?? '',
+    );
+  }
 }
 
 class UlasanItem {
   final String namaPengguna;
-  final String avatarPath; // bisa URL atau asset
+  final String avatarPath;
   final int rating;
   final String komentar;
-  final String waktu; // "2 hari yang lalu"
+  final String waktu;
 
   const UlasanItem({
     required this.namaPengguna,
@@ -26,24 +34,51 @@ class UlasanItem {
     required this.komentar,
     required this.waktu,
   });
+
+  factory UlasanItem.fromMap(Map<String, dynamic> map) {
+    return UlasanItem(
+      namaPengguna: map['nama_pengguna'] ?? '',
+      avatarPath: map['avatar_path'] ?? '',
+      rating: map['rating_overall'] ?? 0,
+      komentar: map['komentar'] ?? '',
+      waktu: map['created_at'] ?? '',
+    );
+  }
+
+  static String _hitungWaktu(dynamic timestamp) {
+    if (timestamp == null) return '';
+    final dt = (timestamp as Timestamp).toDate();
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays > 0) {
+      return '${diff.inDays} hari yang lalu';
+    } else if (diff.inHours > 0) {
+      return '${diff.inHours} jam yang lalu';
+    } else {
+      return 'Baru saja';
+    }
+  }
 }
 
 class DetailLapanganData {
+  final String id;
   final String namaLapangan;
-  final String jenisLapangan; // "FUTSAL"
+  final String jenisLapangan;
+  final String jenisFloor;
   final String lokasi;
   final int hargaPerJam;
   final String deskripsi;
   final double ratingRata;
   final int jumlahUlasan;
-  final List<String> fotoPaths; // list URL atau asset
+  final List<String> fotoPaths;
   final List<FasilitasItem> fasilitas;
   final List<UlasanItem> ulasan;
   final String? googleMapsUrl;
 
   const DetailLapanganData({
+    required this.id,
     required this.namaLapangan,
     required this.jenisLapangan,
+    required this.jenisFloor,
     required this.lokasi,
     required this.hargaPerJam,
     required this.deskripsi,
@@ -54,14 +89,35 @@ class DetailLapanganData {
     required this.ulasan,
     this.googleMapsUrl,
   });
+
+  factory DetailLapanganData.fromFirestore(DocumentSnapshot doc) {
+    final map = doc.data() as Map<String, dynamic>;
+    return DetailLapanganData(
+      id: doc.id,
+      namaLapangan: map['nama'] ?? '',
+      jenisLapangan: map['jenis_lapangan'] ?? '',
+      jenisFloor: map['jenis_floor'] ?? '',
+      lokasi: map['lokasi'] ?? '',
+      hargaPerJam: map['harga'] ?? 0,
+      deskripsi: map['deskripsi'] ?? '',
+      ratingRata: (map['rating_rata'] ?? 0).toDouble(),
+      jumlahUlasan: map['jumlah_ulasan'] ?? 0,
+      fotoPaths: List<String>.from(map['foto'] ?? []),
+      fasilitas: (map['fasilitas'] as List? ?? [])
+          .map((f) => FasilitasItem.fromMap(f))
+          .toList(),
+      ulasan: [], // diambil terpisah dari collection ulasan
+      googleMapsUrl: map['maps_url'],
+    );
+  }
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// page
 
 class DetailLapanganPage extends StatefulWidget {
-  final DetailLapanganData data;
+  final String lapanganId;
 
-  const DetailLapanganPage({super.key, required this.data});
+  const DetailLapanganPage({super.key, required this.lapanganId});
 
   @override
   State<DetailLapanganPage> createState() => _DetailLapanganPageState();
@@ -74,6 +130,70 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
 
   final PageController _pageController = PageController();
   int _currentPhoto = 0;
+
+  DetailLapanganData? _data;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    try {
+      final lapanganDoc = await FirebaseFirestore.instance
+          .collection('lapangan')
+          .doc(widget.lapanganId)
+          .get();
+
+      if (!lapanganDoc.exists) {
+        setState(() {
+          _error = 'Lapangan tidak ditemukan';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final lapangan = DetailLapanganData.fromFirestore(lapanganDoc);
+
+      final ulasanSnapshot = await FirebaseFirestore.instance
+          .collection('ulasan')
+          .where('lapangan_id', isEqualTo: widget.lapanganId)
+          .orderBy('created_at', descending: true)
+          .limit(3)
+          .get();
+
+      final ulasan = ulasanSnapshot.docs
+          .map((doc) => UlasanItem.fromMap(doc.data()))
+          .toList();
+
+      setState(() {
+        _data = DetailLapanganData(
+          id: lapangan.id,
+          namaLapangan: lapangan.namaLapangan,
+          jenisLapangan: lapangan.jenisLapangan,
+          jenisFloor: lapangan.jenisFloor,
+          lokasi: lapangan.lokasi,
+          hargaPerJam: lapangan.hargaPerJam,
+          deskripsi: lapangan.deskripsi,
+          ratingRata: lapangan.ratingRata,
+          jumlahUlasan: lapangan.jumlahUlasan,
+          fotoPaths: lapangan.fotoPaths,
+          fasilitas: lapangan.fasilitas,
+          ulasan: ulasan,
+          googleMapsUrl: lapangan.googleMapsUrl,
+        );
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Gagal memuat data';
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -89,7 +209,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
     ).format(nominal);
   }
 
-  // ─── Share bottom sheet ───────────────────────────────────────────────────
+  // share sheet
 
   void _tampilkanShare() {
     showModalBottomSheet(
@@ -151,10 +271,44 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
     );
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
+  // build
 
   @override
   Widget build(BuildContext context) {
+    // Loading
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF5F7FA),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Error
+    if (_error != null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F7FA),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  size: 48, color: Colors.grey),
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: Colors.grey)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() => _isLoading = true);
+                  _fetchData();
+                },
+                child: const Text('Coba Lagi'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: Stack(
@@ -164,12 +318,11 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
               _buildGaleri(),
               SliverToBoxAdapter(child: _buildInfoUtama()),
               SliverToBoxAdapter(child: _buildFasilitas()),
-              SliverToBoxAdapter(child: _buildDeskripsi()), 
+              SliverToBoxAdapter(child: _buildDeskripsi()),
               SliverToBoxAdapter(child: _buildUlasan()),
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           ),
-          // Floating app bar
           _buildFloatingAppBar(),
         ],
       ),
@@ -177,7 +330,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
     );
   }
 
-  // ─── Floating App Bar ─────────────────────────────────────────────────────
+  // floating app bar
 
   Widget _buildFloatingAppBar() {
     return SafeArea(
@@ -200,10 +353,10 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
     );
   }
 
-  // ─── Galeri Foto ──────────────────────────────────────────────────────────
+  // galeri
 
   Widget _buildGaleri() {
-    final photos = widget.data.fotoPaths;
+    final photos = _data!.fotoPaths;
 
     return SliverToBoxAdapter(
       child: SizedBox(
@@ -279,10 +432,10 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
     );
   }
 
-  // ─── Info Utama ───────────────────────────────────────────────────────────
+  // info utama
 
   Widget _buildInfoUtama() {
-    final d = widget.data;
+    final d = _data!;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -323,8 +476,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
               ),
               Row(
                 children: [
-                  const Icon(Icons.star_rounded,
-                      color: _starColor, size: 18),
+                  const Icon(Icons.star_rounded, color: _starColor, size: 18),
                   const SizedBox(width: 4),
                   Text(
                     '${d.ratingRata.toStringAsFixed(1)} (${d.jumlahUlasan} ulasan)',
@@ -357,8 +509,8 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
               const SizedBox(width: 4),
               Text(
                 d.lokasi,
-                style: const TextStyle(
-                    fontSize: 13.5, color: Color(0xFF666666)),
+                style:
+                    const TextStyle(fontSize: 13.5, color: Color(0xFF666666)),
               ),
             ],
           ),
@@ -405,9 +557,9 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
   }
 
   // Deskripsi
-  
+
   Widget _buildDeskripsi() {
-    final deskripsi = widget.data.deskripsi;
+    final deskripsi = _data!.deskripsi;
     if (deskripsi.isEmpty) return const SizedBox.shrink();
 
     return Container(
@@ -449,10 +601,10 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
     );
   }
 
-  // ─── Fasilitas ────────────────────────────────────────────────────────────
+  // Fasilitas
 
   Widget _buildFasilitas() {
-    final fasilitas = widget.data.fasilitas;
+    final fasilitas = _data!.fasilitas;
     if (fasilitas.isEmpty) return const SizedBox.shrink();
 
     return Container(
@@ -484,19 +636,17 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
           Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: fasilitas
-                .map((f) => _KartuFasilitas(item: f))
-                .toList(),
+            children: fasilitas.map((f) => _KartuFasilitas(item: f)).toList(),
           ),
         ],
       ),
     );
   }
 
-  // ─── Ulasan ───────────────────────────────────────────────────────────────
+  // Ulasan
 
   Widget _buildUlasan() {
-    final ulasan = widget.data.ulasan;
+    final ulasan = _data!.ulasan;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -527,7 +677,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
                 ),
               ),
               Text(
-                '${widget.data.ratingRata.toStringAsFixed(1)} / 5.0',
+                '${_data!.ratingRata.toStringAsFixed(1)} / 5.0',
                 style: const TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w700,
@@ -579,7 +729,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
     );
   }
 
-  // ─── Tombol Lihat Jadwal ──────────────────────────────────────────────────
+  // tombol lihat jadwal
 
   Widget _buildTombolLihatJadwal() {
     return Container(
@@ -605,8 +755,8 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
           style: ElevatedButton.styleFrom(
             backgroundColor: _primaryColor,
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
           ),
           child: const Text(
@@ -619,7 +769,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
   }
 }
 
-// ─── Widget Pembantu ─────────────────────────────────────────────────────────
+// widget pembantu
 
 class _FloatingButton extends StatelessWidget {
   final IconData icon;
@@ -667,7 +817,16 @@ class _KartuFasilitas extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(item.icon, color: const Color(0xFF135B9D), size: 26),
+          Image.network(
+            item.iconUrl,
+            width: 32,
+            height: 32,
+            errorBuilder: (_, __, ___) => const Icon(
+              Icons.category_rounded,
+              color: Color(0xFF135B9D),
+              size: 26,
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             item.nama,
@@ -847,37 +1006,3 @@ class _PlaceholderGambar extends StatelessWidget {
     );
   }
 }
-
-// ─── Cara memanggil halaman ini ───────────────────────────────────────────────
-//
-// Navigator.push(
-//   context,
-//   MaterialPageRoute(
-//     builder: (_) => DetailLapanganPage(
-//       data: DetailLapanganData(
-//         namaLapangan: 'Lapangan Futsal - A',
-//         jenisLapangan: 'FUTSAL',
-//         lokasi: 'Malang, Jawa Timur',
-//         hargaPerJam: 150000,
-//         ratingRata: 4.8,
-//         jumlahUlasan: 2,
-//         fotoPaths: ['assets/images/futsal_a.jpg'],
-//         fasilitas: [
-//           FasilitasItem(nama: 'Parkir Luas', icon: Icons.local_parking_rounded),
-//           FasilitasItem(nama: 'Kamar Mandi', icon: Icons.shower_rounded),
-//           FasilitasItem(nama: 'Kantin', icon: Icons.restaurant_rounded),
-//         ],
-//         ulasan: [
-//           UlasanItem(
-//             namaPengguna: 'Andi Saputra',
-//             avatarPath: '',
-//             rating: 5,
-//             komentar: 'Lapangannya sangat bersih dan terawat!',
-//             waktu: '2 hari yang lalu',
-//           ),
-//         ],
-//         googleMapsUrl: 'https://maps.google.com/?q=...',
-//       ),
-//     ),
-//   ),
-// );
