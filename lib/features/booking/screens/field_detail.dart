@@ -1,8 +1,8 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../booking/screens/pilih_jadwal.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // model
 
@@ -37,11 +37,11 @@ class UlasanItem {
 
   factory UlasanItem.fromMap(Map<String, dynamic> map) {
     return UlasanItem(
-      namaPengguna: map['nama_pengguna'] ?? '',
+      namaPengguna: map['fullName'] ?? map['nama_pengguna'] ?? 'Pengguna',
       avatarPath: map['avatar_path'] ?? '',
       rating: map['rating_overall'] ?? 0,
       komentar: map['komentar'] ?? '',
-      waktu: map['created_at'] ?? '',
+      waktu: UlasanItem._hitungWaktu(map['created_at']),
     );
   }
 
@@ -94,19 +94,19 @@ class DetailLapanganData {
     final map = doc.data() as Map<String, dynamic>;
     return DetailLapanganData(
       id: doc.id,
-      namaLapangan: map['nama'] ?? '',
+      namaLapangan: map['nama_lapangan'] ?? '',
       jenisLapangan: map['jenis_lapangan'] ?? '',
       jenisFloor: map['jenis_floor'] ?? '',
       lokasi: map['lokasi'] ?? '',
       hargaPerJam: map['harga'] ?? 0,
-      deskripsi: map['deskripsi'] ?? '',
+      deskripsi: map['deskripsi_lapangan'] ?? '',
       ratingRata: (map['rating_rata'] ?? 0).toDouble(),
       jumlahUlasan: map['jumlah_ulasan'] ?? 0,
       fotoPaths: List<String>.from(map['foto'] ?? []),
       fasilitas: (map['fasilitas'] as List? ?? [])
           .map((f) => FasilitasItem.fromMap(f))
           .toList(),
-      ulasan: [], // diambil terpisah dari collection ulasan
+      ulasan: [],
       googleMapsUrl: map['maps_url'],
     );
   }
@@ -189,7 +189,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Gagal memuat data';
+        _error = 'Gagal memuat data $e';
         _isLoading = false;
       });
     }
@@ -211,64 +211,18 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
 
   // share sheet
 
-  void _tampilkanShare() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Bagikan',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 16),
-            _ShareOption(
-              icon: Icons.link_rounded,
-              label: 'Bagikan Link Lapangan',
-              deskripsi: 'Salin link untuk promosi',
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: implement share link
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Link disalin!')),
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-            _ShareOption(
-              icon: Icons.location_on_rounded,
-              label: 'Bagikan Lokasi',
-              deskripsi: 'Buka atau bagikan di Google Maps',
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: launch widget.data.googleMapsUrl
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Membuka Google Maps...')),
-                );
-              },
-            ),
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
-          ],
-        ),
-      ),
-    );
+  void _tampilkanShare() async {
+    final mapsUrl = _data!.googleMapsUrl;
+    if (mapsUrl == null || mapsUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lokasi tidak tersedia')),
+      );
+      return;
+    }
+    final uri = Uri.parse(mapsUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   // build
@@ -311,49 +265,49 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              _buildGaleri(),
-              SliverToBoxAdapter(child: _buildInfoUtama()),
-              SliverToBoxAdapter(child: _buildFasilitas()),
-              SliverToBoxAdapter(child: _buildDeskripsi()),
-              SliverToBoxAdapter(child: _buildUlasan()),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
-          ),
-          _buildFloatingAppBar(),
+      body: CustomScrollView(
+        slivers: [
+          _buildAppBar(),
+          _buildGaleri(),
+          SliverToBoxAdapter(child: _buildInfoUtama()),
+          SliverToBoxAdapter(child: _buildFasilitas()),
+          SliverToBoxAdapter(child: _buildDeskripsi()),
+          SliverToBoxAdapter(child: _buildUlasan()),
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
       bottomNavigationBar: _buildTombolLihatJadwal(),
     );
   }
 
-  // floating app bar
-
-  Widget _buildFloatingAppBar() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _FloatingButton(
-              icon: Icons.arrow_back_ios_new_rounded,
-              onTap: () => Navigator.of(context).pop(),
-            ),
-            _FloatingButton(
-              icon: Icons.share_rounded,
-              onTap: _tampilkanShare,
-            ),
-          ],
+  Widget _buildAppBar() {
+    return SliverAppBar(
+      pinned: true,
+      backgroundColor: Colors.white,
+      elevation: 0.5,
+      surfaceTintColor: Colors.white,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_ios_new_rounded,
+            color: _primaryColor, size: 20),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      title: const Text(
+        'Detail Lapangan',
+        style: TextStyle(
+          color: _primaryColor,
+          fontWeight: FontWeight.w700,
+          fontSize: 18,
         ),
       ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.share_rounded,
+              color: _primaryColor, size: 22),
+          onPressed: _tampilkanShare,
+        ),
+      ],
     );
   }
-
-  // galeri
 
   Widget _buildGaleri() {
     final photos = _data!.fotoPaths;
@@ -363,7 +317,6 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
         height: 280,
         child: Stack(
           children: [
-            // Swipe gallery
             PageView.builder(
               controller: _pageController,
               itemCount: photos.isEmpty ? 1 : photos.length,
@@ -388,9 +341,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
             ),
             // Gradient bawah
             Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
+              bottom: 0, left: 0, right: 0,
               child: Container(
                 height: 80,
                 decoration: const BoxDecoration(
@@ -405,9 +356,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
             // Indikator halaman
             if (photos.length > 1)
               Positioned(
-                bottom: 12,
-                left: 0,
-                right: 0,
+                bottom: 12, left: 0, right: 0,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(photos.length, (i) {
@@ -431,7 +380,6 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
       ),
     );
   }
-
   // info utama
 
   Widget _buildInfoUtama() {
@@ -500,6 +448,14 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
               color: Color(0xFF1A1A2E),
             ),
           ),
+          const SizedBox(height: 6),
+          Text(
+              d.jenisFloor,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF888888),
+              ),
+            ),
           const SizedBox(height: 6),
           // Lokasi
           Row(
@@ -749,9 +705,16 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
         width: double.infinity,
         height: 52,
         child: ElevatedButton(
-          onPressed: () {
-            // TODO: navigasi ke halaman pilih jadwal (temanmu)
-          },
+        onPressed: _data == null ? null : () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PilihJadwalPage(
+                lapanganId: _data!.id,
+              ),
+            ),
+          );
+        },
           style: ElevatedButton.styleFrom(
             backgroundColor: _primaryColor,
             foregroundColor: Colors.white,
@@ -769,38 +732,6 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
   }
 }
 
-// widget pembantu
-
-class _FloatingButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _FloatingButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.12),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Icon(icon, color: const Color(0xFF135B9D), size: 18),
-      ),
-    );
-  }
-}
-
 class _KartuFasilitas extends StatelessWidget {
   final FasilitasItem item;
 
@@ -809,32 +740,37 @@ class _KartuFasilitas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 90,
+      width: 88,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
         color: const Color(0xFFF0F5FF),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Image.network(
             item.iconUrl,
             width: 32,
             height: 32,
+            fit: BoxFit.contain,
             errorBuilder: (_, __, ___) => const Icon(
               Icons.category_rounded,
               color: Color(0xFF135B9D),
-              size: 26,
+              size: 32,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             item.nama,
             textAlign: TextAlign.center,
+            maxLines: 2,           // ← maksimal 2 baris
+            overflow: TextOverflow.ellipsis, // ← potong kalau lebih
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
               color: Color(0xFF444444),
+              height: 1.3,
             ),
           ),
         ],
@@ -873,7 +809,9 @@ class _KartuUlasan extends StatelessWidget {
                     : null,
                 child: ulasan.avatarPath.isEmpty
                     ? Text(
-                        ulasan.namaPengguna[0],
+                        ulasan.namaPengguna.isNotEmpty 
+                            ? ulasan.namaPengguna[0]
+                            : '?',                    
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF135B9D),
@@ -928,62 +866,6 @@ class _KartuUlasan extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ShareOption extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String deskripsi;
-  final VoidCallback onTap;
-
-  const _ShareOption({
-    required this.icon,
-    required this.label,
-    required this.deskripsi,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF5F7FA),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF135B9D).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: const Color(0xFF135B9D), size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700)),
-                  Text(deskripsi,
-                      style: const TextStyle(
-                          fontSize: 12.5, color: Color(0xFF888888))),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded,
-                color: Color(0xFF888888), size: 20),
-          ],
-        ),
       ),
     );
   }
