@@ -1,4 +1,5 @@
 import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
+import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../routes/app_routes.dart';
@@ -93,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final List<Widget> pages = [
       _buildHomeBody(),
       const PencarianLapanganScreen(),
-      const Scaffold(body: Center(child: Text('Riwayat'))), // sementara
+      const RiwayatBookingScreen(), // sementara
       const Scaffold(body: Center(child: Text('Profil'))), // sementara
     ];
 
@@ -271,7 +272,8 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pushNamed(context, AppRoutes.pilihJadwal),
+                  onPressed: () =>
+                      Navigator.pushNamed(context, AppRoutes.pilihJadwal),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: _primaryDark,
