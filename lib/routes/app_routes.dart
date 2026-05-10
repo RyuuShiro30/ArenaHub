@@ -7,6 +7,7 @@ import 'package:appbookinglapangan/features/auth/screens/register_screen.dart';
 import 'package:appbookinglapangan/features/auth/screens/pilih_jadwal.dart';
 import 'package:appbookinglapangan/features/booking/screens/payment_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/paymentSucces_screen.dart';
+import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
 
 class AppRoutes {
   static const String login = "/login";
@@ -17,6 +18,7 @@ class AppRoutes {
   static const String pilihJadwal = '/pilihJadwal';
   static const String payment = '/payment';
   static const String paymentSucces = '/paymentSucces';
+  static const String riwayatBooking = '/riwayatBooking';
 
   // Rute standar tanpa parameter
   static Map<String, WidgetBuilder> routes = {
@@ -27,6 +29,7 @@ class AppRoutes {
     register: (context) => const RegisterScreen(),
     pilihJadwal: (context) => const PilihJadwalPage(),
     paymentSucces: (context) => const PaymentSuccessPage(),
+    riwayatBooking: (context) => const RiwayatBookingScreen(),
   };
 
   static Route<dynamic>? generateRoute(RouteSettings settings) {
