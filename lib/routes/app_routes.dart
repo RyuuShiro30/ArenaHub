@@ -7,6 +7,7 @@ import 'package:appbookinglapangan/features/auth/screens/register_screen.dart';
 import 'package:appbookinglapangan/features/auth/screens/pilih_jadwal.dart';
 import 'package:appbookinglapangan/features/booking/screens/payment_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/paymentSucces_screen.dart';
+import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
 
 class AppRoutes {
   static const String login = "/login";
@@ -17,6 +18,7 @@ class AppRoutes {
   static const String pilihJadwal = '/pilihJadwal';
   static const String payment = '/payment';
   static const String paymentSucces = '/paymentSucces';
+  static const String cariLapangan = '/cariLapangan';
 
   // Rute standar tanpa parameter
   static Map<String, WidgetBuilder> routes = {
@@ -27,6 +29,7 @@ class AppRoutes {
     register: (context) => const RegisterScreen(),
     pilihJadwal: (context) => const PilihJadwalPage(),
     paymentSucces: (context) => const PaymentSuccessPage(),
+    cariLapangan: (context) => const PencarianLapanganScreen(),
   };
 
   static Route<dynamic>? generateRoute(RouteSettings settings) {
@@ -34,7 +37,7 @@ class AppRoutes {
       case payment:
         // Cek apakah arguments null atau bukan Map
         final args = settings.arguments;
-        
+
         if (args is Map<String, dynamic>) {
           return MaterialPageRoute(
             builder: (_) => PaymentScreen(
@@ -47,7 +50,7 @@ class AppRoutes {
             ),
           );
         }
-        
+
         return MaterialPageRoute(
           builder: (_) => const Scaffold(
             body: Center(child: Text("Data pembayaran tidak ditemukan")),
