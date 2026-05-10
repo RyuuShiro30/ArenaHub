@@ -7,6 +7,7 @@ import 'package:appbookinglapangan/features/booking/screens/pilih_jadwal.dart';
 import 'package:appbookinglapangan/features/booking/screens/payment_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/paymentSucces_screen.dart';
 import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
+import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/field_detail.dart'; // ← tambah ini
 
 class AppRoutes {
@@ -20,8 +21,8 @@ class AppRoutes {
   static const String riwayatBooking = '/riwayatBooking';
   static const String testDetail = '/test-detail'; // ← tambah ini
 
+  static const String cariLapangan = '/cariLapangan';
   static Map<String, WidgetBuilder> routes = {
-    splash: (context) => const SplashScreen(),
     login: (context) => const LoginScreen(),
     home: (context) => const HomeScreen(),
     register: (context) => const RegisterScreen(),
@@ -30,6 +31,7 @@ class AppRoutes {
     testDetail: (context) => const DetailLapanganPage(
       lapanganId: 'XUSohGidinXPG2emvk7I',
     ),
+    cariLapangan: (context) => const PencarianLapanganScreen(),
   };
 
   static Route<dynamic>? generateRoute(RouteSettings settings) {
@@ -44,6 +46,7 @@ class AppRoutes {
         );
       case payment: 
         final args = settings.arguments;
+
         if (args is Map<String, dynamic>) {
           return MaterialPageRoute(
             builder: (_) => PaymentScreen(
@@ -56,6 +59,7 @@ class AppRoutes {
             ),
           );
         }
+
         return MaterialPageRoute(
           builder: (_) => const Scaffold(
             body: Center(child: Text("Data pembayaran tidak ditemukan")),
