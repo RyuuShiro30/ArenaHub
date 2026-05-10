@@ -1,3 +1,4 @@
+import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../routes/app_routes.dart';
@@ -13,41 +14,60 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedNavIndex = 0;
 
   // ── Colors (Blue Theme) ───────────────────────────────────────────────────────
-  static const Color _primaryDark  = Color(0xFF0D2D6B); // navy dark
-  static const Color _primaryMid   = Color(0xFF1A4FAF); // blue mid
+  static const Color _primaryDark = Color(0xFF0D2D6B); // navy dark
+  static const Color _primaryMid = Color(0xFF1A4FAF); // blue mid
   static const Color _primaryLight = Color(0xFF3A7BD5); // blue light
-  static const Color _accent       = Color(0xFF2563EB); // vivid blue
-  static const Color _bgColor      = Color(0xFFF4F6F9);
-  static const Color _textDark     = Color(0xFF1A2B3C);
+  static const Color _accent = Color(0xFF2563EB); // vivid blue
+  static const Color _bgColor = Color(0xFFF4F6F9);
+  static const Color _textDark = Color(0xFF1A2B3C);
 
   // ── Dummy Data ────────────────────────────────────────────────────────────────
   final List<Map<String, dynamic>> _sportCategories = [
     {
-      'name' : 'Sepak Bola',
-      'image': 'https://images.unsplash.com/photo-1575361204480-aadea25e6e68?w=400&q=80',
+      'name': 'Sepak Bola',
+      'image':
+          'https://images.unsplash.com/photo-1575361204480-aadea25e6e68?w=400&q=80',
       'color': const Color(0xFF0D2D6B),
     },
     {
-      'name' : 'Basket',
-      'image': 'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=400&q=80',
+      'name': 'Basket',
+      'image':
+          'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=400&q=80',
       'color': const Color(0xFF8B3A0F),
     },
     {
-      'name' : 'Bulutangkis',
-      'image': 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=400&q=80',
+      'name': 'Bulutangkis',
+      'image':
+          'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=400&q=80',
       'color': const Color(0xFF1A3A6E),
     },
     {
-      'name' : 'Tenis',
-      'image': 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=400&q=80',
+      'name': 'Tenis',
+      'image':
+          'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=400&q=80',
       'color': const Color(0xFF0D3D2E),
     },
   ];
 
   final List<Map<String, dynamic>> _schedules = [
-    {'time': '16:00', 'name': 'Lapangan Futsal A', 'status': 'Tersedia', 'price': 'Rp150.000'},
-    {'time': '19:00', 'name': 'Badminton Court 3', 'status': 'Tersedia', 'price': 'Rp45.000'},
-    {'time': '20:00', 'name': 'Basket Indoor',     'status': 'Tersedia', 'price': 'Rp200.000'},
+    {
+      'time': '16:00',
+      'name': 'Lapangan Futsal A',
+      'status': 'Tersedia',
+      'price': 'Rp150.000'
+    },
+    {
+      'time': '19:00',
+      'name': 'Badminton Court 3',
+      'status': 'Tersedia',
+      'price': 'Rp45.000'
+    },
+    {
+      'time': '20:00',
+      'name': 'Basket Indoor',
+      'status': 'Tersedia',
+      'price': 'Rp200.000'
+    },
   ];
 
   // ── Helper: Poppins TextStyle ─────────────────────────────────────────────────
@@ -70,49 +90,61 @@ class _HomeScreenState extends State<HomeScreen> {
   // ── Build ─────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final List<Widget> pages = [
+      _buildHomeBody(),
+      const PencarianLapanganScreen(),
+      const Scaffold(body: Center(child: Text('Riwayat'))), // sementara
+      const Scaffold(body: Center(child: Text('Profil'))), // sementara
+    ];
+
     return Scaffold(
       backgroundColor: _bgColor,
-      // ── Sticky Header via Column → header fixed, content scrolls ──
       body: SafeArea(
         child: Column(
           children: [
-            // STICKY HEADER
-            Container(
-              color: _bgColor,
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-              child: _buildHeader(),
-            ),
-            // SCROLLABLE CONTENT
+            if (_selectedNavIndex == 0)
+              Container(
+                color: _bgColor,
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                child: _buildHeader(),
+              ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildFeaturedCard(),
-                    const SizedBox(height: 20),
-                    _buildSearchBar(),
-                    const SizedBox(height: 26),
-                    _sectionTitle('Cabang Olahraga'),
-                    const SizedBox(height: 14),
-                    _buildSportGrid(),
-                    const SizedBox(height: 26),
-                    _sectionTitle('Jadwal Tersedia Hari Ini'),
-                    const SizedBox(height: 14),
-                    _buildScheduleList(),
-                    const SizedBox(height: 26),
-                    _sectionTitle('Booking Terakhirku'),
-                    const SizedBox(height: 14),
-                    _buildLastBooking(),
-                    const SizedBox(height: 28),
-                  ],
-                ),
+              child: IndexedStack(
+                index: _selectedNavIndex,
+                children: pages,
               ),
             ),
           ],
         ),
       ),
       bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildHomeBody() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFeaturedCard(),
+          const SizedBox(height: 20),
+          _buildSearchBar(),
+          const SizedBox(height: 26),
+          _sectionTitle('Cabang Olahraga'),
+          const SizedBox(height: 14),
+          _buildSportGrid(),
+          const SizedBox(height: 26),
+          _sectionTitle('Jadwal Tersedia Hari Ini'),
+          const SizedBox(height: 14),
+          _buildScheduleList(),
+          const SizedBox(height: 26),
+          _sectionTitle('Booking Terakhirku'),
+          const SizedBox(height: 14),
+          _buildLastBooking(),
+          const SizedBox(height: 28),
+        ],
+      ),
     );
   }
 
@@ -126,7 +158,11 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Text(
                 'Halo, Candra!',
-                style: _p(size: 22, weight: FontWeight.bold, color: _primaryDark, height: 1.2),
+                style: _p(
+                    size: 22,
+                    weight: FontWeight.bold,
+                    color: _primaryDark,
+                    height: 1.2),
               ),
               const SizedBox(height: 3),
               Text(
@@ -162,7 +198,10 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.07), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.07),
+              blurRadius: 8,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Icon(icon, color: _primaryDark, size: 20),
@@ -206,16 +245,25 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Text(
               'REKOMENDASI UTAMA',
-              style: _p(size: 10, weight: FontWeight.w600, color: Colors.white, spacing: 0.8),
+              style: _p(
+                  size: 10,
+                  weight: FontWeight.w600,
+                  color: Colors.white,
+                  spacing: 0.8),
             ),
           ),
           const SizedBox(height: 14),
           Text(
             'Sport Center\nArenaHub',
-            style: _p(size: 26, weight: FontWeight.bold, color: Colors.white, height: 1.2),
+            style: _p(
+                size: 26,
+                weight: FontWeight.bold,
+                color: Colors.white,
+                height: 1.2),
           ),
           const SizedBox(height: 14),
-          _cardInfo(Icons.location_on_outlined, 'Jl. Atletik No. 123, Kota Malang'),
+          _cardInfo(
+              Icons.location_on_outlined, 'Jl. Atletik No. 123, Kota Malang'),
           const SizedBox(height: 6),
           _cardInfo(Icons.access_time_outlined, '08:00 – 22:00'),
           const SizedBox(height: 20),
@@ -228,12 +276,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundColor: Colors.white,
                     foregroundColor: _primaryDark,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                     elevation: 0,
                   ),
                   child: Text(
                     'Pesan Sekarang',
-                    style: _p(size: 14, weight: FontWeight.w600, color: _primaryDark),
+                    style: _p(
+                        size: 14, weight: FontWeight.w600, color: _primaryDark),
                   ),
                 ),
               ),
@@ -246,7 +296,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.white.withOpacity(0.3)),
                 ),
-                child: const Icon(Icons.near_me_rounded, color: Colors.white, size: 22),
+                child: const Icon(Icons.near_me_rounded,
+                    color: Colors.white, size: 22),
               ),
             ],
           ),
@@ -273,7 +324,10 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Row(
@@ -291,7 +345,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Section Title ─────────────────────────────────────────────────────────────
   Widget _sectionTitle(String title) {
-    return Text(title, style: _p(size: 16, weight: FontWeight.bold, color: _textDark));
+    return Text(title,
+        style: _p(size: 16, weight: FontWeight.bold, color: _textDark));
   }
 
   // ── Sport Grid (2x2 image cards) ──────────────────────────────────────────────
@@ -316,7 +371,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Image.network(
                 sport['image'] as String,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: sport['color'] as Color),
+                errorBuilder: (_, __, ___) =>
+                    Container(color: sport['color'] as Color),
               ),
               Container(
                 decoration: BoxDecoration(
@@ -335,7 +391,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 left: 14,
                 child: Text(
                   sport['name'] as String,
-                  style: _p(size: 15, weight: FontWeight.bold, color: Colors.white),
+                  style: _p(
+                      size: 15, weight: FontWeight.bold, color: Colors.white),
                 ),
               ),
             ],
@@ -356,21 +413,26 @@ class _HomeScreenState extends State<HomeScreen> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2)),
             ],
           ),
           child: Row(
             children: [
               // Time badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
                 decoration: BoxDecoration(
                   color: _accent.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   s['time'] as String,
-                  style: _p(size: 13, weight: FontWeight.bold, color: _primaryDark),
+                  style: _p(
+                      size: 13, weight: FontWeight.bold, color: _primaryDark),
                 ),
               ),
               const SizedBox(width: 14),
@@ -378,18 +440,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(s['name'] as String,   style: _p(size: 13, weight: FontWeight.w600, color: _textDark)),
+                    Text(s['name'] as String,
+                        style: _p(
+                            size: 13,
+                            weight: FontWeight.w600,
+                            color: _textDark)),
                     const SizedBox(height: 2),
-                    Text(s['status'] as String, style: _p(size: 11, color: Colors.grey.shade500)),
+                    Text(s['status'] as String,
+                        style: _p(size: 11, color: Colors.grey.shade500)),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(s['price'] as String, style: _p(size: 13, weight: FontWeight.bold, color: _accent)),
+                  Text(s['price'] as String,
+                      style: _p(
+                          size: 13, weight: FontWeight.bold, color: _accent)),
                   const SizedBox(height: 2),
-                  Text('/ jam', style: _p(size: 11, color: Colors.grey.shade400)),
+                  Text('/ jam',
+                      style: _p(size: 11, color: Colors.grey.shade400)),
                 ],
               ),
             ],
@@ -407,7 +477,10 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -418,17 +491,26 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Text(
                 'FUTSAL • MINGGU, 20 OKT',
-                style: _p(size: 11, weight: FontWeight.w500, color: Colors.grey.shade500, spacing: 0.4),
+                style: _p(
+                    size: 11,
+                    weight: FontWeight.w500,
+                    color: Colors.grey.shade500,
+                    spacing: 0.4),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: _accent.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   'SELESAI',
-                  style: _p(size: 10, weight: FontWeight.bold, color: _accent, spacing: 0.4),
+                  style: _p(
+                      size: 10,
+                      weight: FontWeight.bold,
+                      color: _accent,
+                      spacing: 0.4),
                 ),
               ),
             ],
@@ -439,7 +521,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 width: 3.5,
                 height: 38,
-                decoration: BoxDecoration(color: _accent, borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(
+                    color: _accent, borderRadius: BorderRadius.circular(4)),
               ),
               const SizedBox(width: 12),
               Text(
@@ -454,12 +537,16 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.access_time_rounded, size: 14, color: Colors.grey.shade400),
+                  Icon(Icons.access_time_rounded,
+                      size: 14, color: Colors.grey.shade400),
                   const SizedBox(width: 5),
-                  Text('18:00 – 20:00 (2 Jam)', style: _p(size: 12, color: Colors.grey.shade500)),
+                  Text('18:00 – 20:00 (2 Jam)',
+                      style: _p(size: 12, color: Colors.grey.shade500)),
                 ],
               ),
-              Text('Rp300.000', style: _p(size: 14, weight: FontWeight.bold, color: _textDark)),
+              Text('Rp300.000',
+                  style:
+                      _p(size: 14, weight: FontWeight.bold, color: _textDark)),
             ],
           ),
         ],
@@ -470,17 +557,20 @@ class _HomeScreenState extends State<HomeScreen> {
   // ── Bottom Nav ────────────────────────────────────────────────────────────────
   Widget _buildBottomNav() {
     final items = [
-      {'icon': Icons.home_rounded,    'label': 'Beranda'},
-      {'icon': Icons.search_rounded,  'label': 'Cari'},
+      {'icon': Icons.home_rounded, 'label': 'Beranda'},
+      {'icon': Icons.search_rounded, 'label': 'Cari'},
       {'icon': Icons.history_rounded, 'label': 'Riwayat'},
-      {'icon': Icons.person_rounded,  'label': 'Profil'},
+      {'icon': Icons.person_rounded, 'label': 'Profil'},
     ];
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 14, offset: const Offset(0, -4)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 14,
+              offset: const Offset(0, -4)),
         ],
       ),
       child: SafeArea(
@@ -494,9 +584,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () => setState(() => _selectedNavIndex = i),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isActive ? _accent.withOpacity(0.1) : Colors.transparent,
+                    color: isActive
+                        ? _accent.withOpacity(0.1)
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -512,7 +605,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         items[i]['label'] as String,
                         style: _p(
                           size: 11,
-                          weight: isActive ? FontWeight.w600 : FontWeight.normal,
+                          weight:
+                              isActive ? FontWeight.w600 : FontWeight.normal,
                           color: isActive ? _primaryDark : Colors.grey.shade400,
                         ),
                       ),

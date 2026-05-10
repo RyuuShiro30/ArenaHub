@@ -1,5 +1,5 @@
 import 'model/lapangan_model.dart';
- 
+
 final List<LapanganModel> dummyLapangan = [
   LapanganModel(
     kategori: 'FUTSAL',
@@ -15,6 +15,11 @@ final List<LapanganModel> dummyLapangan = [
     slotTambahan: 2,
     imagePath:
         'https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=600',
+    bookedSlots: {
+      '2025-07-15': ['16:00', '17:00'],
+      '2025-07-16': ['16:00', '17:00', '20:00'], // penuh
+      '2025-07-20': ['20:00'],
+    },
   ),
   LapanganModel(
     kategori: 'BADMINTON',
@@ -30,6 +35,10 @@ final List<LapanganModel> dummyLapangan = [
     slotTambahan: 0,
     imagePath:
         'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=600',
+    bookedSlots: {
+      '2025-07-15': ['19:00'],
+      '2025-07-18': ['19:00', '21:00'], // penuh
+    },
   ),
   LapanganModel(
     kategori: 'BASKET',
@@ -45,5 +54,9 @@ final List<LapanganModel> dummyLapangan = [
     slotTambahan: 1,
     imagePath:
         'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=600',
+    bookedSlots: {
+      '2025-07-15': ['07:00'],
+      '2025-07-17': ['07:00', '09:00', '15:00'], // penuh
+    },
   ),
 ];
