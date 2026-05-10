@@ -6,6 +6,7 @@ import 'package:appbookinglapangan/features/auth/screens/register_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/pilih_jadwal.dart';
 import 'package:appbookinglapangan/features/booking/screens/payment_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/paymentSucces_screen.dart';
+import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
 import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/field_detail.dart'; // ← tambah ini
 
@@ -17,12 +18,19 @@ class AppRoutes {
   static const String pilihJadwal = '/pilihJadwal';
   static const String payment = '/payment';
   static const String paymentSucces = '/paymentSucces';
+  static const String riwayatBooking = '/riwayatBooking';
+  static const String testDetail = '/test-detail'; // ← tambah ini
+
   static const String cariLapangan = '/cariLapangan';
   static Map<String, WidgetBuilder> routes = {
     login: (context) => const LoginScreen(),
     home: (context) => const HomeScreen(),
     register: (context) => const RegisterScreen(),
     paymentSucces: (context) => const PaymentSuccessPage(),
+    riwayatBooking: (context) => const RiwayatBookingScreen(),
+    testDetail: (context) => const DetailLapanganPage(
+      lapanganId: 'XUSohGidinXPG2emvk7I',
+    ),
     cariLapangan: (context) => const PencarianLapanganScreen(),
   };
 
