@@ -120,8 +120,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
       backgroundColor: Colors.white,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back,
-            color: Color(0xFF1A1A2E), size: 22),
+        icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A2E), size: 22),
         onPressed: () => Navigator.of(context).maybePop(),
       ),
       title: const Text(
@@ -132,7 +131,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
           color: Color(0xFF1A1A2E),
         ),
       ),
-      centerTitle: false,
+      centerTitle: true,
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(color: const Color(0xFFEEEEEE), height: 1),
@@ -148,7 +147,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
       child: TabBar(
         controller: _tabController,
         isScrollable: true,
-        tabAlignment: TabAlignment.start,
+        tabAlignment: TabAlignment.center,
         labelColor: const Color(0xFF1565C0),
         unselectedLabelColor: const Color(0xFF9E9E9E),
         labelStyle: const TextStyle(
@@ -181,8 +180,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_rounded,
-                size: 56, color: Colors.grey.shade300),
+            Icon(Icons.inbox_rounded, size: 56, color: Colors.grey.shade300),
             const SizedBox(height: 16),
             Text(
               'Belum ada riwayat booking',
