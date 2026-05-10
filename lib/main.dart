@@ -10,15 +10,11 @@ import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  initializeDateFormatting('id_ID', null).then((_) {
-    runApp(const MyApp());
-  });
-  await dotenv.load(fileName: ".env");
-
+  await dotenv.load(fileName: ".env", mergeWith: {});
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
+  await initializeDateFormatting('id_ID', null);
   runApp(const MyApp());
 }
 
@@ -38,7 +34,7 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         useMaterial3: true,
       ),
-      initialRoute: AppRoutes.pilihJadwal,
+      initialRoute: AppRoutes.home,
       routes: AppRoutes.routes,
       onGenerateRoute: AppRoutes.generateRoute,
     );

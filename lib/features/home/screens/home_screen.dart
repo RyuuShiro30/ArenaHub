@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../routes/app_routes.dart';
+import '../../profile/screens/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,45 +17,140 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedNavIndex = 0;
 
-  // ── Colors (Blue Theme) ───────────────────────────────────────────────────────
-  static const Color _primaryDark  = Color(0xFF0D2D6B); // navy dark
-  static const Color _primaryMid   = Color(0xFF1A4FAF); // blue mid
-  static const Color _primaryLight = Color(0xFF3A7BD5); // blue light
-  static const Color _accent       = Color(0xFF2563EB); // vivid blue
-  static const Color _bgColor      = Color(0xFFF4F6F9);
-  static const Color _textDark     = Color(0xFF1A2B3C);
+  // ── Firebase ──────────────────────────────────────────────────────────────────
+  final _auth      = FirebaseAuth.instance;
+  final _firestore = FirebaseFirestore.instance;
 
-  // ── Dummy Data ────────────────────────────────────────────────────────────────
+  String _fullName       = '';
+  String _userEmail      = '';
+  bool   _loadingUser    = true;
+  bool   _loadingBooking = true;
+
+  Map<String, dynamic>? _lastBooking;
+
+  // ── Colors ───────────────────────────────────────────────────────────────────
+  static const Color _primaryDark = Color(0xFF0D2D6B);
+  static const Color _accent      = Color(0xFF2563EB);
+  static const Color _bgColor     = Color(0xFFF4F6F9);
+  static const Color _textDark    = Color(0xFF1A2B3C);
+
+  // ── Sport Data (Cloudinary) ───────────────────────────────────────────────────
   final List<Map<String, dynamic>> _sportCategories = [
     {
-      'name' : 'Sepak Bola',
-      'image': 'https://images.unsplash.com/photo-1575361204480-aadea25e6e68?w=400&q=80',
+      'name' : 'Futsal',
+      'image': 'https://res.cloudinary.com/dewncgzjd/image/upload/v1778238273/photo-1575361204480-aadea25e6e68_xyp6yg.jpg',
       'color': const Color(0xFF0D2D6B),
     },
     {
       'name' : 'Basket',
-      'image': 'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=400&q=80',
+      'image': 'https://res.cloudinary.com/dewncgzjd/image/upload/v1778238254/photo-1546519638-68e109498ffc_x5qddl.jpg',
       'color': const Color(0xFF8B3A0F),
     },
     {
       'name' : 'Bulutangkis',
-      'image': 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=400&q=80',
+      'image': 'https://res.cloudinary.com/dewncgzjd/image/upload/v1778238604/glen-carrie-imHF66HA3VY-unsplash_fyjbit.jpg',
       'color': const Color(0xFF1A3A6E),
-    },
-    {
-      'name' : 'Tenis',
-      'image': 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=400&q=80',
-      'color': const Color(0xFF0D3D2E),
     },
   ];
 
   final List<Map<String, dynamic>> _schedules = [
-    {'time': '16:00', 'name': 'Lapangan Futsal A', 'status': 'Tersedia', 'price': 'Rp150.000'},
-    {'time': '19:00', 'name': 'Badminton Court 3', 'status': 'Tersedia', 'price': 'Rp45.000'},
-    {'time': '20:00', 'name': 'Basket Indoor',     'status': 'Tersedia', 'price': 'Rp200.000'},
+    {'time': '16:00', 'name': 'Lapangan Futsal A',      'status': 'Tersedia', 'price': 'Rp150.000'},
+    {'time': '19:00', 'name': 'Lapangan Bulutangkis A', 'status': 'Tersedia', 'price': 'Rp65.000'},
+    {'time': '20:00', 'name': 'Lapangan Basket A',      'status': 'Tersedia', 'price': 'Rp200.000'},
   ];
 
-  // ── Helper: Poppins TextStyle ─────────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserData();
+    _fetchLastBooking();
+  }
+
+  Future<void> _fetchUserData() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _fullName    = doc.data()?['fullName'] ?? 'User';
+          _userEmail   = doc.data()?['email']    ?? user.email ?? '';
+          _loadingUser = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingUser = false);
+    }
+  }
+
+  Future<void> _fetchLastBooking() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final email   = userDoc.data()?['email'] ?? user.email ?? '';
+      final query   = await _firestore
+          .collection('bookings')
+          .where('email', isEqualTo: email)
+          .orderBy('tanggal_booking', descending: true)
+          .limit(1)
+          .get();
+      if (query.docs.isNotEmpty && mounted) {
+        setState(() {
+          _lastBooking    = query.docs.first.data();
+          _loadingBooking = false;
+        });
+      } else {
+        if (mounted) setState(() => _loadingBooking = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingBooking = false);
+    }
+  }
+
+  // ── Buka Google Maps ──────────────────────────────────────────────────────────
+  Future<void> _openMaps() async {
+  final Uri mapsUri = Uri.parse(
+    'geo:0,0?q=Unggul+Sport+Center+Malang'
+  );
+  await launchUrl(mapsUri, mode: LaunchMode.externalApplication);
+}
+
+  String _formatTanggal(dynamic tanggal) {
+    try {
+      if (tanggal is Timestamp) {
+        final dt = tanggal.toDate();
+        return DateFormat('EEEE, d MMM yyyy', 'id_ID').format(dt).toUpperCase();
+      }
+      return tanggal.toString();
+    } catch (_) { return ''; }
+  }
+
+  String _formatHarga(dynamic harga) {
+    try {
+      final num = int.parse(harga.toString());
+      return 'Rp${NumberFormat('#,###', 'id_ID').format(num)}';
+    } catch (_) { return 'Rp$harga'; }
+  }
+
+  String _formatStatus(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'paid': case 'selesai': case 'success': return 'SELESAI';
+      case 'pending':   return 'PENDING';
+      case 'cancelled': return 'DIBATALKAN';
+      default: return (status ?? '').toUpperCase();
+    }
+  }
+
+  Color _statusColor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'paid': case 'selesai': case 'success': return _accent;
+      case 'pending':   return Colors.orange;
+      case 'cancelled': return Colors.red;
+      default: return _accent;
+    }
+  }
+
   TextStyle _p({
     double size = 14,
     FontWeight weight = FontWeight.normal,
@@ -59,30 +159,23 @@ class _HomeScreenState extends State<HomeScreen> {
     double height = 1.4,
   }) {
     return GoogleFonts.poppins(
-      fontSize: size,
-      fontWeight: weight,
-      color: color,
-      letterSpacing: spacing,
-      height: height,
+      fontSize: size, fontWeight: weight,
+      color: color, letterSpacing: spacing, height: height,
     );
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bgColor,
-      // ── Sticky Header via Column → header fixed, content scrolls ──
       body: SafeArea(
         child: Column(
           children: [
-            // STICKY HEADER
             Container(
               color: _bgColor,
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
               child: _buildHeader(),
             ),
-            // SCROLLABLE CONTENT
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -90,8 +183,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildFeaturedCard(),
-                    const SizedBox(height: 20),
-                    _buildSearchBar(),
                     const SizedBox(height: 26),
                     _sectionTitle('Cabang Olahraga'),
                     const SizedBox(height: 14),
@@ -116,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Header (STICKY) ───────────────────────────────────────────────────────────
+  // ── Header ────────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Row(
       children: [
@@ -124,70 +215,54 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Halo, Candra!',
-                style: _p(size: 22, weight: FontWeight.bold, color: _primaryDark, height: 1.2),
-              ),
+              _loadingUser
+                  ? Container(
+                      width: 160, height: 22,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    )
+                  : Text(
+                      'Halo, $_fullName!',
+                      style: _p(size: 22, weight: FontWeight.bold, color: _primaryDark, height: 1.2),
+                    ),
               const SizedBox(height: 3),
-              Text(
-                'Siap berkeringat hari ini?',
-                style: _p(size: 13, color: Colors.grey.shade500),
-              ),
+              Text('Siap berkeringat hari ini?',
+                  style: _p(size: 13, color: Colors.grey.shade500)),
             ],
           ),
         ),
-        _iconButton(Icons.notifications_outlined),
-        const SizedBox(width: 10),
         Container(
-          width: 42,
-          height: 42,
+          width: 42, height: 42,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: _primaryLight, width: 2.5),
-            image: const DecorationImage(
-              image: NetworkImage('https://i.pravatar.cc/150?img=47'),
-              fit: BoxFit.cover,
-            ),
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.07), blurRadius: 8, offset: const Offset(0, 2)),
+            ],
           ),
+          child: Icon(Icons.person_rounded, color: Colors.grey.shade400, size: 24),
         ),
       ],
     );
   }
 
-  Widget _iconButton(IconData icon) {
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.07), blurRadius: 8, offset: const Offset(0, 2)),
-        ],
-      ),
-      child: Icon(icon, color: _primaryDark, size: 20),
-    );
-  }
-
-  // ── Featured Card (Blue Gradient) ─────────────────────────────────────────────
+  // ── Featured Card ─────────────────────────────────────────────────────────────
   Widget _buildFeaturedCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFF0D2D6B), // navy
-            Color(0xFF1A4FAF), // blue
-            Color(0xFF2E7DD6), // light blue
-          ],
+          colors: [Color(0xFF0D3D4A), Color(0xFF1A6B5A), Color(0xFF2A9B7A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: _primaryMid.withOpacity(0.5),
+            color: const Color(0xFF1A6B5A).withOpacity(0.45),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -196,7 +271,6 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             decoration: BoxDecoration(
@@ -204,16 +278,12 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white.withOpacity(0.25)),
             ),
-            child: Text(
-              'REKOMENDASI UTAMA',
-              style: _p(size: 10, weight: FontWeight.w600, color: Colors.white, spacing: 0.8),
-            ),
+            child: Text('REKOMENDASI UTAMA',
+                style: _p(size: 10, weight: FontWeight.w600, color: Colors.white, spacing: 0.8)),
           ),
           const SizedBox(height: 14),
-          Text(
-            'Sport Center\nArenaHub',
-            style: _p(size: 26, weight: FontWeight.bold, color: Colors.white, height: 1.2),
-          ),
+          Text('Sport Center\nArenaHub',
+              style: _p(size: 26, weight: FontWeight.bold, color: Colors.white, height: 1.2)),
           const SizedBox(height: 14),
           _cardInfo(Icons.location_on_outlined, 'Jl. Atletik No. 123, Kota Malang'),
           const SizedBox(height: 6),
@@ -223,30 +293,31 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pushNamed(context, AppRoutes.booking),
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.pilihJadwal),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: _primaryDark,
+                    foregroundColor: const Color(0xFF0D3D4A),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 0,
                   ),
-                  child: Text(
-                    'Pesan Sekarang',
-                    style: _p(size: 14, weight: FontWeight.w600, color: _primaryDark),
-                  ),
+                  child: Text('Pesan Sekarang',
+                      style: _p(size: 14, weight: FontWeight.w600, color: const Color(0xFF0D3D4A))),
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.3)),
+              // Tombol Maps
+              GestureDetector(
+                onTap: _openMaps,
+                child: Container(
+                  width: 50, height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                  ),
+                  child: const Icon(Icons.near_me_rounded, color: Colors.white, size: 22),
                 ),
-                child: const Icon(Icons.near_me_rounded, color: Colors.white, size: 22),
               ),
             ],
           ),
@@ -265,36 +336,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Search Bar ────────────────────────────────────────────────────────────────
-  Widget _buildSearchBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.search_rounded, color: Colors.grey.shade400, size: 20),
-          const SizedBox(width: 10),
-          Text(
-            'Cari jenis olahraga atau lapangan...',
-            style: _p(size: 13, color: Colors.grey.shade400),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Section Title ─────────────────────────────────────────────────────────────
   Widget _sectionTitle(String title) {
     return Text(title, style: _p(size: 16, weight: FontWeight.bold, color: _textDark));
   }
 
-  // ── Sport Grid (2x2 image cards) ──────────────────────────────────────────────
+  // ── Sport Grid ────────────────────────────────────────────────────────────────
   Widget _buildSportGrid() {
     return GridView.builder(
       shrinkWrap: true,
@@ -321,22 +367,16 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      (sport['color'] as Color).withOpacity(0.88),
-                    ],
+                    colors: [Colors.transparent, (sport['color'] as Color).withOpacity(0.88)],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                   ),
                 ),
               ),
               Positioned(
-                bottom: 14,
-                left: 14,
-                child: Text(
-                  sport['name'] as String,
-                  style: _p(size: 15, weight: FontWeight.bold, color: Colors.white),
-                ),
+                bottom: 14, left: 14,
+                child: Text(sport['name'] as String,
+                    style: _p(size: 15, weight: FontWeight.bold, color: Colors.white)),
               ),
             ],
           ),
@@ -355,30 +395,25 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
           ),
           child: Row(
             children: [
-              // Time badge
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
                 decoration: BoxDecoration(
                   color: _accent.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(
-                  s['time'] as String,
-                  style: _p(size: 13, weight: FontWeight.bold, color: _primaryDark),
-                ),
+                child: Text(s['time'] as String,
+                    style: _p(size: 13, weight: FontWeight.bold, color: _primaryDark)),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(s['name'] as String,   style: _p(size: 13, weight: FontWeight.w600, color: _textDark)),
+                    Text(s['name'] as String, style: _p(size: 13, weight: FontWeight.w600, color: _textDark)),
                     const SizedBox(height: 2),
                     Text(s['status'] as String, style: _p(size: 11, color: Colors.grey.shade500)),
                   ],
@@ -401,14 +436,39 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Last Booking ──────────────────────────────────────────────────────────────
   Widget _buildLastBooking() {
+    if (_loadingBooking) {
+      return Container(
+        height: 100,
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_lastBooking == null) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: Center(child: Text('Belum ada booking', style: _p(size: 13, color: Colors.grey.shade400))),
+      );
+    }
+
+    final booking      = _lastBooking!;
+    final namaLapangan = booking['nama_lapangan']     ?? '-';
+    final tanggal      = booking['tanggal_booking'];
+    final totalHarga   = booking['total_harga']       ?? 0;
+    final status       = booking['status_pembayaran'] ?? '';
+    final customerName = booking['customer_name']     ?? '';
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -416,20 +476,18 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'FUTSAL • MINGGU, 20 OKT',
-                style: _p(size: 11, weight: FontWeight.w500, color: Colors.grey.shade500, spacing: 0.4),
+              Expanded(
+                child: Text(_formatTanggal(tanggal),
+                    style: _p(size: 11, weight: FontWeight.w500, color: Colors.grey.shade500, spacing: 0.4)),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _accent.withOpacity(0.1),
+                  color: _statusColor(status).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(
-                  'SELESAI',
-                  style: _p(size: 10, weight: FontWeight.bold, color: _accent, spacing: 0.4),
-                ),
+                child: Text(_formatStatus(status),
+                    style: _p(size: 10, weight: FontWeight.bold, color: _statusColor(status), spacing: 0.4)),
               ),
             ],
           ),
@@ -437,15 +495,12 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             children: [
               Container(
-                width: 3.5,
-                height: 38,
+                width: 3.5, height: 38,
                 decoration: BoxDecoration(color: _accent, borderRadius: BorderRadius.circular(4)),
               ),
               const SizedBox(width: 12),
-              Text(
-                'ArenaHub – Lapangan B',
-                style: _p(size: 15, weight: FontWeight.bold, color: _textDark),
-              ),
+              Expanded(child: Text(namaLapangan,
+                  style: _p(size: 15, weight: FontWeight.bold, color: _textDark))),
             ],
           ),
           const SizedBox(height: 14),
@@ -454,12 +509,13 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.access_time_rounded, size: 14, color: Colors.grey.shade400),
+                  Icon(Icons.person_outline_rounded, size: 14, color: Colors.grey.shade400),
                   const SizedBox(width: 5),
-                  Text('18:00 – 20:00 (2 Jam)', style: _p(size: 12, color: Colors.grey.shade500)),
+                  Text(customerName, style: _p(size: 12, color: Colors.grey.shade500)),
                 ],
               ),
-              Text('Rp300.000', style: _p(size: 14, weight: FontWeight.bold, color: _textDark)),
+              Text(_formatHarga(totalHarga),
+                  style: _p(size: 14, weight: FontWeight.bold, color: _textDark)),
             ],
           ),
         ],
@@ -479,9 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 14, offset: const Offset(0, -4)),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 14, offset: const Offset(0, -4))],
       ),
       child: SafeArea(
         child: Padding(
@@ -491,7 +545,18 @@ class _HomeScreenState extends State<HomeScreen> {
             children: List.generate(items.length, (i) {
               final isActive = _selectedNavIndex == i;
               return GestureDetector(
-                onTap: () => setState(() => _selectedNavIndex = i),
+                onTap: () {
+                  setState(() => _selectedNavIndex = i);
+                  if (i == 1) {
+                    Navigator.pushNamed(context, AppRoutes.pilihJadwal);
+                  }
+                  if (i == 3) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => ProfileScreen()),
+                    );
+                  }
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -502,20 +567,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        items[i]['icon'] as IconData,
-                        color: isActive ? _primaryDark : Colors.grey.shade400,
-                        size: 24,
-                      ),
+                      Icon(items[i]['icon'] as IconData,
+                          color: isActive ? _primaryDark : Colors.grey.shade400, size: 24),
                       const SizedBox(height: 4),
-                      Text(
-                        items[i]['label'] as String,
-                        style: _p(
-                          size: 11,
-                          weight: isActive ? FontWeight.w600 : FontWeight.normal,
-                          color: isActive ? _primaryDark : Colors.grey.shade400,
-                        ),
-                      ),
+                      Text(items[i]['label'] as String,
+                          style: _p(
+                            size: 11,
+                            weight: isActive ? FontWeight.w600 : FontWeight.normal,
+                            color: isActive ? _primaryDark : Colors.grey.shade400,
+                          )),
                     ],
                   ),
                 ),
