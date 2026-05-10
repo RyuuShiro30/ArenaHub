@@ -24,9 +24,6 @@ class AppRoutes {
     register: (context) => const RegisterScreen(),
     paymentSucces: (context) => const PaymentSuccessPage(),
     cariLapangan: (context) => const PencarianLapanganScreen(),
-    testDetail: (context) => const DetailLapanganPage(
-      lapanganId: 'XUSohGidinXPG2emvk7I',
-    ),
   };
 
   static Route<dynamic>? generateRoute(RouteSettings settings) {
