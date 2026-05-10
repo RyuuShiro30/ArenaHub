@@ -271,8 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () =>
-                      Navigator.pushNamed(context, AppRoutes.booking),
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.pilihJadwal),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: _primaryDark,

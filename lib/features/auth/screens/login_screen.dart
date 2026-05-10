@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'register_screen.dart';
 import 'reset_password_screen.dart';
 import 'package:appbookinglapangan/features/home/screens/home_screen.dart';
@@ -18,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
 
   final Color backgroundColor = const Color(0xFFF3F4F7);
   final Color navyDark = const Color(0xFF1B2430);
@@ -92,6 +94,75 @@ class _LoginScreenState extends State<LoginScreen> {
       _showSnackBar(context, "Error: ${e.toString()}");
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isGoogleLoading = true);
+
+    try {
+      // Trigger the Google Sign-In flow
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      
+      // Sign out first to ensure account picker is shown
+      await googleSignIn.signOut();
+      
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
+      if (googleUser == null) {
+        // User cancelled the sign-in
+        if (mounted) setState(() => _isGoogleLoading = false);
+        return;
+      }
+
+      // Obtain the auth details from the request
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // Create a new credential
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase with the Google credential
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+
+      User? user = userCredential.user;
+
+      if (user != null) {
+        // Check if user document exists, create if not
+        DocumentReference userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+        DocumentSnapshot docSnapshot = await userDoc.get();
+
+        if (docSnapshot.exists) {
+          // Update last login
+          await userDoc.update({'lastLogin': FieldValue.serverTimestamp()});
+        } else {
+          // Create new user document for first-time Google sign-in
+          await userDoc.set({
+            'uid': user.uid,
+            'email': user.email ?? '',
+            'name': user.displayName ?? '',
+            'phone': user.phoneNumber ?? '',
+            'photoUrl': user.photoURL ?? '',
+            'createdAt': FieldValue.serverTimestamp(),
+            'lastLogin': FieldValue.serverTimestamp(),
+            'loginMethod': 'google',
+          });
+        }
+      }
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (mounted) _showSnackBar(context, e.message ?? "Login Google gagal");
+    } catch (e) {
+      if (mounted) _showSnackBar(context, "Login Google gagal: ${e.toString()}");
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -208,7 +279,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 25),
               
-              // --- TOMBOL GOOGLE SESUAI GAMBAR ---
+              // --- TOMBOL GOOGLE SIGN IN ---
               _googleLoginButton(),
 
               const SizedBox(height: 35),
@@ -267,29 +338,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _googleLoginButton() {
     return InkWell(
-      onTap: () {
-        // Logika Google Sign In kamu di sini
-      },
+      onTap: _isGoogleLoading ? null : _handleGoogleSignIn,
+      borderRadius: BorderRadius.circular(25),
       child: Container(
         height: 55,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(25), // Dibuat lebih membulat sesuai gambar
+          borderRadius: BorderRadius.circular(25),
           border: Border.all(color: Colors.grey.shade200),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.network(
-              'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Google_Favicon_2025.svg/1280px-Google_Favicon_2025.svg.png',
-              height: 24,
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              "Google",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-            ),
+            if (_isGoogleLoading)
+              const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else ...[
+              Image.network(
+                'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Google_Favicon_2025.svg/1280px-Google_Favicon_2025.svg.png',
+                height: 24,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                "Google",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
+            ],
           ],
         ),
       ),

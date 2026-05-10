@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 class PilihJadwalPage extends StatefulWidget {
-  const PilihJadwalPage({super.key});
+  const PilihJadwalPage({super.key, required this.lapanganId});
+  final String lapanganId;
 
   @override
   _PilihJadwalPageState createState() => _PilihJadwalPageState();
@@ -67,8 +69,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text("Pilih Jadwal",
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w800,
                               fontSize: 16,
                               color: primaryBlue)),
                       const Text("ArenaHub • Lapangan A",
@@ -105,15 +107,15 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text("Lapangan Futsal A",
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold)),
+                                Text("Lapangan Futsal A",
+                                    style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w800)),
                                 const Text("Futsal • Vinyl Floor"),
                                 const SizedBox(height: 4),
                                 Text("${formatCurrency(pricePerHour)} /jam",
-                                    style: TextStyle(
+                                    style: GoogleFonts.poppins(
                                         color: primaryBlue,
-                                        fontWeight: FontWeight.bold)),
+                                        fontWeight: FontWeight.w800)),
                               ],
                             )
                           ],
@@ -125,10 +127,10 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                         children: [
                           Text(
                             DateFormat("MMMM yyyy").format(selectedDate),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.calendar_month),
+                            icon: Icon(Icons.calendar_month, color: primaryBlue),
                             onPressed: () async {
                               DateTime? picked = await showDatePicker(
                                 context: context,
@@ -181,16 +183,16 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                     children: [
                                       Text(
                                         DateFormat("E").format(date),
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w800,
                                           fontSize: 14,
                                           color: isSelected ? Colors.white : Colors.black,
                                         ),
                                       ),
                                       Text(
                                         date.day.toString(),
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w800,
                                           fontSize: 16,
                                           color: isSelected ? Colors.white : Colors.black,
                                         ),
@@ -204,12 +206,12 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Align(
+                      Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
                           "Slot Waktu Tersedia",
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 14),
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w800, fontSize: 14),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -269,8 +271,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                 ),
                                 child: Text(
                                   time,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w800,
                                     fontSize: 12,
                                     decoration: isFull ? TextDecoration.lineThrough : null,
                                     color: isFull
@@ -322,7 +324,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                       Text("Total Harga (${selectedTimes.length} Jam)",
                           style: const TextStyle(fontSize: 12)),
                       Text(formatCurrency(totalAmount),
-                          style: TextStyle(
+                          style: GoogleFonts.poppins(
                               fontWeight: FontWeight.w800,
                               color: primaryBlue,
                               fontSize: 18)),
@@ -353,7 +355,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                     },
                     child: const Text("Lanjut ke Booking",
                         style: TextStyle(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             color: Colors.white)),
                   )
                 ],
