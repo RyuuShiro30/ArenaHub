@@ -185,7 +185,7 @@ Future<void> _openMaps() async {
 Widget build(BuildContext context) {
   return PopScope(
     canPop: false, // ← cegah back keluar app
-    onPopInvoked: (didPop) {
+    onPopInvokedWithResult: (didPop, result) {
       if (_selectedNavIndex != 0) {
         // Kalau tidak di Beranda, kembali ke Beranda
         setState(() => _selectedNavIndex = 0);

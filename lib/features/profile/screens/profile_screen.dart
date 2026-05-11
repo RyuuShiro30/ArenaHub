@@ -308,7 +308,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomNav(),
+      //bottomNavigationBar: _buildBottomNav(),
     );
   }
 
