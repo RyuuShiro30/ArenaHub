@@ -1,11 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../routes/app_routes.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../auth/screens/pencarian_lapangan_screen.dart';
@@ -68,18 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _fetchUserData();
     _fetchLastBooking();
-    _loadSavedPhoto();
   }
-
-  // ── Load foto profil tersimpan ────────────────────────────────────────────────
-  Future<void> _loadSavedPhoto() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedPath = prefs.getString('profile_photo_path');
-    if (savedPath != null && File(savedPath).existsSync() && mounted) {
-      profilePhotoNotifier.value = savedPath;
-    }
-  }
-
 
   Future<void> _fetchUserData() async {
     try {
@@ -92,8 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
           _userEmail   = doc.data()?['email']    ?? user.email ?? '';
           _loadingUser = false;
         });
-        // Sync nama ke notifier
-        profileNameNotifier.value = _fullName;
       }
     } catch (e) {
       if (mounted) setState(() => _loadingUser = false);
@@ -261,18 +246,9 @@ Widget build(BuildContext context) {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     )
-                  : ValueListenableBuilder<String>(
-                      valueListenable: profileNameNotifier,
-                      builder: (context, notifierName, _) {
-                        final displayName = notifierName.isNotEmpty
-                            ? notifierName
-                            : _fullName;
-                        return Text(
-                          'Halo, $displayName!',
-                          style: _p(size: 22, weight: FontWeight.bold,
-                              color: _primaryDark, height: 1.2),
-                        );
-                      },
+                  : Text(
+                      'Halo, $_fullName!',
+                      style: _p(size: 22, weight: FontWeight.bold, color: _primaryDark, height: 1.2),
                     ),
               const SizedBox(height: 3),
               Text('Siap berkeringat hari ini?',
@@ -280,29 +256,16 @@ Widget build(BuildContext context) {
             ],
           ),
         ),
-        ValueListenableBuilder<String?>(
-          valueListenable: profilePhotoNotifier,
-          builder: (context, fotoPath, _) {
-            return Container(
-              width: 42, height: 42,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withOpacity(0.07),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2)),
-                ],
-              ),
-              child: ClipOval(
-                child: fotoPath != null
-                    ? Image.file(File(fotoPath), fit: BoxFit.cover)
-                    : Icon(Icons.person_rounded,
-                        color: Colors.grey.shade400, size: 24),
-              ),
-            );
-          },
+        Container(
+          width: 42, height: 42,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.07), blurRadius: 8, offset: const Offset(0, 2)),
+            ],
+          ),
+          child: Icon(Icons.person_rounded, color: Colors.grey.shade400, size: 24),
         ),
       ],
     );
@@ -345,9 +308,9 @@ Widget build(BuildContext context) {
           Text('Sport Center\nArenaHub',
               style: _p(size: 26, weight: FontWeight.bold, color: Colors.white, height: 1.2)),
           const SizedBox(height: 14),
-          _cardInfo(Icons.location_on_outlined, 'Jl. Raya Karanglo No.84, Malang'),
+          _cardInfo(Icons.location_on_outlined, 'Jl. Atletik No. 123, Kota Malang'),
           const SizedBox(height: 6),
-          _cardInfo(Icons.access_time_outlined, '06.00 - 22.00'),
+          _cardInfo(Icons.access_time_outlined, '08:00 – 22:00'),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -391,14 +354,7 @@ Widget build(BuildContext context) {
       children: [
         Icon(icon, color: Colors.white70, size: 15),
         const SizedBox(width: 7),
-        Expanded(
-          child: Text(
-            text,
-            style: _p(size: 12, color: Colors.white70),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        Text(text, style: _p(size: 12, color: Colors.white70)),
       ],
     );
   }
@@ -454,71 +410,50 @@ Widget build(BuildContext context) {
 
   // ── Schedule List ─────────────────────────────────────────────────────────────
   Widget _buildScheduleList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('lapangan').limit(3).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(child: Text('Tidak ada jadwal tersedia', style: _p(color: Colors.grey)));
-        }
-
-        final docs = snapshot.data!.docs;
-        return Column(
-          children: docs.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final name = data['nama_lapangan'] ?? 'Lapangan';
-            final price = data['harga'] ?? 0;
-            // Gunakan jam dummy untuk tampilan ringkasan
-            const time = "08.00 - 09.00"; 
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))
-                ],
+    return Column(
+      children: _schedules.map((s) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+                decoration: BoxDecoration(
+                  color: _accent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(s['time'] as String,
+                    style: _p(size: 13, weight: FontWeight.bold, color: _primaryDark)),
               ),
-              child: Row(
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s['name'] as String, style: _p(size: 13, weight: FontWeight.w600, color: _textDark)),
+                    const SizedBox(height: 2),
+                    Text(s['status'] as String, style: _p(size: 11, color: Colors.grey.shade500)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-                    decoration: BoxDecoration(
-                      color: _accent.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(time,
-                        style: _p(size: 13, weight: FontWeight.bold, color: _primaryDark)),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: _p(size: 13, weight: FontWeight.w600, color: _textDark)),
-                        const SizedBox(height: 2),
-                        Text('Tersedia', style: _p(size: 11, color: Colors.green.shade600)),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(_formatHarga(price), style: _p(size: 13, weight: FontWeight.bold, color: _accent)),
-                      const SizedBox(height: 2),
-                      Text('/ jam', style: _p(size: 11, color: Colors.grey.shade400)),
-                    ],
-                  ),
+                  Text(s['price'] as String, style: _p(size: 13, weight: FontWeight.bold, color: _accent)),
+                  const SizedBox(height: 2),
+                  Text('/ jam', style: _p(size: 11, color: Colors.grey.shade400)),
                 ],
               ),
-            );
-          }).toList(),
+            ],
+          ),
         );
-      },
+      }).toList(),
     );
   }
 
@@ -635,8 +570,17 @@ Widget build(BuildContext context) {
               return GestureDetector(
                 onTap: () {
                   setState(() => _selectedNavIndex = i);
-                  },
-                
+                  if (i == 1) {
+                    Navigator.pushNamed(context, AppRoutes.cariLapangan);
+                  } else if (i == 2) {
+                    Navigator.pushNamed(context, AppRoutes.riwayatBooking);
+                  } else if (i == 3) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                    );
+                  }
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

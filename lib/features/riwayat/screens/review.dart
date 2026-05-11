@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-import '../../../data/model/booking_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// Data yang dikirim ke halaman review
 class ReviewData {
   final String bookingId;
+  final String lapanganId;
   final String namaLapangan;
   final String imagePath;
   final int hargaPerJam;
 
   const ReviewData({
     required this.bookingId,
+    required this.lapanganId,
     required this.namaLapangan,
     required this.imagePath,
     required this.hargaPerJam,
@@ -51,7 +53,7 @@ class _ReviewPageState extends State<ReviewPage> {
     super.dispose();
   }
 
-  // ─── Label rating overall ─────────────────────────────────────────────────
+  // label rating overall
 
   String get _labelOverall {
     switch (_ratingOverall) {
@@ -77,7 +79,7 @@ class _ReviewPageState extends State<ReviewPage> {
     return _primaryColor;
   }
 
-  // ─── Format rupiah ────────────────────────────────────────────────────────
+  // format rp
 
   String _formatRupiah(int nominal) {
     return NumberFormat.currency(
@@ -87,7 +89,7 @@ class _ReviewPageState extends State<ReviewPage> {
     ).format(nominal);
   }
 
-  // ─── Submit ───────────────────────────────────────────────────────────────
+  // submit
 
   Future<void> _kirimUlasan() async {
     // Validasi rating overall wajib diisi
@@ -98,24 +100,67 @@ class _ReviewPageState extends State<ReviewPage> {
 
     setState(() => _isLoading = true);
 
-    // TODO: Kirim ke Supabase / backend
-    // Payload:
-    // {
-    //   'booking_id': widget.data.bookingId,
-    //   'rating_overall': _ratingOverall,
-    //   'rating_kebersihan': _ratingKebersihan,
-    //   'rating_fasilitas': _ratingFasilitas,
-    //   'rating_pelayanan': _ratingPelayanan,
-    //   'rating_kondisi': _ratingKondisi,
-    //   'ulasan': _komentarController.text.trim(),
-    // }
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+      final firestore = FirebaseFirestore.instance;
 
-    setState(() => _isLoading = false);
+      // 1. Simpan ulasan ke collection 'ulasan'
+      await firestore.collection('ulasan').add({
+        'booking_id': widget.data.bookingId,
+        'lapangan_id': widget.data.lapanganId,
+        'user_id': user.uid,
+        'rating_overall': _ratingOverall,
+        'rating_kebersihan': _ratingKebersihan,
+        'rating_fasilitas': _ratingFasilitas,
+        'rating_pelayanan': _ratingPelayanan,
+        'rating_kondisi': _ratingKondisi,
+        'komentar': _komentarController.text.trim(),
+        'fullName': user.displayName ?? '',
+        'created_at': FieldValue.serverTimestamp(),
+      });
+      // 2. Ambil semua ulasan lapangan ini untuk hitung ulang rating_rata
+      final ulasanSnapshot = await firestore
+          .collection('ulasan')
+          .where('lapangan_id', isEqualTo: widget.data.lapanganId)
+          .get();
 
-    if (!mounted) return;
+      final semuaRating = ulasanSnapshot.docs
+          .map((doc) => (doc.data()['rating_overall'] as num).toDouble())
+          .toList();
 
-    _tampilkanSukses();
+      final ratingBaru = semuaRating.isEmpty
+          ? 0.0
+          : semuaRating.reduce((a, b) => a + b) / semuaRating.length;
+
+      // 3. Update rating_rata dan jumlah_ulasan di collection 'lapangan'
+      await firestore
+          .collection('lapangan')
+          .doc(widget.data.lapanganId)
+          .update({
+        'rating_rata': double.parse(ratingBaru.toStringAsFixed(1)),
+        'jumlah_ulasan': semuaRating.length,
+      });
+      // 4. Update status booking jadi sudah direview
+      await firestore
+          .collection('bookings')
+          .doc(widget.data.bookingId)
+          .update({'sudah_review': true});
+
+      setState(() => _isLoading = false);
+
+      if (!mounted) return;
+      _tampilkanSukses();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal mengirim ulasan: $e')),
+      );
+    }
   }
 
   void _tampilkanSukses() {
@@ -123,8 +168,7 @@ class _ReviewPageState extends State<ReviewPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         contentPadding: const EdgeInsets.all(24),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -135,8 +179,8 @@ class _ReviewPageState extends State<ReviewPage> {
                 color: _starColor.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.star_rounded,
-                  color: _starColor, size: 48),
+              child:
+                  const Icon(Icons.star_rounded, color: _starColor, size: 48),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -159,8 +203,8 @@ class _ReviewPageState extends State<ReviewPage> {
               child: ElevatedButton(
                 onPressed: () {
                   Navigator.of(context).pop(); // tutup dialog
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                      '/home', (route) => false);
+                  Navigator.of(context)
+                      .pushNamedAndRemoveUntil('/home', (route) => false);
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _primaryColor,
@@ -180,7 +224,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
+  // build
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +244,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // ─── App Bar ──────────────────────────────────────────────────────────────
+  // app bar
 
   Widget _buildAppBar() {
     return SliverAppBar(
@@ -225,7 +269,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // ─── Kartu Lapangan ───────────────────────────────────────────────────────
+  // kartu lapangan
 
   Widget _buildKartuLapangan() {
     return Container(
@@ -310,7 +354,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // ─── Rating Overall ───────────────────────────────────────────────────────
+  // rating overall
 
   Widget _buildRatingOverall() {
     return Container(
@@ -383,7 +427,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // ─── Rating Kategori ──────────────────────────────────────────────────────
+  // rating kategori
 
   Widget _buildRatingKategori() {
     return Container(
@@ -443,7 +487,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // ─── Komentar ─────────────────────────────────────────────────────────────
+  // komentar
 
   Widget _buildKomentar() {
     return Container(
@@ -483,8 +527,7 @@ class _ReviewPageState extends State<ReviewPage> {
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Ceritakan pengalamanmu bermain di sini...',
-                hintStyle: TextStyle(
-                    color: Colors.grey.shade400, fontSize: 14),
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 filled: true,
                 fillColor: const Color(0xFFF5F7FA),
                 contentPadding: const EdgeInsets.all(14),
@@ -497,8 +540,8 @@ class _ReviewPageState extends State<ReviewPage> {
                   borderSide:
                       const BorderSide(color: _primaryColor, width: 1.5),
                 ),
-                counterStyle: const TextStyle(
-                    fontSize: 11, color: Color(0xFF888888)),
+                counterStyle:
+                    const TextStyle(fontSize: 11, color: Color(0xFF888888)),
               ),
             ),
           ),
@@ -507,7 +550,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // ─── Tombol Kirim ─────────────────────────────────────────────────────────
+  // tombol kirim
 
   Widget _buildTombolKirim() {
     return Container(
@@ -532,8 +575,8 @@ class _ReviewPageState extends State<ReviewPage> {
             backgroundColor: _primaryColor,
             foregroundColor: Colors.white,
             disabledBackgroundColor: const Color(0xFFBBCCDD),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
           ),
           child: _isLoading
@@ -545,8 +588,7 @@ class _ReviewPageState extends State<ReviewPage> {
                 )
               : const Text(
                   'Kirim Ulasan',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
         ),
       ),
@@ -554,7 +596,7 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 }
 
-// ─── Widget Pembantu ─────────────────────────────────────────────────────────
+// widget pembantu
 
 class _BariKategori extends StatelessWidget {
   final String label;
@@ -597,9 +639,8 @@ class _BariKategori extends StatelessWidget {
                     index <= nilai
                         ? Icons.star_rounded
                         : Icons.star_outline_rounded,
-                    color: index <= nilai
-                        ? _starColor
-                        : const Color(0xFFDDDDDD),
+                    color:
+                        index <= nilai ? _starColor : const Color(0xFFDDDDDD),
                     size: 26,
                   ),
                 ),
