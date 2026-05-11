@@ -548,12 +548,13 @@ Future<void> _openMaps() async {
                 onTap: () {
                   setState(() => _selectedNavIndex = i);
                   if (i == 1) {
-                    Navigator.pushNamed(context, AppRoutes.pilihJadwal);
-                  }
-                  if (i == 3) {
+                    Navigator.pushNamed(context, AppRoutes.cariLapangan);
+                  } else if (i == 2) {
+                    Navigator.pushNamed(context, AppRoutes.riwayatBooking);
+                  } else if (i == 3) {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => ProfileScreen()),
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
                     );
                   }
                 },
