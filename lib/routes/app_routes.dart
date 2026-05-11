@@ -20,15 +20,10 @@ class AppRoutes {
   static const String pilihJadwal = '/pilihJadwal';
   static const String payment = '/payment';
   static const String paymentSucces = '/paymentSucces';
-<<<<<<< HEAD
   static const String riwayatBooking = '/riwayatBooking';
   static const String testDetail = '/test-detail'; // ← tambah ini
   static const String profile_screen = '/profile';
 
-=======
-  static const String testDetail = '/test-detail';
-  static const String riwayatBooking = '/riwayatBooking'; 
->>>>>>> 9d31466d39c3b3dbcff47c458c74575ae80948b7
   static const String cariLapangan = '/cariLapangan';
   static Map<String, WidgetBuilder> routes = {
     login: (context) => const LoginScreen(),

@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'informasi_pribadi.dart';
 import 'keamanan_sandi.dart';
 import 'pusat_bantuan.dart';
 import 'kebijakan_privasi.dart';
+import '../../../../routes/app_routes.dart';
 
-final ValueNotifier<bool> darkModeNotifier = ValueNotifier(false);
+final ValueNotifier<bool>    darkModeNotifier    = ValueNotifier(false);
+final ValueNotifier<String?> profilePhotoNotifier = ValueNotifier(null);
+final ValueNotifier<String>  profileNameNotifier  = ValueNotifier('');
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -44,6 +48,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _fetchUserData();
+    _loadSavedPhoto();
+  }
+
+  // ── Load foto dari SharedPreferences ──────────────────────────────────────────
+  Future<void> _loadSavedPhoto() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedPath = prefs.getString('profile_photo_path');
+    if (savedPath != null && File(savedPath).existsSync()) {
+      setState(() => _fotoPath = savedPath);
+      profilePhotoNotifier.value = savedPath;
+    }
+    // Sync nama ke notifier supaya HomeScreen langsung tahu
+    if (_nama.isNotEmpty) profileNameNotifier.value = _nama;
   }
 
   // ── Fetch data user dari Firestore ────────────────────────────────────────────
@@ -71,6 +88,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _totalBooking = bookingQuery.docs.length;
           _loadingUser  = false;
         });
+        // Sync nama ke notifier supaya HomeScreen langsung menampilkan nama terbaru
+        profileNameNotifier.value = _nama;
       }
     } catch (e) {
       if (mounted) setState(() => _loadingUser = false);
@@ -103,13 +122,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
-    if (result != null) {
+    if (result != null && mounted) {
       setState(() {
         _nama     = result['nama']    ?? _nama;
         _email    = result['email']   ?? _email;
         _telepon  = result['telepon'] ?? _telepon;
         _fotoPath = result['foto'];
       });
+      // Propagasi nama terbaru ke HomeScreen via ValueNotifier
+      profileNameNotifier.value = _nama;
+      // Simpan foto ke SharedPreferences agar persisten setelah login ulang
+      final prefs = await SharedPreferences.getInstance();
+      if (_fotoPath != null) {
+        await prefs.setString('profile_photo_path', _fotoPath!);
+      } else {
+        await prefs.remove('profile_photo_path');
+      }
+      // Propagasi foto terbaru ke HomeScreen via ValueNotifier
+      profilePhotoNotifier.value = _fotoPath;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Text('Profil berhasil diperbarui!',
+                  style: _p(size: 13, color: Colors.white)),
+            ],
+          ),
+          backgroundColor: _accent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -154,17 +202,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _onNavTap(int index) {
     if (index == _selectedNavIndex) return;
     switch (index) {
-      case 0:
-        // TODO: uncomment setelah merge
-        // Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
-        break;
-      case 1:
-        // TODO: uncomment setelah merge
-        break;
-      case 2:
-        // TODO: uncomment setelah merge
-        break;
-      case 3:
+      case 0: // Beranda
+        Navigator.pushNamedAndRemoveUntil(
+            context, AppRoutes.home, (route) => false);
+        return;
+      case 1: // Cari
+        Navigator.pushNamed(context, AppRoutes.cariLapangan);
+        return;
+      case 2: // Riwayat
+        Navigator.pushNamed(context, AppRoutes.riwayatBooking);
+        return;
+      case 3: // Profil (sudah di sini)
         break;
     }
     setState(() => _selectedNavIndex = index);
