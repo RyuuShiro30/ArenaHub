@@ -1,5 +1,3 @@
-import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
-import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -111,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ── Buka Google Maps ──────────────────────────────────────────────────────────
-  Future<void> _openMaps() async {
+Future<void> _openMaps() async {
   final Uri mapsUri = Uri.parse(
     'geo:0,0?q=Unggul+Sport+Center+Malang'
   );
@@ -168,13 +166,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final List<Widget> pages = [
-      _buildHomeBody(),
-      const PencarianLapanganScreen(),
-      const RiwayatBookingScreen(), // sementara
-      const Scaffold(body: Center(child: Text('Profil'))), // sementara
-    ];
-
     return Scaffold(
       backgroundColor: _bgColor,
       body: SafeArea(
@@ -294,8 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Text('Sport Center\nArenaHub',
               style: _p(size: 26, weight: FontWeight.bold, color: Colors.white, height: 1.2)),
           const SizedBox(height: 14),
-          _cardInfo(
-              Icons.location_on_outlined, 'Jl. Atletik No. 123, Kota Malang'),
+          _cardInfo(Icons.location_on_outlined, 'Jl. Atletik No. 123, Kota Malang'),
           const SizedBox(height: 6),
           _cardInfo(Icons.access_time_outlined, '08:00 – 22:00'),
           const SizedBox(height: 20),
@@ -303,13 +293,12 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pushNamed(context, AppRoutes.pilihJadwal),
+                  onPressed: () => Navigator.pushNamed(context, AppRoutes.cariLapangan),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: const Color(0xFF0D3D4A),
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 0,
                   ),
                   child: Text('Pesan Sekarang',
@@ -348,8 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _sectionTitle(String title) {
-    return Text(title,
-        style: _p(size: 16, weight: FontWeight.bold, color: _textDark));
+    return Text(title, style: _p(size: 16, weight: FontWeight.bold, color: _textDark));
   }
 
   // ── Sport Grid ────────────────────────────────────────────────────────────────
@@ -374,8 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Image.network(
                 sport['image'] as String,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    Container(color: sport['color'] as Color),
+                errorBuilder: (_, __, ___) => Container(color: sport['color'] as Color),
               ),
               Container(
                 decoration: BoxDecoration(
@@ -413,8 +400,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
                 decoration: BoxDecoration(
                   color: _accent.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
@@ -429,20 +415,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text(s['name'] as String, style: _p(size: 13, weight: FontWeight.w600, color: _textDark)),
                     const SizedBox(height: 2),
-                    Text(s['status'] as String,
-                        style: _p(size: 11, color: Colors.grey.shade500)),
+                    Text(s['status'] as String, style: _p(size: 11, color: Colors.grey.shade500)),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(s['price'] as String,
-                      style: _p(
-                          size: 13, weight: FontWeight.bold, color: _accent)),
+                  Text(s['price'] as String, style: _p(size: 13, weight: FontWeight.bold, color: _accent)),
                   const SizedBox(height: 2),
-                  Text('/ jam',
-                      style: _p(size: 11, color: Colors.grey.shade400)),
+                  Text('/ jam', style: _p(size: 11, color: Colors.grey.shade400)),
                 ],
               ),
             ],
@@ -499,8 +481,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: _p(size: 11, weight: FontWeight.w500, color: Colors.grey.shade500, spacing: 0.4)),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: _statusColor(status).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -545,10 +526,10 @@ class _HomeScreenState extends State<HomeScreen> {
   // ── Bottom Nav ────────────────────────────────────────────────────────────────
   Widget _buildBottomNav() {
     final items = [
-      {'icon': Icons.home_rounded, 'label': 'Beranda'},
-      {'icon': Icons.search_rounded, 'label': 'Cari'},
+      {'icon': Icons.home_rounded,    'label': 'Beranda'},
+      {'icon': Icons.search_rounded,  'label': 'Cari'},
       {'icon': Icons.history_rounded, 'label': 'Riwayat'},
-      {'icon': Icons.person_rounded, 'label': 'Profil'},
+      {'icon': Icons.person_rounded,  'label': 'Profil'},
     ];
 
     return Container(
@@ -578,12 +559,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isActive
-                        ? _accent.withOpacity(0.1)
-                        : Colors.transparent,
+                    color: isActive ? _accent.withOpacity(0.1) : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(

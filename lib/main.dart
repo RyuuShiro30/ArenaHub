@@ -10,14 +10,6 @@ import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-<<<<<<< HEAD
-  await dotenv.load(fileName: ".env", mergeWith: {});
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  await initializeDateFormatting('id_ID', null);
-  runApp(const MyApp());
-=======
   
   await dotenv.load(fileName: ".env");
   
@@ -28,7 +20,6 @@ void main() async {
   await initializeDateFormatting('id_ID', null);
   
   runApp(const MyApp()); // ← cukup sekali di paling bawah
->>>>>>> e558344300130f522e271a284406aba502826a43
 }
 
 class MyApp extends StatelessWidget {
