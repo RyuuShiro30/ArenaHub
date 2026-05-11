@@ -1,65 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+
 import '../../../data/model/riwayat_booking_model.dart';
 import '../widgets/riwayat_booking_card.dart';
-
-// ── Dummy data (move to data layer when integrating with API) ─────────────────
-
-final List<RiwayatBookingModel> _dummyRiwayat = [
-  RiwayatBookingModel(
-    bookingId: 'AH-9821',
-    namaLapangan: 'Lapangan Futsal A',
-    kategori: 'FUTSAL',
-    tanggal: '24 Maret 2026',
-    waktu: '19:00 - 20:00',
-    totalPembayaran: 130000,
-    status: BookingStatus.aktif,
-    imagePath:
-        'https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=600',
-    sisaWaktu: const Duration(hours: 2, minutes: 15, seconds: 0),
-  ),
-  RiwayatBookingModel(
-    bookingId: 'AH-8712',
-    namaLapangan: 'lapangan Basket A',
-    kategori: 'BASKETBALL',
-    tanggal: '15 Maret 2026',
-    waktu: '16:00 - 18:00',
-    totalPembayaran: 240000,
-    status: BookingStatus.selesai,
-    imagePath:
-        'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=600',
-  ),
-  RiwayatBookingModel(
-    bookingId: 'AH-7611',
-    namaLapangan: 'Lapangan Bulutangkis A',
-    kategori: 'BADMINTON',
-    tanggal: '12 Maret 2026',
-    waktu: '20:00 - 21:00',
-    totalPembayaran: 80000,
-    status: BookingStatus.dibatalkan,
-    imagePath:
-        'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=600',
-  ),
-];
-
-// ── Screen ────────────────────────────────────────────────────────────────────
 
 class RiwayatBookingScreen extends StatefulWidget {
   const RiwayatBookingScreen({super.key});
 
   @override
-  State<RiwayatBookingScreen> createState() => _RiwayatBookingScreenState();
+  State<RiwayatBookingScreen> createState() =>
+      _RiwayatBookingScreenState();
 }
 
-class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
+class _RiwayatBookingScreenState
+    extends State<RiwayatBookingScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  final List<String> _tabs = ['Semua', 'Aktif', 'Selesai', 'Dibatalkan'];
+  final List<String> _tabs = [
+    'Semua',
+    'Aktif',
+    'Selesai',
+    'Dibatalkan',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
+
+    _tabController = TabController(
+      length: _tabs.length,
+      vsync: this,
+    );
   }
 
   @override
@@ -68,28 +41,29 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
     super.dispose();
   }
 
-  // ── Filter list by tab ────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // STATUS PARSER
+  // ─────────────────────────────────────────────────────────────
 
-  List<RiwayatBookingModel> _filtered(int tabIndex) {
-    switch (tabIndex) {
-      case 1:
-        return _dummyRiwayat
-            .where((b) => b.status == BookingStatus.aktif)
-            .toList();
-      case 2:
-        return _dummyRiwayat
-            .where((b) => b.status == BookingStatus.selesai)
-            .toList();
-      case 3:
-        return _dummyRiwayat
-            .where((b) => b.status == BookingStatus.dibatalkan)
-            .toList();
+  BookingStatus _parseStatus(String? status) {
+    switch (status) {
+      case 'aktif':
+        return BookingStatus.aktif;
+
+      case 'selesai':
+        return BookingStatus.selesai;
+
+      case 'dibatalkan':
+        return BookingStatus.dibatalkan;
+
       default:
-        return _dummyRiwayat;
+        return BookingStatus.aktif;
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // BUILD
+  // ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +73,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
       body: Column(
         children: [
           _buildTabBar(),
+
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -113,16 +88,24 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
     );
   }
 
-  // ── AppBar ────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // APP BAR
+  // ─────────────────────────────────────────────────────────────
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
+
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A2E), size: 22),
+        icon: const Icon(
+          Icons.arrow_back,
+          color: Color(0xFF1A1A2E),
+          size: 22,
+        ),
         onPressed: () => Navigator.of(context).maybePop(),
       ),
+
       title: const Text(
         'Riwayat Booking',
         style: TextStyle(
@@ -131,86 +114,234 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
           color: Color(0xFF1A1A2E),
         ),
       ),
+
       centerTitle: true,
+
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
-        child: Container(color: const Color(0xFFEEEEEE), height: 1),
+        child: Container(
+          color: const Color(0xFFEEEEEE),
+          height: 1,
+        ),
       ),
     );
   }
 
-  // ── Tab bar ───────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // TAB BAR
+  // ─────────────────────────────────────────────────────────────
 
   Widget _buildTabBar() {
     return Container(
       color: Colors.white,
+
       child: TabBar(
         controller: _tabController,
         isScrollable: true,
         tabAlignment: TabAlignment.center,
+
         labelColor: const Color(0xFF1565C0),
         unselectedLabelColor: const Color(0xFF9E9E9E),
+
         labelStyle: const TextStyle(
           fontSize: 13.5,
           fontWeight: FontWeight.w700,
         ),
+
         unselectedLabelStyle: const TextStyle(
           fontSize: 13.5,
           fontWeight: FontWeight.w500,
         ),
+
         indicator: const UnderlineTabIndicator(
           borderSide: BorderSide(
             color: Color(0xFF1565C0),
             width: 2.5,
           ),
         ),
+
         indicatorSize: TabBarIndicatorSize.label,
+
         tabs: _tabs.map((t) => Tab(text: t)).toList(),
       ),
     );
   }
 
-  // ── List ──────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // LIST BOOKING
+  // ─────────────────────────────────────────────────────────────
 
   Widget _buildList(int tabIndex) {
-    final list = _filtered(tabIndex);
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('bookings')
+          .orderBy('tanggal_booking', descending: true)
+          .snapshots(),
 
-    if (list.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inbox_rounded, size: 56, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            Text(
-              'Belum ada riwayat booking',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade400,
-              ),
+      builder: (context, snapshot) {
+        // LOADING
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        // EMPTY STATE
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.inbox_rounded,
+                  size: 56,
+                  color: Colors.grey.shade300,
+                ),
+
+                const SizedBox(height: 16),
+
+                Text(
+                  'Belum ada riwayat booking',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
-    }
+          );
+        }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: list.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 14),
-      itemBuilder: (context, index) {
-        final booking = list[index];
-        return RiwayatBookingCard(
-          booking: booking,
-          onLihatDetail: () {
-            // TODO: navigate to detail tiket
-          },
-          onBeriUlasan: () {
-            // TODO: navigate to ulasan
-          },
-          onPesanLagi: () {
-            // TODO: navigate to booking
+        final docs = snapshot.data!.docs;
+
+        // MAPPING FIRESTORE -> MODEL
+        List<RiwayatBookingModel> list = docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+
+          // TANGGAL
+          DateTime tanggalBooking = DateTime.now();
+
+          if (data['tanggal_booking'] != null) {
+            tanggalBooking =
+                (data['tanggal_booking'] as Timestamp).toDate();
+          }
+
+          String formattedTanggal =
+              DateFormat(
+                'd MMMM yyyy',
+                'id_ID',
+              ).format(tanggalBooking);
+
+          return RiwayatBookingModel(
+            bookingId: data['order_id'] ?? '',
+
+            namaLapangan:
+                data['nama_lapangan'] ?? 'Lapangan',
+
+            kategori:
+                data['kategori'] ?? 'SPORT',
+
+            tanggal: formattedTanggal,
+
+            waktu:
+                data['jam_booking'] ?? '-',
+
+            totalPembayaran:
+                data['total_harga'] ?? 0,
+
+            imagePath:
+                data['image_url'] ??
+                    'https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=600',
+
+            status: _parseStatus(
+              data['status'],
+            ),
+          );
+        }).toList();
+
+        // FILTER TAB
+        if (tabIndex == 1) {
+          list = list
+              .where(
+                (e) =>
+                    e.status ==
+                    BookingStatus.aktif,
+              )
+              .toList();
+        } else if (tabIndex == 2) {
+          list = list
+              .where(
+                (e) =>
+                    e.status ==
+                    BookingStatus.selesai,
+              )
+              .toList();
+        } else if (tabIndex == 3) {
+          list = list
+              .where(
+                (e) =>
+                    e.status ==
+                    BookingStatus.dibatalkan,
+              )
+              .toList();
+        }
+
+        // EMPTY FILTER RESULT
+        if (list.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.inbox_rounded,
+                  size: 56,
+                  color: Colors.grey.shade300,
+                ),
+
+                const SizedBox(height: 16),
+
+                Text(
+                  'Tidak ada data',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // LIST VIEW
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+
+          itemCount: list.length,
+
+          separatorBuilder: (_, __) =>
+              const SizedBox(height: 14),
+
+          itemBuilder: (context, index) {
+            final booking = list[index];
+
+            return RiwayatBookingCard(
+              booking: booking,
+
+              onLihatDetail: () {
+                // TODO
+              },
+
+              onBeriUlasan: () {
+                // TODO
+              },
+
+              onPesanLagi: () {
+                // TODO
+              },
+            );
           },
         );
       },
