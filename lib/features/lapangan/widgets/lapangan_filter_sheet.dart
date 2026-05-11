@@ -1,10 +1,12 @@
+// lib/features/lapangan/widgets/lapangan_filter_sheet.dart
+
 import 'package:flutter/material.dart';
 
 // ── Result model ──────────────────────────────────────────────────────────────
 
 class LapanganFilterResult {
-  final DateTime? selectedDate; // null = flexible / no date filter
-  final String? selectedTimeRange; // null = all times  e.g. "06-10"
+  final DateTime? selectedDate;
+  final String? selectedTimeRange;
 
   const LapanganFilterResult({
     this.selectedDate,
@@ -35,7 +37,6 @@ class LapanganFilterSheet extends StatefulWidget {
 
   const LapanganFilterSheet({super.key, this.initialFilter});
 
-  /// Show the bottom sheet and return the user's filter choice.
   static Future<LapanganFilterResult?> show(
     BuildContext context, {
     LapanganFilterResult? initialFilter,
@@ -54,44 +55,24 @@ class LapanganFilterSheet extends StatefulWidget {
 
 class _LapanganFilterSheetState extends State<LapanganFilterSheet>
     with SingleTickerProviderStateMixin {
-  // ── Tab controller ────────────────────────────────────────────
+  // ── Tab ───────────────────────────────────────────────────────
   late TabController _tabController;
   final List<String> _tabs = ['Activity Date', 'Activity Time'];
 
   // ── Date state ────────────────────────────────────────────────
   bool _isFlexible = true;
   DateTime? _pickedDate;
-  late DateTime _focusedMonth;
+  late DateTime _focusedMonth; // bulan yang sedang ditampilkan
 
   // ── Time state ────────────────────────────────────────────────
-  int _selectedTimeIndex = 0; // 0 = Semua
+  int _selectedTimeIndex = 0;
 
   static const List<_TimeOption> _timeOptions = [
-    _TimeOption(
-      label: 'Semua',
-      sublabel: 'Waktu',
-      icon: Icons.wb_sunny_outlined,
-    ),
-    _TimeOption(
-      label: '06-10',
-      sublabel: 'Pagi',
-      icon: Icons.wb_twilight_outlined,
-    ),
-    _TimeOption(
-      label: '11-14',
-      sublabel: 'Siang',
-      icon: Icons.wb_sunny_rounded,
-    ),
-    _TimeOption(
-      label: '15-17',
-      sublabel: 'Sore',
-      icon: Icons.wb_cloudy_outlined,
-    ),
-    _TimeOption(
-      label: '18-22',
-      sublabel: 'Malam',
-      icon: Icons.nightlight_round_outlined,
-    ),
+    _TimeOption(label: 'Semua', sublabel: 'Waktu', icon: Icons.wb_sunny_outlined),
+    _TimeOption(label: '06-10', sublabel: 'Pagi', icon: Icons.wb_twilight_outlined),
+    _TimeOption(label: '11-14', sublabel: 'Siang', icon: Icons.wb_sunny_rounded),
+    _TimeOption(label: '15-17', sublabel: 'Sore', icon: Icons.wb_cloudy_outlined),
+    _TimeOption(label: '18-21', sublabel: 'Malam', icon: Icons.nightlight_round_outlined),
   ];
 
   // ── Init ──────────────────────────────────────────────────────
@@ -106,19 +87,48 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
       _isFlexible = init.selectedDate == null;
       _pickedDate = init.selectedDate;
       if (init.selectedTimeRange != null) {
-        final idx =
-            _timeOptions.indexWhere((t) => t.label == init.selectedTimeRange);
+        final idx = _timeOptions.indexWhere((t) => t.label == init.selectedTimeRange);
         _selectedTimeIndex = idx >= 0 ? idx : 0;
       }
     }
 
-    _focusedMonth = _pickedDate ?? DateTime.now();
+    // Mulai dari bulan ini
+    final now = DateTime.now();
+    _focusedMonth = DateTime(_pickedDate?.year ?? now.year,
+        _pickedDate?.month ?? now.month, 1);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  // ── Navigasi bulan ────────────────────────────────────────────
+
+  void _prevMonth() {
+    final now = DateTime.now();
+    final currentMonthStart = DateTime(now.year, now.month, 1);
+    // Tidak bisa ke bulan sebelum bulan ini
+    if (_focusedMonth.isAfter(currentMonthStart)) {
+      setState(() {
+        _focusedMonth =
+            DateTime(_focusedMonth.year, _focusedMonth.month - 1, 1);
+      });
+    }
+  }
+
+  void _nextMonth() {
+    setState(() {
+      _focusedMonth =
+          DateTime(_focusedMonth.year, _focusedMonth.month + 1, 1);
+    });
+  }
+
+  bool get _canGoPrev {
+    final now = DateTime.now();
+    final currentMonthStart = DateTime(now.year, now.month, 1);
+    return _focusedMonth.isAfter(currentMonthStart);
   }
 
   // ── Actions ───────────────────────────────────────────────────
@@ -135,10 +145,11 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
   }
 
   void _reset() {
+    final now = DateTime.now();
     setState(() {
       _isFlexible = true;
       _pickedDate = null;
-      _focusedMonth = DateTime.now();
+      _focusedMonth = DateTime(now.year, now.month, 1);
       _selectedTimeIndex = 0;
     });
   }
@@ -217,14 +228,10 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
           indicatorSize: TabBarIndicatorSize.tab,
           labelColor: const Color(0xFF1A1A2E),
           unselectedLabelColor: const Color(0xFF9E9E9E),
-          labelStyle: const TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w700,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w500,
-          ),
+          labelStyle:
+              const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+          unselectedLabelStyle:
+              const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
           padding: const EdgeInsets.all(4),
           tabs: _tabs.map((t) => Tab(text: t, height: 38)).toList(),
         ),
@@ -243,7 +250,9 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
           const SizedBox(height: 16),
           _buildDateToggleRow(),
           const SizedBox(height: 20),
-          _buildInlineCalendar(),
+          _buildMonthNavigator(),
+          const SizedBox(height: 12),
+          _buildMonthCalendar(),
           const SizedBox(height: 16),
         ],
       ),
@@ -290,8 +299,9 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
         height: 44,
         decoration: BoxDecoration(
           color: active ? const Color(0xFF1565C0) : Colors.white,
-            border: Border.all(
-          color: active ? const Color(0xFF1565C0) : const Color(0xFFDDDDDD),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: active ? const Color(0xFF1565C0) : const Color(0xFFDDDDDD),
           ),
         ),
         child: Row(
@@ -315,54 +325,92 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
     );
   }
 
-  Widget _buildInlineCalendar() {
-    final now = DateTime.now();
-    return Column(
-      children: List.generate(3, (offset) {
-        final month =
-            DateTime(_focusedMonth.year, _focusedMonth.month + offset, 1);
-        return _buildMonthCalendar(month, now);
-      }),
-    );
-  }
+  // ── Month navigator (header dengan panah kiri/kanan) ──────────
 
-  Widget _buildMonthCalendar(DateTime month, DateTime now) {
+  Widget _buildMonthNavigator() {
     const fullMonthNames = [
-      '',
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember',
+      '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
     ];
 
-    final daysInMonth = DateUtils.getDaysInMonth(month.year, month.month);
-    final startOffset =
-        DateTime(month.year, month.month, 1).weekday - 1; // Mon = 0
+    final label =
+        '${fullMonthNames[_focusedMonth.month]} ${_focusedMonth.year}';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Month header
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Text(
-            '${fullMonthNames[month.month]} ${month.year}',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
+        // Tombol bulan sebelumnya
+        GestureDetector(
+          onTap: _canGoPrev ? _prevMonth : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: _canGoPrev
+                  ? const Color(0xFFF0F4FF)
+                  : const Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _canGoPrev
+                    ? const Color(0xFFBFD0F7)
+                    : const Color(0xFFEEEEEE),
+              ),
+            ),
+            child: Icon(
+              Icons.chevron_left_rounded,
+              size: 22,
+              color: _canGoPrev
+                  ? const Color(0xFF1565C0)
+                  : const Color(0xFFCCCCCC),
             ),
           ),
         ),
-        // Weekday labels
+
+        // Label bulan + tahun
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1A1A2E),
+          ),
+        ),
+
+        // Tombol bulan berikutnya
+        GestureDetector(
+          onTap: _nextMonth,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F4FF),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFBFD0F7)),
+            ),
+            child: const Icon(
+              Icons.chevron_right_rounded,
+              size: 22,
+              color: Color(0xFF1565C0),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Kalender 1 bulan ──────────────────────────────────────────
+
+  Widget _buildMonthCalendar() {
+    final now = DateTime.now();
+    final daysInMonth =
+        DateUtils.getDaysInMonth(_focusedMonth.year, _focusedMonth.month);
+    final startOffset =
+        DateTime(_focusedMonth.year, _focusedMonth.month, 1).weekday - 1;
+
+    return Column(
+      children: [
+        // Label hari
         Row(
           children: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']
               .map(
@@ -384,7 +432,7 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
               .toList(),
         ),
         const SizedBox(height: 8),
-        // Day grid
+        // Grid tanggal
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -397,7 +445,8 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
             if (index < startOffset) return const SizedBox.shrink();
 
             final day = index - startOffset + 1;
-            final date = DateTime(month.year, month.month, day);
+            final date =
+                DateTime(_focusedMonth.year, _focusedMonth.month, day);
             final today = DateTime(now.year, now.month, now.day);
             final isPast = date.isBefore(today);
             final isToday = DateUtils.isSameDay(date, now);
@@ -414,17 +463,19 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
                         _isFlexible = false;
                         _pickedDate = date;
                       }),
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
                 margin: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? const Color(0xFF2E7D32)
+                      ? const Color(0xFF1565C0)
                       : isToday
-                          ? const Color(0xFFE8F5E9)
+                          ? const Color(0xFFE8F0FE)
                           : Colors.transparent,
                   shape: BoxShape.circle,
                   border: isToday && !isSelected
-                      ? Border.all(color: const Color(0xFF2E7D32), width: 1.5)
+                      ? Border.all(
+                          color: const Color(0xFF1565C0), width: 1.5)
                       : null,
                 ),
                 child: Center(
@@ -440,7 +491,7 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
                           : isPast
                               ? const Color(0xFFCCCCCC)
                               : isWeekend
-                                  ? const Color(0xFF1565C0)
+                                  ? const Color(0xFFC62828)
                                   : const Color(0xFF1A1A2E),
                     ),
                   ),
@@ -449,7 +500,6 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
             );
           },
         ),
-        const SizedBox(height: 16),
       ],
     );
   }
@@ -479,12 +529,12 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
               duration: const Duration(milliseconds: 160),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? const Color(0xFFE8F5E9)
+                    ? const Color(0xFFE8F0FE)
                     : const Color(0xFFF8F8F8),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isSelected
-                      ? const Color(0xFF2E7D32)
+                      ? const Color(0xFF1565C0)
                       : const Color(0xFFEEEEEE),
                   width: isSelected ? 1.5 : 1,
                 ),
@@ -496,7 +546,7 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
                     opt.icon,
                     size: 22,
                     color: isSelected
-                        ? const Color(0xFF2E7D32)
+                        ? const Color(0xFF1565C0)
                         : const Color(0xFF9E9E9E),
                   ),
                   const SizedBox(height: 4),
@@ -506,7 +556,7 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: isSelected
-                          ? const Color(0xFF2E7D32)
+                          ? const Color(0xFF1565C0)
                           : const Color(0xFF1A1A2E),
                     ),
                   ),
@@ -515,7 +565,7 @@ class _LapanganFilterSheetState extends State<LapanganFilterSheet>
                     style: TextStyle(
                       fontSize: 10.5,
                       color: isSelected
-                          ? const Color(0xFF2E7D32).withOpacity(0.7)
+                          ? const Color(0xFF1565C0).withOpacity(0.7)
                           : const Color(0xFF9E9E9E),
                     ),
                   ),

@@ -1,17 +1,18 @@
+// lib/screens/lapangan/widgets/lapangan_card.dart
+
 import 'package:flutter/material.dart';
 import '../../../data/model/lapangan_model.dart';
-import '../../../widgets/time_slot_chip.dart';
 
 class LapanganCard extends StatelessWidget {
   final LapanganModel lapangan;
-
-  /// When non-null, slot availability is shown based on this specific date.
   final DateTime? selectedDate;
+  final VoidCallback? onTap; // ← BARU: navigasi ke detail
 
   const LapanganCard({
     super.key,
     required this.lapangan,
     this.selectedDate,
+    this.onTap,
   });
 
   // ── Helpers ───────────────────────────────────────────────────
@@ -25,47 +26,28 @@ class LapanganCard extends StatelessWidget {
     return 'Rp$amount';
   }
 
-  String _formatDate(DateTime date) {
-    const months = [
-      '',
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mei',
-      'Jun',
-      'Jul',
-      'Agu',
-      'Sep',
-      'Okt',
-      'Nov',
-      'Des',
-    ];
-    return '${date.day} ${months[date.month]} ${date.year}';
-  }
-
   Color get _kategoriBadgeColor {
-    switch (lapangan.kategori.toUpperCase()) {
+    switch (lapangan.jenisLapangan.toUpperCase()) {
       case 'FUTSAL':
         return const Color(0xFF2E7D32);
       case 'BADMINTON':
         return const Color(0xFF00695C);
       case 'BASKET':
+      case 'BASKETBALL':
         return const Color(0xFFE65100);
+      case 'TENNIS':
+        return const Color(0xFF6A1B9A);
       default:
         return const Color(0xFF1565C0);
     }
   }
 
-  bool get _isFull =>
-      selectedDate != null && lapangan.isFullOnDate(selectedDate!);
-
   // ── Build ─────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: _isFull ? 0.55 : 1.0,
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -91,13 +73,9 @@ class LapanganCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   _buildLocationRow(),
                   const SizedBox(height: 8),
-                  _buildFacilitiesRow(),
+                  _buildInfoRow(),
                   const SizedBox(height: 10),
-                  const Divider(height: 1, color: Color(0xFFEEEEEE)),
-                  const SizedBox(height: 10),
-                  _buildSlotHeader(),
-                  const SizedBox(height: 8),
-                  _buildTimeSlots(),
+                  _buildRatingFloorRow(),
                 ],
               ),
             ),
@@ -110,24 +88,22 @@ class LapanganCard extends StatelessWidget {
   // ── Image Section ─────────────────────────────────────────────
 
   Widget _buildImageSection() {
+    final imageUrl = lapangan.foto.isNotEmpty ? lapangan.foto[0] : '';
     return Stack(
       children: [
         ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-          child: Image.network(
-            lapangan.imagePath,
-            height: 170,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              height: 170,
-              color: const Color(0xFFB0BEC5),
-              child: const Icon(Icons.sports_soccer,
-                  size: 48, color: Colors.white54),
-            ),
-          ),
+          child: imageUrl.isNotEmpty
+              ? Image.network(
+                  imageUrl,
+                  height: 170,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                )
+              : _imagePlaceholder(),
         ),
-        // Kategori badge
+        // Jenis lapangan badge
         Positioned(
           top: 12,
           left: 12,
@@ -138,7 +114,7 @@ class LapanganCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              lapangan.kategori,
+              lapangan.jenisLapangan.toUpperCase(),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 11,
@@ -148,29 +124,74 @@ class LapanganCard extends StatelessWidget {
             ),
           ),
         ),
-        // Penuh overlay
-        if (_isFull)
-          Positioned.fill(
-            child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(14)),
-              child: Container(
-                color: Colors.black.withOpacity(0.38),
-                child: const Center(
-                  child: Text(
-                    'PENUH',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 5,
-                    ),
+        // Rating badge kanan atas
+        Positioned(
+          top: 12,
+          right: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.star_rounded,
+                    size: 13, color: Color(0xFFFFD700)),
+                const SizedBox(width: 3),
+                Text(
+                  lapangan.rating.toStringAsFixed(1),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+        // Foto count badge bawah kanan
+        if (lapangan.foto.length > 1)
+          Positioned(
+            bottom: 10,
+            right: 12,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.photo_library_outlined,
+                      size: 12, color: Colors.white),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${lapangan.foto.length} foto',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
       ],
+    );
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      height: 170,
+      width: double.infinity,
+      color: const Color(0xFFB0BEC5),
+      child: const Icon(Icons.sports_soccer, size: 48, color: Colors.white54),
     );
   }
 
@@ -182,7 +203,7 @@ class LapanganCard extends StatelessWidget {
       children: [
         Expanded(
           child: Text(
-            lapangan.nama,
+            lapangan.namaLapangan,
             style: const TextStyle(
               fontSize: 15.5,
               fontWeight: FontWeight.w700,
@@ -196,7 +217,7 @@ class LapanganCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              _formatRupiah(lapangan.hargaPerJam),
+              _formatRupiah(lapangan.harga),
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
@@ -225,42 +246,32 @@ class LapanganCard extends StatelessWidget {
         const Icon(Icons.location_on_outlined,
             size: 14, color: Color(0xFF9E9E9E)),
         const SizedBox(width: 3),
-        Text(
-          '${lapangan.lokasi} • ${lapangan.jarak} km',
-          style: const TextStyle(fontSize: 12.5, color: Color(0xFF9E9E9E)),
+        Expanded(
+          child: Text(
+            lapangan.lokasi,
+            style: const TextStyle(fontSize: 12.5, color: Color(0xFF9E9E9E)),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
   }
 
-  // ── Facilities ────────────────────────────────────────────────
+  // ── Info Row (kapasitas + fasilitas) ──────────────────────────
 
-  Widget _buildFacilitiesRow() {
-    final List<Widget> items = [];
-
-    if (lapangan.minOrang != null && lapangan.maxOrang != null) {
-      items.add(_facilityItem(
-        Icons.group_outlined,
-        '${lapangan.minOrang}-${lapangan.maxOrang} Orang',
-      ));
-    } else if (lapangan.minOrang != null) {
-      items.add(
-          _facilityItem(Icons.group_outlined, '${lapangan.minOrang} Orang'));
-    }
-
-    if (lapangan.adaKamarMandi) {
-      items.add(_facilityItem(Icons.shower_outlined, 'Kamar Mandi'));
-    }
-
-    if (lapangan.adaParkir) {
-      items.add(_facilityItem(Icons.local_parking_outlined, 'Parkir Luas'));
-    }
-
-    if (items.isEmpty) return const SizedBox.shrink();
-    return Wrap(spacing: 14, runSpacing: 4, children: items);
+  Widget _buildInfoRow() {
+    return Wrap(
+      spacing: 14,
+      runSpacing: 4,
+      children: [
+        _infoChip(Icons.group_outlined, 'Maks ${lapangan.kapasitas} orang'),
+        if (lapangan.nama.isNotEmpty)
+          _infoChip(Icons.info_outline_rounded, lapangan.nama),
+      ],
+    );
   }
 
-  Widget _facilityItem(IconData icon, String label) {
+  Widget _infoChip(IconData icon, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -278,95 +289,47 @@ class LapanganCard extends StatelessWidget {
     );
   }
 
-  // ── Slot Header ───────────────────────────────────────────────
+  // ── Rating + Floor Row ────────────────────────────────────────
 
-  Widget _buildSlotHeader() {
-    if (_isFull) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFFC62828),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.block_rounded, size: 12, color: Colors.white),
-            SizedBox(width: 4),
-            Text(
-              'PENUH – TIDAK ADA SLOT TERSEDIA',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
+  Widget _buildRatingFloorRow() {
     return Row(
       children: [
-        const Text(
-          'SLOT TERSEDIA',
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF757575),
-            letterSpacing: 0.4,
+        // Jenis lantai
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F5F5),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFE0E0E0)),
+          ),
+          child: Text(
+            lapangan.jenisFloor,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF424242),
+            ),
           ),
         ),
-        if (selectedDate != null) ...[
-          const SizedBox(width: 6),
-          Text(
-            '– ${_formatDate(selectedDate!)}',
-            style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1565C0),
+        const Spacer(),
+        // Tap hint
+        const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Lihat detail',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1565C0),
+              ),
             ),
-          ),
-        ] else ...[
-          const Text(
-            ' HARI INI:',
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF757575),
-              letterSpacing: 0.4,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  // ── Time Slots ────────────────────────────────────────────────
-
-  Widget _buildTimeSlots() {
-    if (_isFull) return const SizedBox.shrink();
-
-    final bookedOnDate =
-        selectedDate != null ? lapangan.bookedSlotsForDate(selectedDate!) : <String>[];
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 6,
-      children: [
-        ...lapangan.slotTersedia.map((slot) {
-          final isBooked = bookedOnDate.contains(slot);
-          return TimeSlotChip(
-            time: slot,
-            status: isBooked ? SlotStatus.booked : SlotStatus.available,
-          );
-        }),
-        if (lapangan.slotTambahan > 0)
-          TimeSlotChip(
-            time: '+${lapangan.slotTambahan} lagi',
-            status: SlotStatus.extra,
-          ),
+            SizedBox(width: 2),
+            Icon(Icons.arrow_forward_ios_rounded,
+                size: 11, color: Color(0xFF1565C0)),
+          ],
+        ),
       ],
     );
   }
