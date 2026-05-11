@@ -11,16 +11,26 @@ class PaymentScreen extends StatefulWidget {
   final String email;
   final String phone;
   final String selectedDate;
+  final String? kodePromo;
+  final int durasiJam;
+  final int subtotal;
+  final int diskon;
+  final String imagePath;
 
-  const PaymentScreen({
-    super.key,
-    required this.totalHarga,
-    required this.namaLapangan,
-    required this.customerName,
-    required this.email,
-    required this.phone,
-    required this.selectedDate,
-  });
+  const PaymentScreen(
+      {super.key,
+      required this.totalHarga,
+      required this.namaLapangan,
+      required this.customerName,
+      required this.email,
+      required this.phone,
+      required this.selectedDate,
+      this.kodePromo,
+      required this.durasiJam,
+      required this.subtotal,
+      this.diskon = 0,
+      required this.imagePath,
+      });
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -28,7 +38,7 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   final MidtransService midtransService = MidtransService();
-  
+
   bool isLoading = true;
   String? qrUrl;
   String? currentOrderId;
@@ -46,7 +56,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     print("Tanggal yang diterima: ${widget.selectedDate}");
     _startTimer();
     _initializeBookingAndPayment();
-    
   }
 
   @override
@@ -58,8 +67,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   // Integrasi: Menggabungkan inisialisasi ID dan pemanggilan Midtrans
   Future<void> _initializeBookingAndPayment() async {
     setState(() {
-    currentOrderId = "ORD-${DateTime.now().millisecondsSinceEpoch}";
-  });
+      currentOrderId = "ORD-${DateTime.now().millisecondsSinceEpoch}";
+    });
     await _generateSequentialBookingCode();
     await payNow();
   }
@@ -79,22 +88,22 @@ class _PaymentScreenState extends State<PaymentScreen> {
           .limit(1)
           .get();
 
-          int nextNumber = 1;
+      int nextNumber = 1;
 
       if (snapshot.docs.isEmpty) {
         // Jika booking pertama hari ini
         _bookingCode = 'INV-$dateTag-001';
       } else {
         String lastId = snapshot.docs.first.data()['order_id'] ?? '';
-        
+
         // Ambil 3 angka terakhir (setelah strip kedua)
         List<String> parts = lastId.split('-');
         int nextNumber = 1;
-        
+
         if (parts.length >= 3) {
           nextNumber = (int.tryParse(parts[2]) ?? 0) + 1;
         }
-        
+
         _bookingCode = 'INV-$dateTag-${nextNumber.toString().padLeft(3, '0')}';
       }
     } catch (e) {
@@ -104,18 +113,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
 
     if (mounted) setState(() {});
-  }
-
-  // Ini fungsi bantuan untuk simulasi (nanti hubungkan ke backend/provider kamu)
-  Future<String> _fetchLastOrderId() async {
-    // Contoh: jika Rani sudah pernah buat INV-00001, 
-    // maka fungsi ini harusnya mengembalikan 'INV-00001'
-    return 'INV-00001'; 
-  }
-
-  Future<String> _fetchLastBookingIdFromDatabase() async {
-    // Placeholder untuk integrasi database di masa depan
-    return ''; 
   }
 
   void _startTimer() {
@@ -156,7 +153,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     // 1. JANGAN gunakan _bookingCode sebagai orderId Midtrans jika tidak unik.
     // Gunakan timestamp agar selalu baru dan tidak ditolak Midtrans.
     String uniqueOrderId = "ORD-${DateTime.now().millisecondsSinceEpoch}";
-    
+
     setState(() {
       isLoading = true;
       currentOrderId = uniqueOrderId; // Simpan ID unik ini ke variabel class
@@ -181,72 +178,90 @@ class _PaymentScreenState extends State<PaymentScreen> {
         // Jika masih gagal, cek Debug Console untuk melihat pesan error dari API Midtrans
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Gagal membuat QR. ID mungkin duplikat atau Server Key salah.'),
+            content: Text(
+                'Gagal membuat QR. ID mungkin duplikat atau Server Key salah.'),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
-}
+  }
 
   Future<void> handleConfirmPayment() async {
-  if (currentOrderId == null) return;
+    if (currentOrderId == null) return;
 
-  setState(() {
-    isLoading = true;
-  });
+    setState(() {
+      isLoading = true;
+    });
 
-  try {
-    // 1. Cek status pembayaran ke Midtrans
-    final status = await midtransService.checkStatus(currentOrderId!);
+    try {
+      // 1. Cek status pembayaran ke Midtrans
+      final status = await midtransService.checkStatus(currentOrderId!);
 
-    if (mounted) {
-      // Jika statusnya 'settlement' (berhasil) atau 'pending' (menunggu pembayaran)
-      if (status == 'settlement' || status == 'pending') {
-        
-        // 2. SIMPAN DATA KE FIRESTORE
-        // Bagian ini akan membuat koleksi 'bookings' secara otomatis di Firebase
-        await FirebaseFirestore.instance.collection('bookings').doc(currentOrderId).set({
-          'order_id': currentOrderId,
-          'nama_lapangan': widget.namaLapangan,
-          'customer_name': widget.customerName,
-          'email': widget.email,
-          'phone': widget.phone,
-          'total_harga': widget.totalHarga,
-          'status_pembayaran': status, // Menyimpan status dari Midtrans
-          'tanggal_booking': FieldValue.serverTimestamp(), // Waktu transaksi
-        }, SetOptions(merge: true));
+      if (mounted) {
+        // Jika statusnya 'settlement' (berhasil) atau 'pending' (menunggu pembayaran)
+        if (status == 'settlement' || status == 'pending') {
+          // 2. SIMPAN DATA KE FIRESTORE
+          // Bagian ini akan membuat koleksi 'bookings' secara otomatis di Firebase
+          await FirebaseFirestore.instance
+              .collection('bookings')
+              .doc(currentOrderId)
+              .set({
+            'order_id': currentOrderId,
+            'nama_lapangan': widget.namaLapangan,
+            'customer_name': widget.customerName,
+            'email': widget.email,
+            'phone': widget.phone,
+            'total_harga': widget.totalHarga,
+            'status_pembayaran': status, // Menyimpan status dari Midtrans
+            'tanggal_booking': FieldValue.serverTimestamp(), // Waktu transaksi
+            'tanggal_main': widget.selectedDate,
+          }, SetOptions(merge: true));
+          // update pemakaian promo kalau ada
+          if (widget.kodePromo != null && widget.kodePromo!.isNotEmpty) {
+            await FirebaseFirestore.instance
+                .collection('promos')
+                .where('kode', isEqualTo: widget.kodePromo)
+                .limit(1)
+                .get()
+                .then((snapshot) {
+              if (snapshot.docs.isNotEmpty) {
+                snapshot.docs.first.reference.update({
+                  'used': FieldValue.increment(1),
+                });
+              }
+            });
+          }
+          setState(() {
+            isLoading = false;
+          });
 
-        setState(() {
-          isLoading = false;
-        });
-
-        // 3. PINDAH KE HALAMAN SUKSES
-        // Kita kirim currentOrderId sebagai argumen agar bisa dibaca di halaman tujuan
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.paymentSucces,
-          (route) => false,
-          arguments: currentOrderId, 
-        );
-      } else {
-        // Jika status selain settlement/pending (misal: expire atau deny)
+          // 3. PINDAH KE HALAMAN SUKSES
+          // Kita kirim currentOrderId sebagai argumen agar bisa dibaca di halaman tujuan
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.paymentSucces,
+            (route) => false,
+            arguments: currentOrderId,
+          );
+        } else {
+          // Jika status selain settlement/pending (misal: expire atau deny)
+          setState(() => isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Status pembayaran saat ini: $status")),
+          );
+        }
+      }
+    } catch (e) {
+      // Menangani error jika koneksi atau proses simpan gagal
+      if (mounted) {
         setState(() => isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Status pembayaran saat ini: $status")),
+          SnackBar(content: Text("Terjadi kesalahan: $e")),
         );
       }
     }
-  } catch (e) {
-    // Menangani error jika koneksi atau proses simpan gagal
-    if (mounted) {
-      setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Terjadi kesalahan: $e")),
-      );
-    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -313,12 +328,23 @@ class _PaymentScreenState extends State<PaymentScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    height: 140,
-                    width: double.infinity,
-                    color: Colors.grey.shade300,
-                    child: const Icon(Icons.image, size: 50, color: Colors.grey),
-                  ),
+                Container(
+                  height: 140,
+                  width: double.infinity,
+                  child: widget.imagePath.isNotEmpty
+                      ? Image.network(
+                          widget.imagePath,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: Colors.grey.shade300,
+                            child: const Icon(Icons.image, size: 50, color: Colors.grey),
+                          ),
+                        )
+                      : Container(
+                          color: Colors.grey.shade300,
+                          child: const Icon(Icons.image, size: 50, color: Colors.grey),
+                        ),
+                ),
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -336,13 +362,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 color: Colors.grey.shade100,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                _bookingCode.isEmpty ? '#...' : '#$_bookingCode',
+                                _bookingCode.isEmpty
+                                    ? '#...'
+                                    : '#$_bookingCode',
                                 style: const TextStyle(
                                   color: Colors.grey,
                                   fontSize: 10,
@@ -387,7 +416,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
             Row(
               children: [
-                Icon(Icons.account_balance_wallet_outlined, color: primaryDarkBlue),
+                Icon(Icons.account_balance_wallet_outlined,
+                    color: primaryDarkBlue),
                 const SizedBox(width: 8),
                 const Text(
                   'Metode Pembayaran',
@@ -419,7 +449,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             border: Border.all(color: Colors.grey.shade300),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Icon(Icons.qr_code_scanner, color: primaryDarkBlue),
+                          child: Icon(Icons.qr_code_scanner,
+                              color: primaryDarkBlue),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -472,7 +503,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                     ? Image.network(
                                         qrUrl!,
                                         fit: BoxFit.contain,
-                                        loadingBuilder: (context, child, progress) {
+                                        loadingBuilder:
+                                            (context, child, progress) {
                                           if (progress == null) return child;
                                           return const Center(
                                             child: CircularProgressIndicator(),
@@ -481,9 +513,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                         errorBuilder: (context, error, stack) {
                                           return const Center(
                                             child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
                                               children: [
-                                                Icon(Icons.broken_image, color: Colors.grey),
+                                                Icon(Icons.broken_image,
+                                                    color: Colors.grey),
                                                 SizedBox(height: 8),
                                                 Text(
                                                   'Gagal memuat QR',
@@ -499,7 +533,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                       )
                                     : Center(
                                         child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
                                           children: [
                                             Icon(
                                               Icons.error_outline,
@@ -535,7 +570,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ],
               ),
             ),
-            
+
             // --- BARIS KODE: INSTRUKSI PEMBAYARAN DROP DOWN ---
             const SizedBox(height: 20),
             Container(
@@ -545,7 +580,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 border: Border.all(color: Colors.grey.shade200),
               ),
               child: Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                data: Theme.of(context)
+                    .copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
                   leading: Icon(Icons.list_alt_rounded, color: primaryDarkBlue),
                   title: Text(
@@ -556,12 +592,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       color: primaryDarkBlue,
                     ),
                   ),
-                  childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  childrenPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   children: [
-                    _buildStepItem('1', 'Buka aplikasi pembayaran pilihan Anda (Gopay, OVO, Dana, atau Mobile Banking).'),
-                    _buildStepItem('2', 'Pilih menu Scan / Bayar dan arahkan kamera ke kode QR di atas.'),
-                    _buildStepItem('3', 'Pastikan jumlah sesuai yaitu ${_formatRupiah(widget.totalHarga)}.'),
-                    _buildStepItem('4', 'Selesaikan transaksi dan simpan bukti pembayaran Anda.'),
+                    _buildStepItem('1',
+                        'Buka aplikasi pembayaran pilihan Anda (Gopay, OVO, Dana, atau Mobile Banking).'),
+                    _buildStepItem('2',
+                        'Pilih menu Scan / Bayar dan arahkan kamera ke kode QR di atas.'),
+                    _buildStepItem('3',
+                        'Pastikan jumlah sesuai yaitu ${_formatRupiah(widget.totalHarga)}.'),
+                    _buildStepItem('4',
+                        'Selesaikan transaksi dan simpan bukti pembayaran Anda.'),
                   ],
                 ),
               ),
@@ -591,11 +632,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Harga Lapangan (1 Jam)',
+                        'Harga Lapangan (${widget.durasiJam} Jam)',
                         style: TextStyle(color: Colors.grey.shade600),
                       ),
                       Text(
-                        _formatRupiah(basePrice),
+                        _formatRupiah(widget.subtotal),
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ],
@@ -609,11 +650,27 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         style: TextStyle(color: Colors.grey.shade600),
                       ),
                       Text(
-                        _formatRupiah(serviceFee),
+                        _formatRupiah(widget.totalHarga -
+                            widget.subtotal -
+                            (-widget.diskon)),
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
+                  if (widget.diskon > 0) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Diskon (${widget.kodePromo})',
+                            style: const TextStyle(color: Color(0xFF4CAF50))),
+                        Text('- ${_formatRupiah(widget.diskon)}',
+                            style: const TextStyle(
+                                color: Color(0xFF4CAF50),
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   const Divider(height: 1),
                   const SizedBox(height: 16),
@@ -645,7 +702,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ],
         ),
       ),
-
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -663,7 +719,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(20),
@@ -671,7 +728,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.shield_outlined, size: 16, color: primaryDarkBlue),
+                    Icon(Icons.shield_outlined,
+                        size: 16, color: primaryDarkBlue),
                     const SizedBox(width: 8),
                     Text(
                       'Pembayaran aman & terenkripsi',
@@ -685,7 +743,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -702,15 +759,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
                         )
                       : const Text(
                           'Konfirmasi Pembayaran',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                 ),
               ),
-
               const SizedBox(height: 12),
             ],
           ),
@@ -731,14 +789,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
             backgroundColor: primaryDarkBlue.withOpacity(0.1),
             child: Text(
               number,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: primaryDarkBlue),
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: primaryDarkBlue),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.4),
+              style: TextStyle(
+                  fontSize: 13, color: Colors.grey.shade700, height: 1.4),
             ),
           ),
         ],

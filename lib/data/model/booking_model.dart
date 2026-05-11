@@ -1,34 +1,26 @@
-import 'package:flutter/material.dart';
-
-/// Data lapangan + jadwal yang dikirim dari halaman Pilih Jadwal
+import 'package:cloud_firestore/cloud_firestore.dart';
 class BookingData {
+  final String lapanganId;
   final String namaLapangan;
   final String imagePath;
   final DateTime tanggal;
-  final TimeOfDay jamMulai;
-  final TimeOfDay jamSelesai;
-  final int hargaPerJam;      
+  final List<String> selectedTimes;
+  final int hargaPerJam;
+  final int biayaLayanan;
 
   const BookingData({
+    required this.lapanganId,
     required this.namaLapangan,
     required this.imagePath,
     required this.tanggal,
-    required this.jamMulai,
-    required this.jamSelesai,
+    required this.selectedTimes,
     required this.hargaPerJam,
+    required this.biayaLayanan,
   });
 
-  int get durasiJam {
-    final mulai = jamMulai.hour * 60 + jamMulai.minute;
-    final selesai = jamSelesai.hour * 60 + jamSelesai.minute;
-    return ((selesai - mulai) / 60).round();
-  }
+  int get durasiJam => selectedTimes.length;
 
-  String get waktuDisplay {
-    String fmt(TimeOfDay t) =>
-        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-    return '${fmt(jamMulai)} - ${fmt(jamSelesai)} ($durasiJam Jam)';
-  }
+  int get subtotal => hargaPerJam * durasiJam;
 
   String get tanggalDisplay {
     const bulan = [
@@ -37,6 +29,15 @@ class BookingData {
     ];
     return '${tanggal.day} ${bulan[tanggal.month]} ${tanggal.year}';
   }
+
+  String get waktuDisplay {
+    if (selectedTimes.isEmpty) return '-';
+    
+    final jamMulai = selectedTimes.first.split(' - ').first;
+    final jamSelesai = selectedTimes.last.split(' - ').last;
+    
+    return '$jamMulai s/d $jamSelesai ($durasiJam Jam)';
+  }
 }
 
 class PromoData {
@@ -44,15 +45,34 @@ class PromoData {
   final String deskripsi;
   final int diskon;
 
-  const PromoData({
+  final bool isActive;
+  final DateTime expiredAt;
+  final int minTransaksi;
+  final int kuota;
+
+  PromoData({
     required this.kode,
     required this.deskripsi,
     required this.diskon,
+    required this.isActive,
+    required this.expiredAt,
+    required this.minTransaksi,
+    required this.kuota,
   });
-}
 
-/// TODO: Ganti dengan fetch dari API/Supabase saat backend sudah siap.
-const List<PromoData> daftarPromo = [
-  PromoData(kode: 'ARENAJAGO', deskripsi: 'Diskon member baru', diskon: 25000),
-  PromoData(kode: 'WEEKEND10', deskripsi: 'Promo akhir pekan', diskon: 15000),
-];
+  factory PromoData.fromFirestore(Map<String, dynamic> map) {
+    return PromoData(
+      kode: map['kode'] ?? '',
+      deskripsi: map['deskripsi'] ?? '',
+      diskon: map['diskon'] ?? 0,
+
+      isActive: map['aktif'] ?? false,
+
+      expiredAt:
+          (map['expiredAt'] as Timestamp).toDate(),
+
+      minTransaksi: map['minimalTransaksi'] ?? 0,
+      kuota: map['kuota'] ?? 0,
+    );
+  }
+}

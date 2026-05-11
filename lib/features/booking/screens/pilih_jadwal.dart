@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../screens/form_booking.dart';
 
 class PilihJadwalPage extends StatefulWidget {
   const PilihJadwalPage({super.key, required this.lapanganId});
@@ -11,7 +13,41 @@ class PilihJadwalPage extends StatefulWidget {
 }
 
 class _PilihJadwalPageState extends State<PilihJadwalPage> {
+  String namaLapangan = '';
+  String jenisLapangan = '';
+  String jenisFloor = '';
+  String fotoUrl = '';
+  int pricePerHour = 0;
+  bool isLoadingLapangan = true;
   DateTime selectedDate = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLapangan();
+  }
+
+  Future<void> _fetchLapangan() async {
+    final doc = await FirebaseFirestore.instance
+        .collection('lapangan')
+        .doc(widget.lapanganId)
+        .get();
+
+    if (doc.exists) {
+      final map = doc.data()!;
+      setState(() {
+        namaLapangan = map['nama_lapangan'] ?? '';
+        jenisLapangan = map['jenis_lapangan'] ?? '';
+        jenisFloor = map['jenis_floor'] ?? '';
+        fotoUrl = (map['foto'] as List?)?.first ?? '';
+        pricePerHour = map['harga'] ?? 0;
+        isLoadingLapangan = false;
+      });
+    } else {
+      setState(() => isLoadingLapangan = false);
+    }
+  }
+
   
   // Perubahan 1: Gunakan List untuk menampung banyak pilihan
   List<String> selectedTimes = [];
@@ -19,7 +55,6 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
   final Color primaryBlue = Color(0xFF0B4E89);
   final Color primaryGreen = Color(0xFF1A8C6A);
   final Color fullGrey = Color(0xFFE2E8F0);
-  final int pricePerHour = 150000;
 
   List<String> times = [
     "06.00 - 07.00", "07.00 - 08.00", "08.00 - 09.00",
@@ -48,38 +83,43 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
 
   @override
   Widget build(BuildContext context) {
+    // perubahan untuk nambahin loading
+    if (isLoadingLapangan) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
     // Perubahan 3: Hitung total harga berdasarkan jumlah pilihan
     int totalAmount = selectedTimes.length * pricePerHour;
 
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        surfaceTintColor: Colors.white,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: primaryBlue,
+            size: 20,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Pilih Jadwal',
+          style: TextStyle(
+            color: primaryBlue,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
+      ),
       backgroundColor: const Color(0xffF5F6FA),
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Icon(Icons.arrow_back, color: primaryBlue),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Pilih Jadwal",
-                          style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                              color: primaryBlue)),
-                      const Text("ArenaHub • Lapangan A",
-                          style: TextStyle(fontSize: 12)),
-                    ],
-                  )
-                ],
-              ),
-            ),
             Expanded(
               child: SingleChildScrollView(
                 child: Padding(
@@ -96,23 +136,24 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
-                                "https://via.placeholder.com/80",
-                                width: 70,
-                                height: 70,
-                                fit: BoxFit.cover,
-                              ),
+                              child: fotoUrl.isNotEmpty
+                                ? Image.network(
+                                  fotoUrl, 
+                                  width: 70, 
+                                  height: 70, 
+                                  fit: BoxFit.cover)
+                                : Container(width: 70, height: 70, color: const Color(0xFFE3EAF5)),
                             ),
                             const SizedBox(width: 12),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text("Lapangan Futsal A",
+                                Text(namaLapangan,
                                     style: GoogleFonts.poppins(
                                         fontWeight: FontWeight.w800)),
-                                const Text("Futsal • Vinyl Floor"),
+                                Text('$jenisLapangan • $jenisFloor'),
                                 const SizedBox(height: 4),
-                                Text("${formatCurrency(pricePerHour)} /jam",
+                                Text('${formatCurrency(pricePerHour)} /jam',
                                     style: GoogleFonts.poppins(
                                         color: primaryBlue,
                                         fontWeight: FontWeight.w800)),
@@ -340,17 +381,16 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                           horizontal: 24, vertical: 14),
                     ),
                     onPressed: selectedTimes.isEmpty ? null : () {
-                      Navigator.pushNamed(
+                    Navigator.push(
                       context,
-                      '/payment',
-                      arguments: {
-                        'totalHarga': totalAmount + 5000, // +5000 biaya layanan
-                        'namaLapangan': 'Lapangan Futsal A',
-                        'customerName': 'Nama Customer', // ganti dengan data user asli
-                        'email': 'email@example.com',    // ganti dengan data user asli
-                        'phone': '08123456789',          // ganti dengan data user asli
-                        'selectedDate': DateFormat("ddMMyyyy").format(selectedDate),
-                      },
+                      MaterialPageRoute(
+                        builder: (context) => FormBookingPage(
+                          lapanganId: widget.lapanganId,
+                          selectedDate: selectedDate,
+                          selectedTimes: selectedTimes,
+                          serviceFee: 5000,
+                        ),
+                      ),
                     );
                     },
                     child: const Text("Lanjut ke Booking",

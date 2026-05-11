@@ -2,13 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'konfirmasi_booking.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../data/model/booking_model.dart';
 
 class FormBookingPage extends StatefulWidget {
-  final BookingData booking;
+  final String lapanganId;
+  final DateTime selectedDate;
+  final List<String> selectedTimes;
+  final int serviceFee;
 
-  const FormBookingPage({super.key, required this.booking});
+  const FormBookingPage({
+    super.key,
+    required this.lapanganId,
+    required this.selectedDate,
+    required this.selectedTimes,
+    required this.serviceFee,
+  });
 
   @override
   State<FormBookingPage> createState() => _FormBookingPageState();
@@ -21,8 +30,14 @@ class _FormBookingPageState extends State<FormBookingPage> {
   final _catatanController = TextEditingController();
   final _promoController = TextEditingController();
 
+  String _namaLapangan = '';
+  String _imagePath = '';
+  int _hargaPerJam = 0;
+  bool _isLoadingLapangan = true;
+
   PromoData? _promoAktif;
   String? _promoError;
+
   bool _isLoading = false;
 
   static const Color _primaryColor = Color(0xFF135B9D);
@@ -30,6 +45,12 @@ class _FormBookingPageState extends State<FormBookingPage> {
   static const Color _successColor = Color(0xFF4CAF50);
   static const Color _errorColor = Color(0xFFE53935);
 
+  @override
+  void initState() {
+    super.initState();
+    _fetchLapangan();
+  }
+  
   @override
   void dispose() {
     _namaController.dispose();
@@ -39,11 +60,55 @@ class _FormBookingPageState extends State<FormBookingPage> {
     super.dispose();
   }
 
-  // ─── Kalkulasi harga ─────────────────────────────────────────────────────
+  // fetch data lapangan
+  Future<void> _fetchLapangan() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('lapangan')
+          .doc(widget.lapanganId)
+          .get();
 
-  int get _subtotal => widget.booking.hargaPerJam * widget.booking.durasiJam;
+      if (doc.exists) {
+        final map = doc.data()!;
+        setState(() {
+          _namaLapangan = map['nama_lapangan'] ?? '';
+          _imagePath = (map['foto'] as List?)?.first ?? '';
+          _hargaPerJam = map['harga'] ?? 0;
+          _isLoadingLapangan = false;
+        });
+      } else {
+        setState(() => _isLoadingLapangan = false);
+      }
+    } catch (e) {
+      setState(() => _isLoadingLapangan = false);
+    }
+  }
+
+  // kalkulasi harga
+
+  int get _subtotal => _hargaPerJam * widget.selectedTimes.length;
   int get _diskon => _promoAktif?.diskon ?? 0;
-  int get _total => _subtotal - _diskon;
+  int get _total => _subtotal + widget.serviceFee - _diskon;
+
+  // format tgl waktu
+  String get _tanggalDisplay {
+    const bulan = [
+      '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    return '${widget.selectedDate.day} ${bulan[widget.selectedDate.month]} ${widget.selectedDate.year}';
+  }
+
+  String get _waktuDisplay {
+    if (widget.selectedTimes.isEmpty) return '-';
+    
+    final jamMulai = widget.selectedTimes.first.split(' - ').first;  // ambil "10:00" dari "10:00 - 11:00"
+    final jamSelesai = widget.selectedTimes.last.split(' - ').last;  // ambil "12:00" dari "11:00 - 12:00"
+    
+    return '$jamMulai s/d $jamSelesai (${widget.selectedTimes.length} Jam)';
+  }
+
+  // format rp
 
   String _formatRupiah(int nominal) {
     return NumberFormat.currency(
@@ -53,9 +118,9 @@ class _FormBookingPageState extends State<FormBookingPage> {
     ).format(nominal);
   }
 
-  // ─── Logic promo ─────────────────────────────────────────────────────────
+  // logic promo
 
-  void _terapkanPromo() {
+  Future<void> _terapkanPromo() async {
     final kode = _promoController.text.trim().toUpperCase();
 
     if (kode.isEmpty) {
@@ -66,25 +131,72 @@ class _FormBookingPageState extends State<FormBookingPage> {
       return;
     }
 
-    // Cari promo — pakai where().cast() agar tidak butuh extension firstOrNull
-    // TODO: Ganti dengan API call ke backend saat database sudah siap
-    PromoData? promo;
-    for (final p in daftarPromo) {
-      if (p.kode == kode) {
-        promo = p;
-        break;
-      }
-    }
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('promos')
+          .where('kode', isEqualTo: kode)
+          .limit(1)
+          .get();
 
-    setState(() {
-      if (promo != null) {
+      if (snapshot.docs.isEmpty) {
+        setState(() {
+          _promoAktif = null;
+          _promoError = 'Kode promo tidak valid';
+        });
+        return;
+      }
+
+      final promo = PromoData.fromFirestore(snapshot.docs.first.data());
+
+      // cek aktif
+      if (!promo.isActive) {
+        setState(() {
+          _promoAktif = null;
+          _promoError = 'Promo sedang tidak aktif';
+        });
+        return;
+      }
+
+      // cek expired
+      if (promo.expiredAt.isBefore(DateTime.now())) {
+        setState(() {
+          _promoAktif = null;
+          _promoError = 'Promo sudah expired';
+        });
+        return;
+      }
+
+      // cek minimum transaksi
+      if (_subtotal < promo.minTransaksi) {
+        setState(() {
+          _promoAktif = null;
+          _promoError =
+              'Minimal transaksi ${_formatRupiah(promo.minTransaksi)}';
+        });
+        return;
+      }
+
+      // cek kuota
+      if (promo.kuota <= 0) {
+        setState(() {
+          _promoAktif = null;
+          _promoError = 'Kuota promo habis';
+        });
+        return;
+      }
+
+      // promo valid
+      setState(() {
         _promoAktif = promo;
         _promoError = null;
-      } else {
+      });
+
+    } catch (e) {
+      setState(() {
         _promoAktif = null;
-        _promoError = 'Kode promo tidak valid';
-      }
-    });
+        _promoError = 'Terjadi kesalahan';
+      });
+    }
   }
 
   void _hapusPromo() {
@@ -95,9 +207,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     });
   }
 
-  // ─── Submit booking ───────────────────────────────────────────────────────
-
-  // ─── Submit booking ───────────────────────────────────────────────────────
+  // submit booking
 
   Future<void> _konfirmasiBooking() async {
     FocusScope.of(context).unfocus();
@@ -115,22 +225,33 @@ class _FormBookingPageState extends State<FormBookingPage> {
       MaterialPageRoute(
         builder: (_) => KonfirmasiBookingPage(
           data: KonfirmasiData(
-            booking: widget.booking,
+            lapanganId: widget.lapanganId,
+            namaLapangan: _namaLapangan,
+            imagePath: _imagePath,
+            tanggal: widget.selectedDate,
+            selectedTimes: widget.selectedTimes,
+            hargaPerJam: _hargaPerJam,
+            biayaLayanan: widget.serviceFee,
             namaPemesan: _namaController.text.trim(),
             nomorTelepon: _teleponController.text.trim(),
             catatan: _catatanController.text.trim(),
-            promo: _promoAktif,
-            biayaLayanan: 5000,
+            promo: _promoAktif,            
           ),
         ),
       ),
     );
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
+  // build
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingLapangan) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF5F7FA),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: Form(
@@ -150,7 +271,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // ─── App Bar ──────────────────────────────────────────────────────────────
+  // app bar
 
   Widget _buildAppBar() {
     return SliverAppBar(
@@ -174,7 +295,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // ─── Kartu Info Lapangan ──────────────────────────────────────────────────
+  // kartu lapangan
 
   Widget _buildKartuLapangan() {
     return Container(
@@ -197,21 +318,15 @@ class _FormBookingPageState extends State<FormBookingPage> {
           ClipRRect(
             borderRadius:
                 const BorderRadius.vertical(top: Radius.circular(16)),
-            child: widget.booking.imagePath.startsWith('http')
+            child: _imagePath.isNotEmpty
                 ? Image.network(
-                    widget.booking.imagePath,
+                    _imagePath,
                     height: 160,
                     width: double.infinity,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => const _PlaceholderGambar(),
                   )
-                : Image.asset(
-                    widget.booking.imagePath,
-                    height: 160,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const _PlaceholderGambar(),
-                  ),
+                : const _PlaceholderGambar(),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -219,7 +334,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.booking.namaLapangan,
+                  _namaLapangan,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -229,12 +344,12 @@ class _FormBookingPageState extends State<FormBookingPage> {
                 const SizedBox(height: 10),
                 _InfoRow(
                   icon: Icons.calendar_today_rounded,
-                  text: widget.booking.tanggalDisplay,
+                  text: _tanggalDisplay,
                 ),
                 const SizedBox(height: 6),
                 _InfoRow(
                   icon: Icons.access_time_rounded,
-                  text: widget.booking.waktuDisplay,
+                  text: _waktuDisplay,
                 ),
               ],
             ),
@@ -244,7 +359,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // ─── Seksi Data Pemesan ───────────────────────────────────────────────────
+  // section data pemesan
 
   Widget _buildSeksiDataPemesan() {
     return _Kartu(
@@ -294,7 +409,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // ─── Seksi Promo ─────────────────────────────────────────────────────────
+  // section promo
 
   Widget _buildSeksiPromo() {
     return _Kartu(
@@ -412,7 +527,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '${_promoAktif!.deskripsi} · Hemat ${_formatRupiah(_promoAktif!.diskon)}',
+                      '${_promoAktif!.deskripsi} Hemat ${_formatRupiah(_promoAktif!.diskon)}',
                       style: const TextStyle(
                         color: _successColor,
                         fontSize: 12.5,
@@ -429,7 +544,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // ─── Seksi Rincian Harga ──────────────────────────────────────────────────
+  // section rincian harga
 
   Widget _buildSeksiRincianHarga() {
     return _Kartu(
@@ -441,13 +556,18 @@ class _FormBookingPageState extends State<FormBookingPage> {
           const SizedBox(height: 16),
           _BarisPricing(
             label: 'Harga per jam',
-            nilai: _formatRupiah(widget.booking.hargaPerJam),
+            nilai: _formatRupiah(_hargaPerJam),
           ),
           const SizedBox(height: 8),
           _BarisPricing(
             label: 'Durasi',
-            nilai: '${widget.booking.durasiJam} Jam',
+            nilai: '${widget.selectedTimes.length} Jam',
           ),
+        const SizedBox(height: 8),
+        _BarisPricing(
+          label: 'Biaya Layanan',
+          nilai: _formatRupiah(widget.serviceFee),
+        ),          
           if (_diskon > 0) ...[
             const SizedBox(height: 8),
             _BarisPricing(
@@ -486,7 +606,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // ─── Tombol Konfirmasi ────────────────────────────────────────────────────
+  // tombol konfirmasi
 
   Widget _buildTombolKonfirmasi() {
     return Container(
@@ -532,7 +652,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
   }
 }
 
-// ─── Widget Pembantu ─────────────────────────────────────────────────────────
+// widget pembantu
 
 class _Kartu extends StatelessWidget {
   final Widget child;

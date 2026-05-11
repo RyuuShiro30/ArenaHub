@@ -1,26 +1,65 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
 import '../../../data/model/booking_model.dart';
+import '../screens/payment_screen.dart';
 
 /// Data tambahan dari form booking yang diteruskan ke halaman ini
 class KonfirmasiData {
-  final BookingData booking;
+  final String lapanganId;
+  final String namaLapangan;
+  final String imagePath;
+  final DateTime tanggal;
+  final List<String> selectedTimes;
+  final int hargaPerJam;
+  final int biayaLayanan;
   final String namaPemesan;
   final String nomorTelepon;
   final String? catatan;
   final PromoData? promo;
-  final int biayaLayanan;
 
   const KonfirmasiData({
-    required this.booking,
+    required this.lapanganId,
+    required this.namaLapangan,
+    required this.imagePath,
+    required this.tanggal,
+    required this.selectedTimes,
+    required this.hargaPerJam,
+    required this.biayaLayanan,
     required this.namaPemesan,
     required this.nomorTelepon,
     this.catatan,
     this.promo,
-    this.biayaLayanan = 5000,
   });
+
+  int get durasiJam => selectedTimes.length;
+
+  String get tanggalDisplay {
+    const bulan = [
+      '',
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember'
+    ];
+    return '${tanggal.day} ${bulan[tanggal.month]} ${tanggal.year}';
+  }
+
+  String get waktuDisplay {
+    if (selectedTimes.isEmpty) return '-';
+
+    final jamMulai = selectedTimes.first.split(' - ').first;
+    final jamSelesai = selectedTimes.last.split(' - ').last;
+
+    return '$jamMulai s/d $jamSelesai ($durasiJam Jam)';
+  }
 }
 
 class KonfirmasiBookingPage extends StatefulWidget {
@@ -36,108 +75,13 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
   static const Color _primaryColor = Color(0xFF135B9D);
   static const Color _successColor = Color(0xFF4CAF50);
   static const Color _errorColor = Color(0xFFE53935);
-  static const Color _warningColor = Color(0xFFFF6B35);
-
-  // Countdown timer — 15 menit
-  static const int _durasiDetik = 15 * 60;
-  late int _sisaDetik;
-  Timer? _timer;
 
   bool _setujuSyarat = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _sisaDetik = _durasiDetik;
-    _mulaiTimer();
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  // ─── Timer ────────────────────────────────────────────────────────────────
-
-  void _mulaiTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_sisaDetik <= 0) {
-        t.cancel();
-        _handleTimerHabis();
-      } else {
-        setState(() => _sisaDetik--);
-      }
-    });
-  }
-
-  void _handleTimerHabis() {
-    if (!mounted) return;
-    // TODO: Update status booking ke 'canceled' di backend
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        contentPadding: const EdgeInsets.all(24),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.timer_off_rounded, color: _errorColor, size: 48),
-            const SizedBox(height: 16),
-            const Text('Waktu Habis',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1A2E))),
-            const SizedBox(height: 8),
-            const Text(
-              'Booking kamu otomatis dibatalkan karena melewati batas waktu pembayaran.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13.5, color: Color(0xFF666666)),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                      '/home', (route) => false);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _primaryColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: const Text('Kembali ke Beranda',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String get _jamDisplay =>
-      (_sisaDetik ~/ 3600).toString().padLeft(2, '0');
-  String get _menitDisplay =>
-      ((_sisaDetik % 3600) ~/ 60).toString().padLeft(2, '0');
-  String get _detikDisplay =>
-      (_sisaDetik % 60).toString().padLeft(2, '0');
-
-  bool get _timerKritis => _sisaDetik <= 60; // merah kalau < 1 menit
-
-  // ─── Kalkulasi harga ──────────────────────────────────────────────────────
-
-  int get _hargaLapangan =>
-      widget.data.booking.hargaPerJam * widget.data.booking.durasiJam;
+  // kalkulasi harga
+  int get _hargaLapangan => widget.data.hargaPerJam * widget.data.durasiJam;
   int get _diskon => widget.data.promo?.diskon ?? 0;
-  int get _total =>
-      _hargaLapangan + widget.data.biayaLayanan - _diskon;
+  int get _total => _hargaLapangan + widget.data.biayaLayanan - _diskon;
 
   String _formatRupiah(int nominal) {
     return NumberFormat.currency(
@@ -147,56 +91,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
     ).format(nominal);
   }
 
-  // ─── Deadline bayar display ───────────────────────────────────────────────
-
-  String get _deadlineDisplay {
-    final deadline =
-        DateTime.now().add(Duration(seconds: _sisaDetik));
-    const bulan = [
-      '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-    ];
-    final jam = deadline.hour.toString().padLeft(2, '0');
-    final menit = deadline.minute.toString().padLeft(2, '0');
-    return 'Bayar sebelum ${deadline.day} ${bulan[deadline.month]} ${deadline.year}, $jam:$menit WIB';
-  }
-
-  // ─── Back button ──────────────────────────────────────────────────────────
-
-  Future<bool> _onWillPop() async {
-    final hasil = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        contentPadding: const EdgeInsets.all(24),
-        title: const Text('Batalkan Booking?',
-            style:
-                TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-        content: const Text(
-          'Apakah kamu yakin ingin membatalkan booking?.',
-          style: TextStyle(fontSize: 13.5, color: Color(0xFF666666)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Ya',
-                style: TextStyle(
-                    color: _errorColor, fontWeight: FontWeight.w600)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Tidak',
-                style: TextStyle(
-                    color: _primaryColor, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
-    return hasil ?? false;
-  }
-
-  // ─── Syarat & Ketentuan popup ─────────────────────────────────────────────
+  // pop up syarat dan ketentuan
 
   void _tampilkanSyarat() {
     showModalBottomSheet(
@@ -227,12 +122,8 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
               ),
               const SizedBox(height: 16),
               const Text('Syarat & Ketentuan',
-                  style: TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
-              const Text('dan Kebijakan Pembatalan',
-                  style: TextStyle(
-                      fontSize: 14, color: Color(0xFF666666))),
               const Divider(height: 24),
               Expanded(
                 child: ListView(
@@ -242,21 +133,6 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
                       judul: 'Syarat Pemesanan',
                       isi:
                           'Pengguna wajib memastikan data yang dimasukkan sudah benar sebelum melanjutkan ke pembayaran. Booking dianggap sah setelah pembayaran berhasil dikonfirmasi.',
-                    ),
-                    _SeksiSyarat(
-                      judul: 'Batas Waktu Pembayaran',
-                      isi:
-                          'Pembayaran harus diselesaikan dalam 15 menit setelah booking dibuat. Jika melewati batas waktu, booking akan otomatis dibatalkan.',
-                    ),
-                    _SeksiSyarat(
-                      judul: 'Kebijakan Pembatalan',
-                      isi:
-                          'Pembatalan dapat dilakukan maksimal 2 jam sebelum jadwal bermain. Pembatalan yang dilakukan setelah batas waktu tersebut tidak mendapatkan pengembalian dana.',
-                    ),
-                    _SeksiSyarat(
-                      judul: 'Pengembalian Dana',
-                      isi:
-                          'Refund akan diproses dalam 3-5 hari kerja ke metode pembayaran asal jika pembatalan memenuhi syarat.',
                     ),
                     _SeksiSyarat(
                       judul: 'Keterlambatan',
@@ -290,30 +166,28 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
     );
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
+  // build
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF5F7FA),
-        body: CustomScrollView(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      body: Form(
+        child: CustomScrollView(
           slivers: [
             _buildAppBar(),
-            SliverToBoxAdapter(child: _buildCountdown()),
             SliverToBoxAdapter(child: _buildRingkasanBooking()),
             SliverToBoxAdapter(child: _buildRincianPembayaran()),
             SliverToBoxAdapter(child: _buildCheckboxSyarat()),
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
-        bottomNavigationBar: _buildTombolLanjut(),
       ),
+      bottomNavigationBar: _buildTombolLanjut(),
     );
   }
 
-  // ─── App Bar ──────────────────────────────────────────────────────────────
+  // app bar
 
   Widget _buildAppBar() {
     return SliverAppBar(
@@ -323,10 +197,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded,
             color: _primaryColor, size: 20),
-        onPressed: () async {
-          final boleh = await _onWillPop();
-          if (boleh && mounted) Navigator.of(context).pop();
-        },
+        onPressed: () => Navigator.of(context).pop(),
       ),
       title: const Text(
         'Konfirmasi Booking',
@@ -337,65 +208,12 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
         ),
       ),
       centerTitle: false,
-      titleSpacing: 0,
     );
   }
 
-  // ─── Countdown ────────────────────────────────────────────────────────────
-
-  Widget _buildCountdown() {
-    final warnaTimer = _timerKritis ? _errorColor : _primaryColor;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Text(
-            'Selesaikan pembayaran dalam waktu',
-            style: TextStyle(
-              fontSize: 13.5,
-              color: _timerKritis ? _errorColor : const Color(0xFF888888),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _KotakWaktu(nilai: _jamDisplay, label: 'JAM', warna: warnaTimer),
-              _Pemisah(warna: warnaTimer),
-              _KotakWaktu(nilai: _menitDisplay, label: 'MENIT', warna: warnaTimer),
-              _Pemisah(warna: warnaTimer),
-              _KotakWaktu(nilai: _detikDisplay, label: 'DETIK', warna: warnaTimer),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            _deadlineDisplay,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF888888)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── Ringkasan Booking ────────────────────────────────────────────────────
+  // ringkasan booking
 
   Widget _buildRingkasanBooking() {
-    final b = widget.data.booking;
-
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       decoration: BoxDecoration(
@@ -441,19 +259,17 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
 
           // Foto lapangan
           ClipRRect(
-            child: b.imagePath.startsWith('http')
-                ? Image.network(b.imagePath,
+            child: widget.data.imagePath.startsWith('http')
+                ? Image.network(widget.data.imagePath,
                     height: 160,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        const _PlaceholderGambar())
-                : Image.asset(b.imagePath,
+                    errorBuilder: (_, __, ___) => const _PlaceholderGambar())
+                : Image.asset(widget.data.imagePath,
                     height: 160,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        const _PlaceholderGambar()),
+                    errorBuilder: (_, __, ___) => const _PlaceholderGambar()),
           ),
 
           // Info lapangan
@@ -468,7 +284,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        b.namaLapangan,
+                        widget.data.namaLapangan,
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
@@ -496,15 +312,14 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.3)),
                           const SizedBox(height: 4),
-                          Text(b.tanggalDisplay,
+                          Text(widget.data.tanggalDisplay,
                               style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
                                   color: Color(0xFF1A1A2E))),
-                          Text(b.waktuDisplay,
+                          Text(widget.data.waktuDisplay,
                               style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF666666))),
+                                  fontSize: 13, color: Color(0xFF666666))),
                         ],
                       ),
                     ),
@@ -526,8 +341,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
                                   color: Color(0xFF1A1A2E))),
                           Text(widget.data.nomorTelepon,
                               style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF666666))),
+                                  fontSize: 13, color: Color(0xFF666666))),
                         ],
                       ),
                     ),
@@ -561,7 +375,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
     );
   }
 
-  // ─── Rincian Pembayaran ───────────────────────────────────────────────────
+  // rincian pembayaran
 
   Widget _buildRincianPembayaran() {
     return Container(
@@ -616,8 +430,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
             child: Column(
               children: [
                 _BarisPricing(
-                  label:
-                      'Harga Lapangan (${widget.data.booking.durasiJam} Jam)',
+                  label: 'Harga Lapangan (${widget.data.durasiJam} Jam)',
                   nilai: _formatRupiah(_hargaLapangan),
                 ),
                 const SizedBox(height: 8),
@@ -666,7 +479,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
     );
   }
 
-  // ─── Checkbox Syarat ──────────────────────────────────────────────────────
+  // checkbox syarat
 
   Widget _buildCheckboxSyarat() {
     return Container(
@@ -690,16 +503,16 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
             value: _setujuSyarat,
             onChanged: (v) => setState(() => _setujuSyarat = v ?? false),
             activeColor: _primaryColor,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
           ),
           Expanded(
             child: GestureDetector(
               onTap: () => setState(() => _setujuSyarat = !_setujuSyarat),
               child: RichText(
                 text: TextSpan(
-                  style: const TextStyle(
-                      fontSize: 13, color: Color(0xFF444444)),
+                  style:
+                      const TextStyle(fontSize: 13, color: Color(0xFF444444)),
                   children: [
                     const TextSpan(text: 'Saya menyetujui '),
                     WidgetSpan(
@@ -707,20 +520,6 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
                         onTap: _tampilkanSyarat,
                         child: const Text(
                           'Syarat & Ketentuan',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: _primaryColor,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const TextSpan(text: ' serta '),
-                    WidgetSpan(
-                      child: GestureDetector(
-                        onTap: _tampilkanSyarat,
-                        child: const Text(
-                          'Kebijakan Pembatalan',
                           style: TextStyle(
                             fontSize: 13,
                             color: _primaryColor,
@@ -740,7 +539,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
     );
   }
 
-  // ─── Tombol Lanjut ke Pembayaran ──────────────────────────────────────────
+  // tombol lanjut
 
   Widget _buildTombolLanjut() {
     return Container(
@@ -761,18 +560,37 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
         height: 52,
         child: ElevatedButton(
           // Tombol aktif hanya kalau checkbox dicentang
-          onPressed: _setujuSyarat
-              ? () {
-                  // TODO: Navigasi ke halaman pembayaran
-                  Navigator.of(context).pushNamed('/pembayaran');
-                }
-              : null,
+        onPressed: _setujuSyarat
+            ? () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PaymentScreen(
+                      totalHarga: _total,
+                      namaLapangan: widget.data.namaLapangan,
+                      imagePath: widget.data.imagePath,
+                      customerName: widget.data.namaPemesan,
+                      email: '',
+                      phone: widget.data.nomorTelepon,
+                      selectedDate: widget.data.tanggal
+                          .toIso8601String()
+                          .split('T')
+                          .first, // format: 2026-03-24
+                      kodePromo: widget.data.promo?.kode,
+                      durasiJam: widget.data.durasiJam,
+                      subtotal: _hargaLapangan,
+                      diskon: _diskon,
+                    ),
+                  ),
+                );
+              }
+            : null,
           style: ElevatedButton.styleFrom(
             backgroundColor: _primaryColor,
             foregroundColor: Colors.white,
             disabledBackgroundColor: const Color(0xFFBBCCDD),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
           ),
           child: const Row(
@@ -780,8 +598,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
             children: [
               Text(
                 'Lanjutkan ke Pembayaran',
-                style:
-                    TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
               SizedBox(width: 8),
               Icon(Icons.arrow_forward_rounded, size: 18),
@@ -793,67 +610,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
   }
 }
 
-// ─── Widget Pembantu ─────────────────────────────────────────────────────────
-
-class _KotakWaktu extends StatelessWidget {
-  final String nilai;
-  final String label;
-  final Color warna;
-
-  const _KotakWaktu({
-    required this.nilai,
-    required this.label,
-    required this.warna,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 64,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: warna.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: warna.withOpacity(0.25), width: 1.5),
-          ),
-          child: Text(
-            nilai,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: warna,
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(label,
-            style: const TextStyle(
-                fontSize: 10,
-                color: Color(0xFF888888),
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.5)),
-      ],
-    );
-  }
-}
-
-class _Pemisah extends StatelessWidget {
-  final Color warna;
-  const _Pemisah({required this.warna});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 0, 6, 18),
-      child: Text(':',
-          style: TextStyle(
-              fontSize: 26, fontWeight: FontWeight.w800, color: warna)),
-    );
-  }
-}
+// widget pembantu
 
 class _BarisPricing extends StatelessWidget {
   final String label;
@@ -872,8 +629,7 @@ class _BarisPricing extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
-            style:
-                const TextStyle(fontSize: 14, color: Color(0xFF666666))),
+            style: const TextStyle(fontSize: 14, color: Color(0xFF666666))),
         Text(
           nilai,
           style: TextStyle(
@@ -924,9 +680,7 @@ class _SeksiSyarat extends StatelessWidget {
           const SizedBox(height: 4),
           Text(isi,
               style: const TextStyle(
-                  fontSize: 13.5,
-                  color: Color(0xFF555555),
-                  height: 1.5)),
+                  fontSize: 13.5, color: Color(0xFF555555), height: 1.5)),
         ],
       ),
     );
