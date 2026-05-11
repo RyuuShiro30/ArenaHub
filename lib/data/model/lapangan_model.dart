@@ -1,44 +1,50 @@
+// lib/data/model/lapangan_model.dart
+
 class LapanganModel {
-  final String kategori;
-  final String nama;
+  final String id;
+  final String namaLapangan;
+  final String nama; // fasilitas tambahan, e.g. "Kamar Mandi"
+  final String jenisLapangan;
+  final String jenisFloor;
   final String lokasi;
-  final double jarak;
-  final int hargaPerJam;
-  final int? minOrang;
-  final int? maxOrang;
-  final bool adaKamarMandi;
-  final bool adaParkir;
-  final List<String> slotTersedia;
-  final int slotTambahan;
-  final String imagePath;
-  final Map<String, List<String>> bookedSlots;
+  final int harga;
+  final int kapasitas;
+  final double rating;
+  final String mapsUrl;
+  final String iconUrl;
+  final List<String> foto;
 
   const LapanganModel({
-    required this.kategori,
+    required this.id,
+    required this.namaLapangan,
     required this.nama,
+    required this.jenisLapangan,
+    required this.jenisFloor,
     required this.lokasi,
-    required this.jarak,
-    required this.hargaPerJam,
-    this.minOrang,
-    this.maxOrang,
-    this.adaKamarMandi = false,
-    this.adaParkir = false,
-    required this.slotTersedia,
-    this.slotTambahan = 0,
-    required this.imagePath,
-    this.bookedSlots = const {},
+    required this.harga,
+    required this.kapasitas,
+    required this.rating,
+    required this.mapsUrl,
+    required this.iconUrl,
+    required this.foto,
   });
 
-  /// Returns list of booked time slots for the given date.
-  List<String> bookedSlotsForDate(DateTime date) {
-    final key =
-        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-    return bookedSlots[key] ?? [];
+  factory LapanganModel.fromFirestore(Map<String, dynamic> data, String id) {
+    return LapanganModel(
+      id: id,
+      namaLapangan: data['nama_lapangan'] ?? '',
+      nama: data['nama'] ?? '',
+      jenisLapangan: data['jenis_lapangan'] ?? '',
+      jenisFloor: data['jenis_floor'] ?? '',
+      lokasi: data['lokasi'] ?? '',
+      harga: (data['harga'] as num?)?.toInt() ?? 0,
+      kapasitas: (data['kapasitas'] as num?)?.toInt() ?? 0,
+      rating: (data['rating'] as num?)?.toDouble() ?? 0.0,
+      mapsUrl: data['maps_url'] ?? '',
+      iconUrl: data['icon_url'] ?? '',
+      foto: List<String>.from(data['foto'] ?? []),
+    );
   }
 
-  /// Returns true if ALL available slots are booked on the given date.
-  bool isFullOnDate(DateTime date) {
-    final booked = bookedSlotsForDate(date);
-    return slotTersedia.every((s) => booked.contains(s));
-  }
+  bool isFullOnDate(DateTime date) => false;
 }
