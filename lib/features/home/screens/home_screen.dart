@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../routes/app_routes.dart';
 import '../../profile/screens/profile_screen.dart';
+import '../../auth/screens/pencarian_lapangan_screen.dart';
+import '../../riwayat/screens/riwayat_booking_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -180,47 +182,68 @@ Future<void> _openMaps() async {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bgColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              color: _bgColor,
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-              child: _buildHeader(),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildFeaturedCard(),
-                    const SizedBox(height: 26),
-                    _sectionTitle('Cabang Olahraga'),
-                    const SizedBox(height: 14),
-                    _buildSportGrid(),
-                    const SizedBox(height: 26),
-                    _sectionTitle('Jadwal Tersedia Hari Ini'),
-                    const SizedBox(height: 14),
-                    _buildScheduleList(),
-                    const SizedBox(height: 26),
-                    _sectionTitle('Booking Terakhirku'),
-                    const SizedBox(height: 14),
-                    _buildLastBooking(),
-                    const SizedBox(height: 28),
-                  ],
+Widget build(BuildContext context) {
+  return PopScope(
+    canPop: false, // ← cegah back keluar app
+    onPopInvoked: (didPop) {
+      if (_selectedNavIndex != 0) {
+        // Kalau tidak di Beranda, kembali ke Beranda
+        setState(() => _selectedNavIndex = 0);
+      }
+    },
+  child: Scaffold(
+    backgroundColor: _bgColor,
+    body: SafeArea(
+      child: IndexedStack(       
+        index: _selectedNavIndex,
+        children: [
+          // Tab 0 - Beranda
+          Column(
+            children: [
+              Container(
+                color: _bgColor,
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                child: _buildHeader(),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildFeaturedCard(),
+                      const SizedBox(height: 26),
+                      _sectionTitle('Cabang Olahraga'),
+                      const SizedBox(height: 14),
+                      _buildSportGrid(),
+                      const SizedBox(height: 26),
+                      _sectionTitle('Jadwal Tersedia Hari Ini'),
+                      const SizedBox(height: 14),
+                      _buildScheduleList(),
+                      const SizedBox(height: 26),
+                      _sectionTitle('Booking Terakhirku'),
+                      const SizedBox(height: 14),
+                      _buildLastBooking(),
+                      const SizedBox(height: 28),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+          // Tab 1 - Cari
+          const PencarianLapanganScreen(),
+          // Tab 2 - Riwayat
+          const RiwayatBookingScreen(),
+          // Tab 3 - Profil
+          const ProfileScreen(),
+        ],
       ),
-      bottomNavigationBar: _buildBottomNav(),
-    );
-  }
+    ),
+    bottomNavigationBar: _buildBottomNav(),
+  )
+  );
+}
 
   // ── Header ────────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
@@ -610,26 +633,10 @@ Future<void> _openMaps() async {
             children: List.generate(items.length, (i) {
               final isActive = _selectedNavIndex == i;
               return GestureDetector(
-                onTap: () async {
-                  if (i == _selectedNavIndex && i == 0) return;
-
+                onTap: () {
                   setState(() => _selectedNavIndex = i);
-
-                  if (i == 1) {
-                    await Navigator.pushNamed(context, AppRoutes.cariLapangan);
-                  } else if (i == 2) {
-                    await Navigator.pushNamed(context, AppRoutes.riwayatBooking);
-                  } else if (i == 3) {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                    );
-                  }
-
-                  if (mounted) {
-                    setState(() => _selectedNavIndex = 0);
-                  }
-                },
+                  },
+                
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
