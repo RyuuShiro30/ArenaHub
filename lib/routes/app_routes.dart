@@ -21,9 +21,8 @@ class AppRoutes {
   static const String payment = '/payment';
   static const String paymentSucces = '/paymentSucces';
   static const String riwayatBooking = '/riwayatBooking';
-  static const String testDetail = '/test-detail'; // ← tambah ini
+  static const String testDetail = '/test-detail'; 
   static const String profile_screen = '/profile';
-
   static const String cariLapangan = '/cariLapangan';
   static Map<String, WidgetBuilder> routes = {
     login: (context) => const LoginScreen(),
