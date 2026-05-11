@@ -2,6 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class InformasiPribadiScreen extends StatefulWidget {
   final String initialNama;
@@ -162,31 +165,38 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
   }
 
   // ── Simpan ────────────────────────────────────────────────────────────────────
-  void _simpan() {
+  Future<void> _simpan() async {
+    final nama    = _namaController.text.trim();
+    final email   = _emailController.text.trim();
+    final telepon = _teleponController.text.trim();
+
     setState(() {
-      _savedNama     = _namaController.text.trim();
-      _savedEmail    = _emailController.text.trim();
-      _savedTelepon  = _teleponController.text.trim();
+      _savedNama     = nama;
+      _savedEmail    = email;
+      _savedTelepon  = telepon;
       _savedFotoPath = _currentFotoPath;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Text('Perubahan berhasil disimpan!',
-                style: _p(size: 13, color: Colors.white)),
-          ],
-        ),
-        backgroundColor: _accent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    // Simpan nama & telepon ke Firestore supaya permanen
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({'fullName': nama, 'phone': telepon});
+      }
+    } catch (_) {}
+
+    // Kembali ke ProfileScreen dengan membawa data terbaru
+    if (mounted) {
+      Navigator.pop<Map<String, String?>>(context, {
+        'nama'   : _savedNama,
+        'email'  : _savedEmail,
+        'telepon': _savedTelepon,
+        'foto'   : _savedFotoPath,
+      });
+    }
   }
 
   // ── Back handler ──────────────────────────────────────────────────────────────

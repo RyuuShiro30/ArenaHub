@@ -9,6 +9,8 @@ import 'package:appbookinglapangan/features/booking/screens/paymentSucces_screen
 import 'package:appbookinglapangan/features/booking/screens/field_detail.dart';
 import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
 import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
+import 'package:appbookinglapangan/features/booking/screens/field_detail.dart'; // ← tambah ini
+import 'package:appbookinglapangan/features/profile/screens/profile_screen.dart';
 
 class AppRoutes {
   static const String login = "/login";
@@ -18,8 +20,10 @@ class AppRoutes {
   static const String pilihJadwal = '/pilihJadwal';
   static const String payment = '/payment';
   static const String paymentSucces = '/paymentSucces';
-  static const String testDetail = '/test-detail';
-  static const String riwayatBooking = '/riwayatBooking'; 
+  static const String riwayatBooking = '/riwayatBooking';
+  static const String testDetail = '/test-detail'; // ← tambah ini
+  static const String profile_screen = '/profile';
+
   static const String cariLapangan = '/cariLapangan';
   static Map<String, WidgetBuilder> routes = {
     login: (context) => const LoginScreen(),
@@ -31,6 +35,7 @@ class AppRoutes {
       lapanganId: 'XUSohGidinXPG2emvk7I',
     ),
     cariLapangan: (context) => const PencarianLapanganScreen(),
+    profile_screen: (context) => const ProfileScreen(),
   };
 
   static Route<dynamic>? generateRoute(RouteSettings settings) {

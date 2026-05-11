@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class KeamananSandiScreen extends StatefulWidget {
   const KeamananSandiScreen({super.key});
@@ -9,22 +10,20 @@ class KeamananSandiScreen extends StatefulWidget {
 }
 
 class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
-  // ── Colors ───────────────────────────────────────────────────────────────────
   static const Color _primaryDark = Color(0xFF0D2D6B);
   static const Color _accent      = Color(0xFF1A4FAF);
   static const Color _bgColor     = Color(0xFFF4F6F9);
   static const Color _textDark    = Color(0xFF1A2B3C);
 
-  // ── Controllers ───────────────────────────────────────────────────────────────
   final TextEditingController _sandiLamaController    = TextEditingController();
   final TextEditingController _sandiBaruController    = TextEditingController();
   final TextEditingController _konfirmasiController   = TextEditingController();
 
-  bool _showSandiLama    = false;
-  bool _showSandiBaru    = false;
-  bool _showKonfirmasi   = false;
+  bool _showSandiLama  = false;
+  bool _showSandiBaru  = false;
+  bool _showKonfirmasi = false;
+  bool _isLoading      = false;
 
-  // Cek apakah ada input yang diisi
   bool get _hasChanges =>
       _sandiLamaController.text.isNotEmpty  ||
       _sandiBaruController.text.isNotEmpty  ||
@@ -52,9 +51,8 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
         color: color, letterSpacing: spacing);
   }
 
-  // ── Simpan: tetap di halaman, tampilkan snackbar ──────────────────────────────
-  void _simpanPerubahan() {
-    // Validasi sederhana
+  // ── Simpan Perubahan Password via Firebase ────────────────────────────────────
+  Future<void> _simpanPerubahan() async {
     if (_sandiLamaController.text.isEmpty) {
       _showError('Kata sandi lama tidak boleh kosong!');
       return;
@@ -67,31 +65,77 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
       _showError('Konfirmasi kata sandi tidak cocok!');
       return;
     }
+    if (_sandiLamaController.text == _sandiBaruController.text) {
+      _showError('Kata sandi baru harus berbeda dari sandi lama!');
+      return;
+    }
 
-    // Simpan (dummy) — tetap di halaman
-    setState(() {
+    setState(() => _isLoading = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null || user.email == null) {
+        _showError('User tidak ditemukan!');
+        return;
+      }
+
+      // Step 1: Re-authenticate dengan sandi lama
+      final credential = EmailAuthProvider.credential(
+        email:    user.email!,
+        password: _sandiLamaController.text,
+      );
+      await user.reauthenticateWithCredential(credential);
+
+      // Step 2: Update ke sandi baru
+      await user.updatePassword(_sandiBaruController.text);
+
+      // Step 3: Bersihkan field & tampilkan snackbar sukses (tanpa logout)
       _sandiLamaController.clear();
       _sandiBaruController.clear();
       _konfirmasiController.clear();
-    });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Text('Kata sandi berhasil diperbarui!',
-                style: _p(size: 13, color: Colors.white)),
-          ],
-        ),
-        backgroundColor: _accent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Text('Kata sandi berhasil diubah!',
+                    style: _p(size: 13, color: Colors.white)),
+              ],
+            ),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        // Kembali ke ProfileScreen setelah SnackBar tampil
+        await Future.delayed(const Duration(milliseconds: 1500));
+        if (mounted) Navigator.pop(context);
+      }
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'wrong-password':
+        case 'invalid-credential':
+          _showError('Kata sandi lama salah!');
+          break;
+        case 'weak-password':
+          _showError('Kata sandi baru terlalu lemah!');
+          break;
+        case 'requires-recent-login':
+          _showError('Sesi habis. Silakan login ulang.');
+          break;
+        default:
+          _showError('Gagal mengubah kata sandi. Coba lagi.');
+      }
+    } catch (e) {
+      _showError('Terjadi kesalahan. Coba lagi.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   void _showError(String msg) {
@@ -108,12 +152,11 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  // ── Back: dialog kalau ada input yang belum disimpan ─────────────────────────
   Future<bool> _onWillPop() async {
     if (_hasChanges) {
       await showDialog(
@@ -139,13 +182,12 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                     textAlign: TextAlign.center,
                     style: _p(size: 13, color: Colors.grey.shade600)),
                 const SizedBox(height: 22),
-                // Ya
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.pop(context); // tutup dialog
-                      _simpanPerubahan();     // simpan
+                      Navigator.pop(context);
+                      _simpanPerubahan();
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,
@@ -157,13 +199,12 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                // Tidak
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.pop(context); // tutup dialog
-                      Navigator.pop(context); // balik ke profil
+                      Navigator.pop(context);
+                      Navigator.pop(context);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFF1F1F1),
@@ -214,7 +255,6 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                 ),
               ),
 
-              // ── Content ───────────────────────────────────────────────────
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -223,7 +263,7 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                     children: [
                       const SizedBox(height: 24),
 
-                      // ── Hero Card ─────────────────────────────────────────
+                      // Hero Card
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(22),
@@ -238,7 +278,6 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Shield icon
                             Container(
                               width: 46, height: 46,
                               decoration: BoxDecoration(
@@ -261,7 +300,6 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                       ),
                       const SizedBox(height: 28),
 
-                      // ── Kata Sandi Lama ───────────────────────────────────
                       Text('Kata Sandi Lama', style: _p(size: 13, weight: FontWeight.w500)),
                       const SizedBox(height: 8),
                       _buildPasswordField(
@@ -272,7 +310,6 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // ── Kata Sandi Baru ───────────────────────────────────
                       Text('Kata Sandi Baru', style: _p(size: 13, weight: FontWeight.w500)),
                       const SizedBox(height: 8),
                       _buildPasswordField(
@@ -283,7 +320,6 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // ── Konfirmasi Kata Sandi Baru ────────────────────────
                       Text('Konfirmasi Kata Sandi Baru',
                           style: _p(size: 13, weight: FontWeight.w500)),
                       const SizedBox(height: 8),
@@ -295,7 +331,7 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // ── Tips Keamanan ─────────────────────────────────────
+                      // Tips
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -332,22 +368,27 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                 ),
               ),
 
-              // ── Tombol Simpan Perubahan ───────────────────────────────────
+              // ── Tombol Simpan ─────────────────────────────────────────────
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                 color: _bgColor,
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _simpanPerubahan,
+                    onPressed: _isLoading ? null : _simpanPerubahan,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       elevation: 0,
                     ),
-                    child: Text('Simpan Perubahan',
-                        style: _p(size: 15, weight: FontWeight.w600, color: Colors.white)),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : Text('Simpan Perubahan',
+                            style: _p(size: 15, weight: FontWeight.w600, color: Colors.white)),
                   ),
                 ),
               ),
@@ -358,7 +399,6 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
     );
   }
 
-  // ── Password Field ────────────────────────────────────────────────────────────
   Widget _buildPasswordField({
     required TextEditingController controller,
     required String hint,
