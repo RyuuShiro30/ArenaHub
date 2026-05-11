@@ -6,9 +6,9 @@ import 'package:appbookinglapangan/features/auth/screens/register_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/pilih_jadwal.dart';
 import 'package:appbookinglapangan/features/booking/screens/payment_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/paymentSucces_screen.dart';
+import 'package:appbookinglapangan/features/booking/screens/field_detail.dart';
 import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
 import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
-import 'package:appbookinglapangan/features/booking/screens/field_detail.dart'; // ← tambah ini
 
 class AppRoutes {
   static const String login = "/login";
@@ -18,9 +18,8 @@ class AppRoutes {
   static const String pilihJadwal = '/pilihJadwal';
   static const String payment = '/payment';
   static const String paymentSucces = '/paymentSucces';
-  static const String riwayatBooking = '/riwayatBooking';
-  static const String testDetail = '/test-detail'; // ← tambah ini
-
+  static const String testDetail = '/test-detail';
+  static const String riwayatBooking = '/riwayatBooking'; 
   static const String cariLapangan = '/cariLapangan';
   static Map<String, WidgetBuilder> routes = {
     login: (context) => const LoginScreen(),
@@ -56,6 +55,11 @@ class AppRoutes {
               email: args['email'] ?? '',
               phone: args['phone'] ?? '',
               selectedDate: args['selectedDate'] ?? '',
+              kodePromo: args['kodePromo'] ?? '',
+              durasiJam: args['durasiJam'] ?? 1,
+              subtotal: args['subtotal'] ?? 0,
+              diskon: args['diskon'] ?? 0,
+              imagePath: args['imagePath'] ?? '',
             ),
           );
         }
