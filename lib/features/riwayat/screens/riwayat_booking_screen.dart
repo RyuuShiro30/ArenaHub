@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../data/model/riwayat_booking_model.dart';
 import '../widgets/riwayat_booking_card.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class RiwayatBookingScreen extends StatefulWidget {
   const RiwayatBookingScreen({super.key});
@@ -47,15 +48,15 @@ class _RiwayatBookingScreenState
 
   BookingStatus _parseStatus(String? status) {
     switch (status) {
-      case 'aktif':
+      case 'sudah dibayar': // Sesuai label dari PaymentScreen
+        return BookingStatus.aktif; 
+      case 'pending':
         return BookingStatus.aktif;
-
       case 'selesai':
         return BookingStatus.selesai;
-
+      case 'gagal':
       case 'dibatalkan':
         return BookingStatus.dibatalkan;
-
       default:
         return BookingStatus.aktif;
     }
@@ -172,179 +173,95 @@ class _RiwayatBookingScreenState
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildList(int tabIndex) {
+    // 1. Ambil user yang sedang login
+    final currentUser = FirebaseAuth.instance.currentUser;
+
     return StreamBuilder<QuerySnapshot>(
+      // 2. Tambahkan filter .where berdasarkan email user yang login
       stream: FirebaseFirestore.instance
           .collection('bookings')
+          .where('email', isEqualTo: currentUser?.email) // Filter user
           .orderBy('tanggal_booking', descending: true)
           .snapshots(),
 
       builder: (context, snapshot) {
-        // LOADING
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
-
-        // EMPTY STATE
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.inbox_rounded,
-                  size: 56,
-                  color: Colors.grey.shade300,
-                ),
-
-                const SizedBox(height: 16),
-
-                Text(
-                  'Belum ada riwayat booking',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade400,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
+        // 1. CEK ERROR (Sangat Penting!)
+          if (snapshot.hasError) {
+            return Center(child: Text('Terjadi kesalahan: ${snapshot.error}'));
+          }
+          // 2. LOADING
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
         final docs = snapshot.data!.docs;
 
-        // MAPPING FIRESTORE -> MODEL
         List<RiwayatBookingModel> list = docs.map((doc) {
           final data = doc.data() as Map<String, dynamic>;
 
-          // TANGGAL
           DateTime tanggalBooking = DateTime.now();
-
           if (data['tanggal_booking'] != null) {
-            tanggalBooking =
-                (data['tanggal_booking'] as Timestamp).toDate();
+            tanggalBooking = (data['tanggal_booking'] as Timestamp).toDate();
           }
 
-          String formattedTanggal =
-              DateFormat(
-                'd MMMM yyyy',
-                'id_ID',
-              ).format(tanggalBooking);
+          String formattedTanggal = DateFormat('d MMMM yyyy', 'id_ID').format(tanggalBooking);
 
           return RiwayatBookingModel(
             bookingId: data['order_id'] ?? '',
-
-            namaLapangan:
-                data['nama_lapangan'] ?? 'Lapangan',
-
-            kategori:
-                data['kategori'] ?? 'SPORT',
-
+            namaLapangan: data['nama_lapangan'] ?? 'Lapangan',
+            kategori: data['kategori'] ?? 'SPORT',
             tanggal: formattedTanggal,
-
-            waktu:
-                data['jam_booking'] ?? '-',
-
-            totalPembayaran:
-                data['total_harga'] ?? 0,
-
-            imagePath:
-                data['image_url'] ??
-                    'https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=600',
-
-            status: _parseStatus(
-              data['status'],
-            ),
+            // 1. Ubah 'jam_booking' menjadi 'jam_main'
+            waktu: data['jam_main'] ?? '-', 
+            totalPembayaran: data['total_harga'] ?? 0,
+            imagePath: data['image_url'] ?? 'https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=600',
+            // 2. Ubah 'status' menjadi 'status_pembayaran'
+            status: _parseStatus(data['status_pembayaran']), 
           );
         }).toList();
 
-        // FILTER TAB
+        // FILTER BERDASARKAN TAB (Logika filter tetap sama)
         if (tabIndex == 1) {
-          list = list
-              .where(
-                (e) =>
-                    e.status ==
-                    BookingStatus.aktif,
-              )
-              .toList();
+          list = list.where((e) => e.status == BookingStatus.aktif).toList();
         } else if (tabIndex == 2) {
-          list = list
-              .where(
-                (e) =>
-                    e.status ==
-                    BookingStatus.selesai,
-              )
-              .toList();
+          list = list.where((e) => e.status == BookingStatus.selesai).toList();
         } else if (tabIndex == 3) {
-          list = list
-              .where(
-                (e) =>
-                    e.status ==
-                    BookingStatus.dibatalkan,
-              )
-              .toList();
+          list = list.where((e) => e.status == BookingStatus.dibatalkan).toList();
         }
 
-        // EMPTY FILTER RESULT
         if (list.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment:
-                  MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.inbox_rounded,
-                  size: 56,
-                  color: Colors.grey.shade300,
-                ),
-
-                const SizedBox(height: 16),
-
-                Text(
-                  'Tidak ada data',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade400,
-                  ),
-                ),
-              ],
-            ),
-          );
+          return _buildEmptyState('Tidak ada data');
         }
 
-        // LIST VIEW
         return ListView.separated(
           padding: const EdgeInsets.all(16),
-
           itemCount: list.length,
-
-          separatorBuilder: (_, __) =>
-              const SizedBox(height: 14),
-
-          itemBuilder: (context, index) {
-            final booking = list[index];
-
-            return RiwayatBookingCard(
-              booking: booking,
-
-              onLihatDetail: () {
-                // TODO
-              },
-
-              onBeriUlasan: () {
-                // TODO
-              },
-
-              onPesanLagi: () {
-                // TODO
-              },
-            );
-          },
+          separatorBuilder: (_, __) => const SizedBox(height: 14),
+          itemBuilder: (context, index) => RiwayatBookingCard(
+            booking: list[index],
+            onLihatDetail: () {},
+            onBeriUlasan: () {},
+            onPesanLagi: () {},
+          ),
         );
       },
+    );
+  }
+
+  // Helper untuk menampilkan state kosong agar kode lebih bersih
+  Widget _buildEmptyState(String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.inbox_rounded, size: 56, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.grey.shade400),
+          ),
+        ],
+      ),
     );
   }
 }

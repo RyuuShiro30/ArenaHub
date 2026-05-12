@@ -16,6 +16,8 @@ class PaymentScreen extends StatefulWidget {
   final int subtotal;
   final int diskon;
   final String imagePath;
+  final String jamMain;
+  final String lapanganId;
 
   const PaymentScreen(
       {super.key,
@@ -30,6 +32,8 @@ class PaymentScreen extends StatefulWidget {
       required this.subtotal,
       this.diskon = 0,
       required this.imagePath,
+      required this.jamMain,
+      required this.lapanganId,
       });
 
   @override
@@ -198,6 +202,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
       // 1. Cek status pembayaran ke Midtrans
       final status = await midtransService.checkStatus(currentOrderId!);
 
+      // Mapping status Midtrans ke label Firebase
+      // settlement → sudah dibayar, pending tetap pending, selainnya → gagal
+      String statusPembayaran;
+      if (status == 'settlement') {
+        statusPembayaran = 'sudah dibayar';
+      } else if (status == 'pending') {
+        statusPembayaran = 'pending';
+      } else {
+        statusPembayaran = 'gagal';
+      }
+
       if (mounted) {
         // Jika statusnya 'settlement' (berhasil) atau 'pending' (menunggu pembayaran)
         if (status == 'settlement' || status == 'pending') {
@@ -209,13 +224,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
               .set({
             'order_id': currentOrderId,
             'nama_lapangan': widget.namaLapangan,
+            'lapangan_id': widget.lapanganId,
             'customer_name': widget.customerName,
             'email': widget.email,
             'phone': widget.phone,
             'total_harga': widget.totalHarga,
-            'status_pembayaran': status, // Menyimpan status dari Midtrans
+            'status_pembayaran': statusPembayaran,
             'tanggal_booking': FieldValue.serverTimestamp(), // Waktu transaksi
             'tanggal_main': widget.selectedDate,
+            'jam_main': widget.jamMain,
+            'selected_times': widget.jamMain, // ← tambah ini
+            'kode_promo': widget.kodePromo ?? '',   // ← tambah ini
+            'diskon': widget.diskon,                // ← tambah ini
+            'biaya_layanan': widget.totalHarga - widget.subtotal + widget.diskon, // ← tambah ini
           }, SetOptions(merge: true));
           // update pemakaian promo kalau ada
           if (widget.kodePromo != null && widget.kodePromo!.isNotEmpty) {
@@ -246,9 +267,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
           );
         } else {
           // Jika status selain settlement/pending (misal: expire atau deny)
+          // Simpan data dengan status 'gagal' ke Firestore
+          await FirebaseFirestore.instance
+              .collection('bookings')
+              .doc(currentOrderId)
+              .set({
+            'order_id': currentOrderId,
+            'nama_lapangan': widget.namaLapangan,
+            'customer_name': widget.customerName,
+            'email': widget.email,
+            'phone': widget.phone,
+            'total_harga': widget.totalHarga,
+            'status_pembayaran': statusPembayaran,
+            'tanggal_booking': FieldValue.serverTimestamp(),
+            'tanggal_main': widget.selectedDate,
+          }, SetOptions(merge: true));
+
           setState(() => isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Status pembayaran saat ini: $status")),
+            SnackBar(content: Text("Status pembayaran saat ini: $statusPembayaran")),
           );
         }
       }

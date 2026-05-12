@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../data/model/booking_model.dart';
 import '../screens/payment_screen.dart';
 
@@ -568,16 +569,22 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
                     builder: (_) => PaymentScreen(
                       totalHarga: _total,
                       namaLapangan: widget.data.namaLapangan,
+                      lapanganId: widget.data.lapanganId,
                       imagePath: widget.data.imagePath,
                       customerName: widget.data.namaPemesan,
-                      email: '',
+                      email: FirebaseAuth.instance.currentUser?.email ?? '',
                       phone: widget.data.nomorTelepon,
                       selectedDate: widget.data.tanggal
                           .toIso8601String()
                           .split('T')
-                          .first, // format: 2026-03-24
+                          .first,
                       kodePromo: widget.data.promo?.kode,
                       durasiJam: widget.data.durasiJam,
+
+                      // ===== TAMBAHAN BARU =====
+                      jamMain: widget.data.selectedTimes.join(', '),
+                      // =========================
+
                       subtotal: _hargaLapangan,
                       diskon: _diskon,
                     ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/gestures.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -282,14 +283,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 30),
 
               /// --- 5. SUDAH PUNYA AKUN? ---
+              // ... bagian kode lainnya tetap sama ...
+
+              /// --- 5. SUDAH PUNYA AKUN? ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text("Sudah punya akun? ", style: TextStyle(color: textGrey)),
                   GestureDetector(
                     onTap: () {
-                      // Navigate back to LoginScreen
-                      Navigator.pop(context);
+                      // PERBAIKAN: Gunakan pushReplacementNamed jika kamu pakai routes, 
+                      // atau pushReplacement jika manual agar tidak menumpuk halaman.
+                      // Jika kamu menggunakan penamaan route di main.dart:
+                      Navigator.pushReplacementNamed(context, '/login'); 
+                      
+                      // ATAU jika kamu ingin kembali ke halaman sebelumnya (jika yakin dari login):
+                      // if (Navigator.canPop(context)) {
+                      //   Navigator.pop(context);
+                      // } else {
+                      //   Navigator.pushReplacementNamed(context, '/login');
+                      // }
                     },
                     child: Text(
                       "Masuk di sini",
@@ -298,6 +311,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ],
               ),
+
 
               const SizedBox(height: 50),
 
