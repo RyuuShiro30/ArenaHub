@@ -10,7 +10,7 @@ import 'pusat_bantuan.dart';
 import 'kebijakan_privasi.dart';
 import '../../../../routes/app_routes.dart';
 
-final ValueNotifier<bool>    darkModeNotifier    = ValueNotifier(false);
+final ValueNotifier<bool>    darkModeNotifier     = ValueNotifier(false);
 final ValueNotifier<String?> profilePhotoNotifier = ValueNotifier(null);
 final ValueNotifier<String>  profileNameNotifier  = ValueNotifier('');
 
@@ -22,22 +22,19 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _notifikasi      = true;
+  bool _notifikasi       = true;
   int  _selectedNavIndex = 3;
 
-  // ── Firebase ──────────────────────────────────────────────────────────────────
   final _auth      = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
 
-  // ── User Data dari Firebase ───────────────────────────────────────────────────
   String  _nama         = '';
   String  _email        = '';
   String  _telepon      = '';
-  String? _fotoPath;
+  String? _fotoPath;       // URL Cloudinary atau null
   int     _totalBooking = 0;
   bool    _loadingUser  = true;
 
-  // ── Colors ───────────────────────────────────────────────────────────────────
   static const Color _primaryDark = Color(0xFF0D2D6B);
   static const Color _primaryMid  = Color(0xFF1A4FAF);
   static const Color _accent      = Color(0xFF2563EB);
@@ -48,52 +45,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _fetchUserData();
-    _loadSavedPhoto();
   }
 
-  // ── Load foto dari SharedPreferences ──────────────────────────────────────────
-  Future<void> _loadSavedPhoto() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedPath = prefs.getString('profile_photo_path');
-    if (savedPath != null && File(savedPath).existsSync()) {
-      setState(() => _fotoPath = savedPath);
-      profilePhotoNotifier.value = savedPath;
-    }
-    // Sync nama ke notifier supaya HomeScreen langsung tahu
-    if (_nama.isNotEmpty) profileNameNotifier.value = _nama;
-  }
-
-  // ── Fetch data user dari Firestore ────────────────────────────────────────────
+  // ── Fetch data user + photoUrl dari Firestore ─────────────────────────────
   Future<void> _fetchUserData() async {
     try {
       final user = _auth.currentUser;
       if (user == null) return;
 
-      // Ambil data profil
       final doc = await _firestore.collection('users').doc(user.uid).get();
       if (doc.exists && mounted) {
-        final data = doc.data()!;
+        final data  = doc.data()!;
         final email = data['email'] ?? user.email ?? '';
 
-        // Hitung total booking berdasarkan email
         final bookingQuery = await _firestore
             .collection('bookings')
             .where('email', isEqualTo: email)
             .get();
 
+        // Ambil photoUrl dari Firestore (URL Cloudinary)
+        final String? photoUrl = data['photoUrl'];
+
         setState(() {
           _nama         = data['fullName'] ?? '';
           _email        = email;
           _telepon      = data['phone']    ?? '';
+          _fotoPath     = photoUrl;          // ← URL Cloudinary langsung
           _totalBooking = bookingQuery.docs.length;
           _loadingUser  = false;
         });
-        // Sync nama ke notifier supaya HomeScreen langsung menampilkan nama terbaru
-        profileNameNotifier.value = _nama;
+
+        profileNameNotifier.value  = _nama;
+        profilePhotoNotifier.value = _fotoPath;
       }
     } catch (e) {
       if (mounted) setState(() => _loadingUser = false);
     }
+  }
+
+  // ── Helper: tampilkan foto dari URL Cloudinary ────────────────────────────
+  Widget _buildFotoWidget({double size = 90}) {
+    if (_fotoPath == null) {
+      return Icon(Icons.person, size: size * 0.55, color: Colors.white);
+    }
+    return Image.network(
+      _fotoPath!,
+      fit: BoxFit.cover,
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Colors.white.withOpacity(0.8),
+          ),
+        );
+      },
+      errorBuilder: (_, __, ___) =>
+          Icon(Icons.person, size: size * 0.55, color: Colors.white),
+    );
   }
 
   TextStyle _p({
@@ -109,7 +118,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── Navigate ke Informasi Pribadi ─────────────────────────────────────────────
+  // ── Navigate ke Informasi Pribadi ─────────────────────────────────────────
   void _goToInformasiPribadi() async {
     final result = await Navigator.push<Map<String, String?>>(
       context,
@@ -122,30 +131,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+
     if (result != null && mounted) {
       setState(() {
         _nama     = result['nama']    ?? _nama;
         _email    = result['email']   ?? _email;
         _telepon  = result['telepon'] ?? _telepon;
-        _fotoPath = result['foto'];
+        _fotoPath = result['foto'];   // URL Cloudinary atau null
       });
-      // Propagasi nama terbaru ke HomeScreen via ValueNotifier
-      profileNameNotifier.value = _nama;
-      // Simpan foto ke SharedPreferences agar persisten setelah login ulang
-      final prefs = await SharedPreferences.getInstance();
-      if (_fotoPath != null) {
-        await prefs.setString('profile_photo_path', _fotoPath!);
-      } else {
-        await prefs.remove('profile_photo_path');
-      }
-      // Propagasi foto terbaru ke HomeScreen via ValueNotifier
+
+      profileNameNotifier.value  = _nama;
       profilePhotoNotifier.value = _fotoPath;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const Icon(Icons.check_circle_rounded,
+                  color: Colors.white, size: 20),
               const SizedBox(width: 10),
               Text('Profil berhasil diperbarui!',
                   style: _p(size: 13, color: Colors.white)),
@@ -153,7 +156,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           backgroundColor: _accent,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           duration: const Duration(seconds: 2),
         ),
@@ -161,12 +165,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // ── Logout ────────────────────────────────────────────────────────────────────
+  // ── Logout ────────────────────────────────────────────────────────────────
   void _logout() async {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Keluar dari Akun?',
             style: _p(size: 16, weight: FontWeight.bold)),
         content: Text('Kamu akan keluar dari akun ini.',
@@ -182,37 +187,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
               await _auth.signOut();
               if (mounted) {
                 Navigator.pushNamedAndRemoveUntil(
-                  context, '/login', (route) => false,
-                );
+                    context, '/login', (route) => false);
               }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
               elevation: 0,
             ),
-            child: Text('Keluar', style: _p(size: 14, weight: FontWeight.w600, color: Colors.white)),
+            child: Text('Keluar',
+                style: _p(
+                    size: 14,
+                    weight: FontWeight.w600,
+                    color: Colors.white)),
           ),
         ],
       ),
     );
   }
 
-  // ── Bottom Nav ────────────────────────────────────────────────────────────────
+  // ── Bottom Nav ────────────────────────────────────────────────────────────
   void _onNavTap(int index) {
     if (index == _selectedNavIndex) return;
     switch (index) {
-      case 0: // Beranda
+      case 0:
         Navigator.pushNamedAndRemoveUntil(
             context, AppRoutes.home, (route) => false);
         return;
-      case 1: // Cari
+      case 1:
         Navigator.pushNamed(context, AppRoutes.cariLapangan);
         return;
-      case 2: // Riwayat
+      case 2:
         Navigator.pushNamed(context, AppRoutes.riwayatBooking);
         return;
-      case 3: // Profil (sudah di sini)
+      case 3:
         break;
     }
     setState(() => _selectedNavIndex = index);
@@ -224,31 +233,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: _bgColor,
       body: Column(
         children: [
-          // ── STICKY: Top bar putih ─────────────────────────────────────────
           SafeArea(
             bottom: false,
             child: Container(
               color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               child: Stack(
                 alignment: Alignment.center,
                 children: [
                   Align(
                     alignment: Alignment.centerLeft,
                     child: IconButton(
-                      icon: const Icon(Icons.arrow_back_rounded, color: _primaryDark),
+                      icon: const Icon(Icons.arrow_back_rounded,
+                          color: _primaryDark),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ),
-                  Text('Profil', style: GoogleFonts.poppins(
-                    fontSize: 17, fontWeight: FontWeight.w600, color: _textDark,
-                  )),
+                  Text('Profil',
+                      style: GoogleFonts.poppins(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: _textDark)),
                 ],
               ),
             ),
           ),
-
-          // ── SCROLL: Gradient + Content ────────────────────────────────────
           Expanded(
             child: SingleChildScrollView(
               child: Column(
@@ -265,38 +275,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _sectionLabel('AKUN'),
                         const SizedBox(height: 10),
                         _buildMenuCard([
-                          _menuItem(Icons.person_outline_rounded, 'Informasi Pribadi',
+                          _menuItem(Icons.person_outline_rounded,
+                              'Informasi Pribadi',
                               onTap: _goToInformasiPribadi),
                           _divider(),
-                          _menuItem(Icons.shield_outlined, 'Keamanan & Sandi',
-                              onTap: () => Navigator.push(context,
-                                  MaterialPageRoute(builder: (_) => KeamananSandiScreen()))),
+                          _menuItem(Icons.shield_outlined,
+                              'Keamanan & Sandi',
+                              onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          KeamananSandiScreen()))),
                         ]),
                         const SizedBox(height: 24),
                         _sectionLabel('PENGATURAN'),
                         const SizedBox(height: 10),
                         _buildMenuCard([
-                          _toggleItem(Icons.notifications_outlined, 'Notifikasi',
-                              _notifikasi, (val) => setState(() => _notifikasi = val)),
+                          _toggleItem(
+                              Icons.notifications_outlined,
+                              'Notifikasi',
+                              _notifikasi,
+                              (val) =>
+                                  setState(() => _notifikasi = val)),
                         ]),
                         const SizedBox(height: 24),
                         _sectionLabel('LAINNYA'),
                         const SizedBox(height: 10),
                         _buildMenuCard([
-                          _menuItem(Icons.help_outline_rounded, 'Pusat Bantuan',
-                              onTap: () => Navigator.push(context,
-                                  MaterialPageRoute(builder: (_) => PusatBantuanScreen()))),
+                          _menuItem(Icons.help_outline_rounded,
+                              'Pusat Bantuan',
+                              onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          PusatBantuanScreen()))),
                           _divider(),
-                          _menuItem(Icons.policy_outlined, 'Kebijakan Privasi',
-                              onTap: () => Navigator.push(context,
-                                  MaterialPageRoute(builder: (_) => KebijakanPrivasiScreen()))),
+                          _menuItem(Icons.policy_outlined,
+                              'Kebijakan Privasi',
+                              onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          KebijakanPrivasiScreen()))),
                         ]),
                         const SizedBox(height: 28),
                         _buildLogoutButton(),
                         const SizedBox(height: 16),
                         Center(
                           child: Text('Versi 2.4.1 (Build 108)',
-                              style: _p(size: 12, color: Colors.grey.shade400)),
+                              style: _p(
+                                  size: 12,
+                                  color: Colors.grey.shade400)),
                         ),
                         const SizedBox(height: 28),
                       ],
@@ -308,17 +337,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      //bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  // ── Gradient Section ──────────────────────────────────────────────────────────
+  // ── Gradient Section ──────────────────────────────────────────────────────
   Widget _buildGradientSection() {
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0D3D6B), Color(0xFF1A6B8A), Color(0xFF1A8A6B)],
+          colors: [
+            Color(0xFF0D3D6B),
+            Color(0xFF1A6B8A),
+            Color(0xFF1A8A6B),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -327,58 +359,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           Container(
-            width: 90, height: 90,
+            width: 90,
+            height: 90,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white.withOpacity(0.3),
-              border: Border.all(color: Colors.white.withOpacity(0.6), width: 3),
+              border: Border.all(
+                  color: Colors.white.withOpacity(0.6), width: 3),
             ),
             child: ClipOval(
-              child: _fotoPath != null
-                  ? Image.file(File(_fotoPath!), fit: BoxFit.cover)
-                  : const Icon(Icons.person, size: 50, color: Colors.white),
+              child: _buildFotoWidget(size: 90), // ← pakai helper
             ),
           ),
           const SizedBox(height: 12),
           _loadingUser
-              ? Container(width: 120, height: 18,
+              ? Container(
+                  width: 120,
+                  height: 18,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(8),
                   ))
-              : Text(_nama, style: GoogleFonts.poppins(
-                  fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+              : Text(_nama,
+                  style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white)),
           const SizedBox(height: 4),
           _loadingUser
-              ? Container(width: 160, height: 14,
+              ? Container(
+                  width: 160,
+                  height: 14,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(6),
                   ))
-              : Text(_email, style: GoogleFonts.poppins(fontSize: 13, color: Colors.white70)),
+              : Text(_email,
+                  style: GoogleFonts.poppins(
+                      fontSize: 13, color: Colors.white70)),
         ],
       ),
     );
   }
 
-  // ── Stats Card (dari Firebase) ────────────────────────────────────────────────
   Widget _buildStatsCard() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2),
-        )],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2))
+        ],
       ),
       child: Row(
         children: [
           _statItem(
-            _loadingUser ? '-' : _totalBooking.toString(),
-            'TOTAL BOOKING',
-          ),
-          Container(width: 1, height: 36, color: Colors.grey.shade200),
+              _loadingUser ? '-' : _totalBooking.toString(),
+              'TOTAL BOOKING'),
+          Container(
+              width: 1, height: 36, color: Colors.grey.shade200),
           _statItem('0', 'ULASAN'),
         ],
       ),
@@ -389,24 +432,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Expanded(
       child: Column(
         children: [
-          Text(value, style: GoogleFonts.poppins(
-            fontSize: 22, fontWeight: FontWeight.bold, color: _accent,
-          )),
+          Text(value,
+              style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: _accent)),
           const SizedBox(height: 4),
-          Text(label, style: GoogleFonts.poppins(
-            fontSize: 10, fontWeight: FontWeight.w500,
-            color: Colors.grey.shade500, letterSpacing: 0.4,
-          )),
+          Text(label,
+              style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade500,
+                  letterSpacing: 0.4)),
         ],
       ),
     );
   }
 
   Widget _sectionLabel(String label) {
-    return Text(label, style: GoogleFonts.poppins(
-      fontSize: 11, fontWeight: FontWeight.w600,
-      color: Colors.grey.shade500, letterSpacing: 0.8,
-    ));
+    return Text(label,
+        style: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade500,
+            letterSpacing: 0.8));
   }
 
   Widget _buildMenuCard(List<Widget> children) {
@@ -414,44 +463,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2),
-        )],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2))
+        ],
       ),
       child: Column(children: children),
     );
   }
 
-  Widget _menuItem(IconData icon, String title, {required VoidCallback onTap}) {
+  Widget _menuItem(IconData icon, String title,
+      {required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         child: Row(
           children: [
             Icon(icon, color: _primaryMid, size: 22),
             const SizedBox(width: 14),
-            Expanded(child: Text(title, style: _p(size: 14, weight: FontWeight.w500))),
-            Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400, size: 22),
+            Expanded(
+                child: Text(title,
+                    style: _p(size: 14, weight: FontWeight.w500))),
+            Icon(Icons.chevron_right_rounded,
+                color: Colors.grey.shade400, size: 22),
           ],
         ),
       ),
     );
   }
 
-  Widget _toggleItem(IconData icon, String title, bool value, ValueChanged<bool> onChanged) {
+  Widget _toggleItem(IconData icon, String title, bool value,
+      ValueChanged<bool> onChanged) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
       child: Row(
         children: [
           Icon(icon, color: _primaryMid, size: 22),
           const SizedBox(width: 14),
-          Expanded(child: Text(title, style: _p(size: 14, weight: FontWeight.w500))),
+          Expanded(
+              child: Text(title,
+                  style: _p(size: 14, weight: FontWeight.w500))),
           Switch(
-            value: value, onChanged: onChanged,
-            activeColor: Colors.white, activeTrackColor: _accent,
-            inactiveThumbColor: Colors.white, inactiveTrackColor: Colors.grey.shade300,
+            value: value,
+            onChanged: onChanged,
+            activeColor: Colors.white,
+            activeTrackColor: _accent,
+            inactiveThumbColor: Colors.white,
+            inactiveTrackColor: Colors.grey.shade300,
           ),
         ],
       ),
@@ -459,76 +523,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _divider() {
-    return Divider(height: 1, thickness: 1, indent: 54, endIndent: 18, color: Colors.grey.shade100);
+    return Divider(
+        height: 1,
+        thickness: 1,
+        indent: 54,
+        endIndent: 18,
+        color: Colors.grey.shade100);
   }
 
   Widget _buildLogoutButton() {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: _logout, // ← sekarang pakai Firebase signOut
-        icon: const Icon(Icons.logout_rounded, color: Colors.red, size: 20),
-        label: Text('Keluar dari Akun', style: GoogleFonts.poppins(
-          fontSize: 14, fontWeight: FontWeight.w600, color: Colors.red,
-        )),
+        onPressed: _logout,
+        icon: const Icon(Icons.logout_rounded,
+            color: Colors.red, size: 20),
+        label: Text('Keluar dari Akun',
+            style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.red)),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 16),
           side: const BorderSide(color: Colors.red, width: 1.5),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    final items = [
-      {'icon': Icons.home_rounded,    'label': 'Beranda'},
-      {'icon': Icons.search_rounded,  'label': 'Cari'},
-      {'icon': Icons.history_rounded, 'label': 'Riwayat'},
-      {'icon': Icons.person_rounded,  'label': 'Profil'},
-    ];
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.08), blurRadius: 14, offset: const Offset(0, -4),
-        )],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(items.length, (i) {
-              final isActive = _selectedNavIndex == i;
-              return GestureDetector(
-                onTap: () => _onNavTap(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isActive ? _accent.withOpacity(0.1) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(items[i]['icon'] as IconData,
-                          color: isActive ? _primaryDark : Colors.grey.shade400, size: 24),
-                      const SizedBox(height: 4),
-                      Text(items[i]['label'] as String,
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                            color: isActive ? _primaryDark : Colors.grey.shade400,
-                          )),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14)),
         ),
       ),
     );
