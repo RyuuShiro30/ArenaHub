@@ -22,7 +22,6 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
   static const Color _warningColor = Color(0xFFFF9800);
 
   Map<String, dynamic>? _booking;
-  Map<String, dynamic>? _lapangan;
   bool _isLoading = true;
   String? _error;
 
@@ -32,22 +31,6 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
     _fetchBooking();
   }
 
-  Future<void> _fetchLapangan(String lapanganId) async {
-  try {
-    final doc = await FirebaseFirestore.instance
-        .collection('lapangan')
-        .doc(lapanganId)
-        .get();
-
-    if (doc.exists) {
-      setState(() {
-        _lapangan = doc.data();
-      });
-    }
-  } catch (e) {
-    debugPrint('Gagal fetch lapangan: $e');
-  }
-}
 
   Future<void> _fetchBooking() async {
     try {
@@ -75,11 +58,18 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
 
         setState(() {
           _booking = bookingData;
-          _isPageLoading = false;
+          _isLoading = false;
         });
+
+        // Tambah ini untuk debug
+        debugPrint('=== DATA BOOKING ===');
+        debugPrint('selected_times: ${bookingData['selected_times']}');
+        debugPrint('tipe selected_times: ${bookingData['selected_times'].runtimeType}');
+        debugPrint('jam_main: ${bookingData['jam_main']}');
+        debugPrint('tanggal_main: ${bookingData['tanggal_main']}');
       }
     } catch (e) {
-      setState(() => _isPageLoading = false);
+      setState(() => _isLoading = false);
     }
   }
 
@@ -366,7 +356,12 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
 
   Widget _buildDetailJadwal(Map<String, dynamic> b) {
     final tanggal = _formatTanggal(b['tanggal_main'] as String?);
-    final selectedTimes = List<String>.from(b['selected_times'] ?? []);
+    
+    final rawTimes = b['selected_times'];
+    final selectedTimes = (rawTimes is List)
+        ? rawTimes.map((e) => e.toString()).toList()
+        : <String>[];
+
     final jamMulai = selectedTimes.isNotEmpty
         ? selectedTimes.first.split(' - ').first
         : '-';
@@ -449,13 +444,14 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
 
   Widget _buildRincianPembayaran(Map<String, dynamic> b) {
     final orderId = b['order_id'] ?? '-';
-    final totalHarga = b['total_harga'] ?? 0;
-    final hargaPerJam = b['harga_per_jam'] ?? 0;
-    final durasi = (b['selected_times'] as List?)?.length ?? 1;
-    final biayaLayanan = b['biaya_layanan'] ?? 5000;
+    final totalHarga = (b['total_harga'] as num?)?.toInt() ?? 0;
+    final hargaPerJam = (b['harga_per_jam'] as num?)?.toInt() ?? 0;
+    final biayaLayanan = (b['biaya_layanan'] as num?)?.toInt() ?? 5000;
+    final diskon = (b['diskon'] as num?)?.toInt() ?? 0;
+    final rawTimes = b['selected_times'];
+    final durasi = (rawTimes is List) ? rawTimes.length : 1;
     final kodePromo = b['kode_promo'] as String?;
-    final diskon = b['diskon'] ?? 0;
-    final sewaLapangan = hargaPerJam * durasi;
+    final sewaLapangan = hargaPerJam * durasi; // 
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
