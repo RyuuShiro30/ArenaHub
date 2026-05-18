@@ -3,27 +3,13 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// Data yang dikirim ke halaman review
-class ReviewData {
-  final String bookingId;
-  final String lapanganId;
-  final String namaLapangan;
-  final String imagePath;
-  final int hargaPerJam;
-
-  const ReviewData({
-    required this.bookingId,
-    required this.lapanganId,
-    required this.namaLapangan,
-    required this.imagePath,
-    required this.hargaPerJam,
-  });
-}
-
 class ReviewPage extends StatefulWidget {
-  final ReviewData data;
+  final String bookingId;
 
-  const ReviewPage({super.key, required this.data});
+  const ReviewPage({
+    super.key,
+    required this.bookingId,
+  });
 
   @override
   State<ReviewPage> createState() => _ReviewPageState();
@@ -33,6 +19,12 @@ class _ReviewPageState extends State<ReviewPage> {
   static const Color _primaryColor = Color(0xFF135B9D);
   static const Color _starColor = Color(0xFFFFC107);
   static const Color _errorColor = Color(0xFFE53935);
+
+  Map<String, dynamic>? _booking;
+
+  bool _isPageLoading = true;
+  bool _isLoading = false;
+  bool _showErrorOverall = false;
 
   // Overall rating
   int _ratingOverall = 0;
@@ -44,13 +36,40 @@ class _ReviewPageState extends State<ReviewPage> {
   int _ratingKondisi = 0;
 
   final _komentarController = TextEditingController();
-  bool _isLoading = false;
-  bool _showErrorOverall = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchBooking();
+  }
 
   @override
   void dispose() {
     _komentarController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchBooking() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('bookings')
+          .doc(widget.bookingId)
+          .get();
+      if (doc.exists) {
+        setState(() {
+          _booking = doc.data();
+          _isPageLoading = false;
+        });
+      } else {
+        setState(() {
+          _isPageLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isPageLoading = false;
+      });
+    }
   }
 
   // label rating overall
@@ -107,11 +126,12 @@ class _ReviewPageState extends State<ReviewPage> {
         return;
       }
       final firestore = FirebaseFirestore.instance;
+      final lapanganId = _booking?['lapangan_id'] ?? '';
 
       // 1. Simpan ulasan ke collection 'ulasan'
       await firestore.collection('ulasan').add({
-        'booking_id': widget.data.bookingId,
-        'lapangan_id': widget.data.lapanganId,
+        'booking_id': widget.bookingId,
+        'lapangan_id': lapanganId,
         'user_id': user.uid,
         'rating_overall': _ratingOverall,
         'rating_kebersihan': _ratingKebersihan,
@@ -125,7 +145,7 @@ class _ReviewPageState extends State<ReviewPage> {
       // 2. Ambil semua ulasan lapangan ini untuk hitung ulang rating_rata
       final ulasanSnapshot = await firestore
           .collection('ulasan')
-          .where('lapangan_id', isEqualTo: widget.data.lapanganId)
+          .where('lapangan_id', isEqualTo: lapanganId)
           .get();
 
       final semuaRating = ulasanSnapshot.docs
@@ -139,15 +159,15 @@ class _ReviewPageState extends State<ReviewPage> {
       // 3. Update rating_rata dan jumlah_ulasan di collection 'lapangan'
       await firestore
           .collection('lapangan')
-          .doc(widget.data.lapanganId)
+          .doc(lapanganId)
           .update({
-        'rating_rata': double.parse(ratingBaru.toStringAsFixed(1)),
+        'rating': double.parse(ratingBaru.toStringAsFixed(1)),
         'jumlah_ulasan': semuaRating.length,
       });
       // 4. Update status booking jadi sudah direview
       await firestore
           .collection('bookings')
-          .doc(widget.data.bookingId)
+          .doc(widget.bookingId)
           .update({'sudah_review': true});
 
       setState(() => _isLoading = false);
@@ -272,6 +292,10 @@ class _ReviewPageState extends State<ReviewPage> {
   // kartu lapangan
 
   Widget _buildKartuLapangan() {
+    final fotoField = _booking?['foto'];
+    final imagePath = (fotoField is List && fotoField.isNotEmpty) ? fotoField.first.toString() : (fotoField is String ? fotoField : '');
+    final namaLapangan = _booking?['nama_lapangan'] ?? '-';
+    final hargaPerJam = _booking?['harga_per_jam'] ?? 0;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       padding: const EdgeInsets.all(12),
@@ -290,21 +314,15 @@ class _ReviewPageState extends State<ReviewPage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: widget.data.imagePath.startsWith('http')
+            child: imagePath.startsWith('http')
                 ? Image.network(
-                    widget.data.imagePath,
+                    imagePath,
                     width: 72,
                     height: 72,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => _placeholderKecil(),
                   )
-                : Image.asset(
-                    widget.data.imagePath,
-                    width: 72,
-                    height: 72,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _placeholderKecil(),
-                  ),
+                  : _placeholderKecil(),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -320,7 +338,7 @@ class _ReviewPageState extends State<ReviewPage> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  widget.data.namaLapangan,
+                  namaLapangan,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -329,7 +347,7 @@ class _ReviewPageState extends State<ReviewPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${_formatRupiah(widget.data.hargaPerJam)}/jam',
+                  '${_formatRupiah(hargaPerJam)}/jam',
                   style: const TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
