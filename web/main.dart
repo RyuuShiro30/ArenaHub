@@ -4,7 +4,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:appbookinglapangan/firebase_options.dart';
-import 'dashboard/dashboardAdmin.dart'; // ← ganti ini
+import 'dashboard/dashboardAdmin.dart';
+import 'profile/profileAdmin.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +31,7 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: AdminDashboardScreen(), 
+      home: const ProfileAdminScreen(), 
     );
   }
 }
