@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'informasi_pribadi.dart';
 import 'keamanan_sandi.dart';
 import 'pusat_bantuan.dart';
@@ -31,8 +29,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String  _nama         = '';
   String  _email        = '';
   String  _telepon      = '';
-  String? _fotoPath;       // URL Cloudinary atau null
+  String? _fotoPath;
   int     _totalBooking = 0;
+  int     _totalUlasan  = 0; // ← dari collection ulasan, field user_id
   bool    _loadingUser  = true;
 
   static const Color _primaryDark = Color(0xFF0D2D6B);
@@ -47,7 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _fetchUserData();
   }
 
-  // ── Fetch data user + photoUrl dari Firestore ─────────────────────────────
+  // ── Fetch data user + booking + ulasan dari Firestore ────────────────────
   Future<void> _fetchUserData() async {
     try {
       final user = _auth.currentUser;
@@ -55,28 +54,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final doc = await _firestore.collection('users').doc(user.uid).get();
       if (doc.exists && mounted) {
-        final data  = doc.data()!;
-        final email = data['email'] ?? user.email ?? '';
+        final data     = doc.data()!;
+        final email    = data['email'] ?? user.email ?? '';
+        final photoUrl = data['photoUrl'] as String?;
 
+        // Hitung total booking berdasarkan email
         final bookingQuery = await _firestore
             .collection('bookings')
             .where('email', isEqualTo: email)
             .get();
 
-        // Ambil photoUrl dari Firestore (URL Cloudinary)
-        final String? photoUrl = data['photoUrl'];
+        // Hitung total ulasan berdasarkan user_id ← field dari Firestore
+        final ulasanQuery = await _firestore
+            .collection('ulasan')
+            .where('user_id', isEqualTo: user.uid)
+            .get();
 
-        setState(() {
-          _nama         = data['fullName'] ?? '';
-          _email        = email;
-          _telepon      = data['phone']    ?? '';
-          _fotoPath     = photoUrl;          // ← URL Cloudinary langsung
-          _totalBooking = bookingQuery.docs.length;
-          _loadingUser  = false;
-        });
+        if (mounted) {
+          setState(() {
+            _nama         = data['fullName'] ?? '';
+            _email        = email;
+            _telepon      = data['phone']    ?? '';
+            _fotoPath     = photoUrl;
+            _totalBooking = bookingQuery.docs.length;
+            _totalUlasan  = ulasanQuery.docs.length; // ← real dari Firestore
+            _loadingUser  = false;
+          });
 
-        profileNameNotifier.value  = _nama;
-        profilePhotoNotifier.value = _fotoPath;
+          profileNameNotifier.value  = _nama;
+          profilePhotoNotifier.value = _fotoPath;
+        }
       }
     } catch (e) {
       if (mounted) setState(() => _loadingUser = false);
@@ -137,7 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _nama     = result['nama']    ?? _nama;
         _email    = result['email']   ?? _email;
         _telepon  = result['telepon'] ?? _telepon;
-        _fotoPath = result['foto'];   // URL Cloudinary atau null
+        _fotoPath = result['foto'];
       });
 
       profileNameNotifier.value  = _nama;
@@ -170,8 +177,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
         title: Text('Keluar dari Akun?',
             style: _p(size: 16, weight: FontWeight.bold)),
         content: Text('Kamu akan keluar dari akun ini.',
@@ -207,7 +214,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── Bottom Nav ────────────────────────────────────────────────────────────
   void _onNavTap(int index) {
     if (index == _selectedNavIndex) return;
     switch (index) {
@@ -359,23 +365,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           Container(
-            width: 90,
-            height: 90,
+            width: 90, height: 90,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white.withOpacity(0.3),
               border: Border.all(
                   color: Colors.white.withOpacity(0.6), width: 3),
             ),
-            child: ClipOval(
-              child: _buildFotoWidget(size: 90), // ← pakai helper
-            ),
+            child: ClipOval(child: _buildFotoWidget(size: 90)),
           ),
           const SizedBox(height: 12),
           _loadingUser
               ? Container(
-                  width: 120,
-                  height: 18,
+                  width: 120, height: 18,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(8),
@@ -388,8 +390,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 4),
           _loadingUser
               ? Container(
-                  width: 160,
-                  height: 14,
+                  width: 160, height: 14,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(6),
@@ -402,6 +403,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // ── Stats Card ────────────────────────────────────────────────────────────
   Widget _buildStatsCard() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 18),
@@ -418,11 +420,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         children: [
           _statItem(
-              _loadingUser ? '-' : _totalBooking.toString(),
-              'TOTAL BOOKING'),
-          Container(
-              width: 1, height: 36, color: Colors.grey.shade200),
-          _statItem('0', 'ULASAN'),
+            _loadingUser ? '-' : _totalBooking.toString(),
+            'TOTAL BOOKING',
+          ),
+          Container(width: 1, height: 36, color: Colors.grey.shade200),
+          _statItem(
+            _loadingUser ? '-' : _totalUlasan.toString(), // ← real data
+            'ULASAN',
+          ),
         ],
       ),
     );
@@ -500,8 +505,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _toggleItem(IconData icon, String title, bool value,
       ValueChanged<bool> onChanged) {
     return Padding(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
       child: Row(
         children: [
           Icon(icon, color: _primaryMid, size: 22),
@@ -536,8 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: _logout,
-        icon: const Icon(Icons.logout_rounded,
-            color: Colors.red, size: 20),
+        icon: const Icon(Icons.logout_rounded, color: Colors.red, size: 20),
         label: Text('Keluar dari Akun',
             style: GoogleFonts.poppins(
                 fontSize: 14,
