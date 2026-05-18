@@ -2,9 +2,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+<<<<<<< Updated upstream
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+=======
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+>>>>>>> Stashed changes
 
 class InformasiPribadiScreen extends StatefulWidget {
   final String initialNama;
@@ -39,6 +45,7 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
   late TextEditingController _emailController;
   late TextEditingController _teleponController;
 
+<<<<<<< Updated upstream
   late String _savedNama;
   late String _savedEmail;
   late String _savedTelepon;
@@ -46,6 +53,16 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
   String?     _currentFotoPath; // path lokal (File baru) atau URL lama
 
   bool _isLoading = false;
+=======
+  late String  _savedNama;
+  late String  _savedEmail;
+  late String  _savedTelepon;
+  String?      _savedFotoPath;
+  String?      _currentFotoPath;   // path lokal (File)
+  String?      _fotoUrl;           // URL dari Firebase Storage
+
+  bool _isUploading = false;
+>>>>>>> Stashed changes
 
   final ImagePicker _picker = ImagePicker();
 
@@ -83,6 +100,7 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
     super.dispose();
   }
 
+<<<<<<< Updated upstream
   TextStyle _p({
     double size = 14,
     FontWeight weight = FontWeight.normal,
@@ -95,6 +113,12 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
       color: color,
       letterSpacing: spacing,
     );
+=======
+  TextStyle _p({double size = 14, FontWeight weight = FontWeight.normal,
+      Color color = _textDark, double spacing = 0}) {
+    return GoogleFonts.poppins(fontSize: size, fontWeight: weight,
+        color: color, letterSpacing: spacing);
+>>>>>>> Stashed changes
   }
 
   // ── Widget foto (lokal atau URL) ──────────────────────────────────────────
@@ -146,9 +170,13 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? foto = await _picker.pickImage(
+<<<<<<< Updated upstream
                   source: ImageSource.camera,
                   imageQuality: 80,
                 );
+=======
+                    source: ImageSource.camera, imageQuality: 80);
+>>>>>>> Stashed changes
                 if (foto != null) setState(() => _currentFotoPath = foto.path);
               },
             ),
@@ -163,9 +191,13 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? foto = await _picker.pickImage(
+<<<<<<< Updated upstream
                   source: ImageSource.gallery,
                   imageQuality: 80,
                 );
+=======
+                    source: ImageSource.gallery, imageQuality: 80);
+>>>>>>> Stashed changes
                 if (foto != null) setState(() => _currentFotoPath = foto.path);
               },
             ),
@@ -196,6 +228,7 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
     );
   }
 
+<<<<<<< Updated upstream
   Widget _iconTile(IconData icon, Color iconColor, {Color? bg}) {
     return Container(
       width: 44,
@@ -206,6 +239,102 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
       ),
       child: Icon(icon, color: iconColor, size: 22),
     );
+=======
+  // ── Upload foto ke Firebase Storage ──────────────────────────────────────────
+  Future<String?> _uploadFoto(String filePath) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return null;
+
+      final file = File(filePath);
+      final ref  = FirebaseStorage.instance
+          .ref()
+          .child('profile_photos')
+          .child('${user.uid}.jpg');
+
+      setState(() => _isUploading = true);
+      final uploadTask = await ref.putFile(file);
+      final url = await uploadTask.ref.getDownloadURL();
+      return url;
+    } catch (e) {
+      return null;
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  // ── Simpan ke Firestore + Firebase Storage ────────────────────────────────────
+  void _simpan() async {
+    setState(() => _isUploading = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      // Upload foto baru ke Firebase Storage kalau ada perubahan foto
+      String? newFotoUrl = _fotoUrl;
+      if (_currentFotoPath != null && _currentFotoPath != _savedFotoPath) {
+        newFotoUrl = await _uploadFoto(_currentFotoPath!);
+      }
+
+      // Simpan nama, telepon, dan foto URL ke Firestore
+      if (user != null) {
+        final Map<String, dynamic> updateData = {
+          'fullName': _namaController.text.trim(),
+          'phone'   : _teleponController.text.trim(),
+        };
+        if (newFotoUrl != null) {
+          updateData['fotoUrl'] = newFotoUrl;
+        }
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update(updateData);
+      }
+
+      setState(() {
+        _savedNama     = _namaController.text.trim();
+        _savedEmail    = _emailController.text.trim();
+        _savedTelepon  = _teleponController.text.trim();
+        _savedFotoPath = _currentFotoPath;
+        _fotoUrl       = newFotoUrl;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Text('Perubahan berhasil disimpan!',
+                    style: _p(size: 13, color: Colors.white)),
+              ],
+            ),
+            backgroundColor: _accent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menyimpan. Coba lagi.',
+                style: _p(size: 13, color: Colors.white)),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+>>>>>>> Stashed changes
   }
 
   // ── Upload ke Cloudinary ──────────────────────────────────────────────────
@@ -324,12 +453,18 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
+<<<<<<< Updated upstream
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
                       color: Colors.red.shade50, shape: BoxShape.circle),
                   child: const Icon(Icons.warning_amber_rounded,
                       color: Colors.red, size: 28),
+=======
+                  width: 52, height: 52,
+                  decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
+                  child: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+>>>>>>> Stashed changes
                 ),
                 const SizedBox(height: 16),
                 Text('Simpan perubahan?',
@@ -346,20 +481,37 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
                   child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(context);
+<<<<<<< Updated upstream
                       _simpan(); // simpan + otomatis pop setelah selesai
+=======
+                      _savedNama     = _namaController.text.trim();
+                      _savedEmail    = _emailController.text.trim();
+                      _savedTelepon  = _teleponController.text.trim();
+                      _savedFotoPath = _currentFotoPath;
+                      Navigator.pop<Map<String, String?>>(context, {
+                        'nama'   : _savedNama,
+                        'email'  : _savedEmail,
+                        'telepon': _savedTelepon,
+                        'foto'   : _savedFotoPath,
+                        'fotoUrl': _fotoUrl,
+                      });
+>>>>>>> Stashed changes
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),
+<<<<<<< Updated upstream
                     child: Text('Ya',
                         style: _p(
                             size: 14,
                             weight: FontWeight.w600,
                             color: Colors.white)),
+=======
+                    child: Text('Ya', style: _p(size: 14, weight: FontWeight.w600, color: Colors.white)),
+>>>>>>> Stashed changes
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -375,20 +527,24 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
                         'email'  : _savedEmail,
                         'telepon': _savedTelepon,
                         'foto'   : _savedFotoPath,
+                        'fotoUrl': _fotoUrl,
                       });
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFF1F1F1),
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),
+<<<<<<< Updated upstream
                     child: Text('Tidak',
                         style: _p(
                             size: 14,
                             weight: FontWeight.w500,
                             color: _textDark)),
+=======
+                    child: Text('Tidak', style: _p(size: 14, weight: FontWeight.w500, color: _textDark)),
+>>>>>>> Stashed changes
                   ),
                 ),
               ],
@@ -404,6 +560,7 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
       'email'  : _savedEmail,
       'telepon': _savedTelepon,
       'foto'   : _savedFotoPath,
+      'fotoUrl': _fotoUrl,
     });
     return false;
   }
@@ -439,7 +596,14 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
                             style: _p(size: 17, weight: FontWeight.w600)),
                       ],
                     ),
+<<<<<<< Updated upstream
                   ),
+=======
+                    Text('Informasi Pribadi', style: _p(size: 17, weight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+>>>>>>> Stashed changes
 
                   // ── Form ─────────────────────────────────────────────────
                   Expanded(
@@ -451,6 +615,7 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
                         children: [
                           const SizedBox(height: 32),
 
+<<<<<<< Updated upstream
                           // Avatar
                           Center(
                             child: GestureDetector(
@@ -493,13 +658,63 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
                                     ),
                                   ),
                                 ],
+=======
+                      // Avatar
+                      Center(
+                        child: GestureDetector(
+                          onTap: _isUploading ? null : _pilihFoto,
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 100, height: 100,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.grey.shade200,
+                                  border: _currentFotoPath != _savedFotoPath
+                                      ? Border.all(color: Colors.orange, width: 3)
+                                      : null,
+                                ),
+                                child: ClipOval(
+                                  child: _isUploading
+                                      ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                                      : _currentFotoPath != null
+                                          ? Image.file(File(_currentFotoPath!), fit: BoxFit.cover)
+                                          : _fotoUrl != null
+                                              ? Image.network(_fotoUrl!, fit: BoxFit.cover)
+                                              : const Icon(Icons.person, size: 56, color: Colors.grey),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 0, right: 0,
+                                child: Container(
+                                  width: 32, height: 32,
+                                  decoration: BoxDecoration(
+                                    color: _accent, shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2),
+                                  ),
+                                  child: const Icon(Icons.edit_rounded, size: 16, color: Colors.white),
+                                ),
+>>>>>>> Stashed changes
                               ),
                             ),
                           ),
+<<<<<<< Updated upstream
                           const SizedBox(height: 8),
                           Center(
                             child: Text('Ganti Foto Profil',
                                 style: _p(size: 13, color: _accent)),
+=======
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Center(child: Text('Ganti Foto Profil', style: _p(size: 13, color: _accent))),
+                      if (_currentFotoPath != _savedFotoPath)
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text('⚠ Foto belum disimpan',
+                                style: _p(size: 11, color: Colors.orange.shade700)),
+>>>>>>> Stashed changes
                           ),
                           if (_isLocalFile)
                             Center(
@@ -630,7 +845,61 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
                           ),
                         ],
                       ),
+<<<<<<< Updated upstream
                     ),
+=======
+                      const SizedBox(height: 20),
+
+                      // Email (read only)
+                      Text('Email', style: _p(size: 13, weight: FontWeight.w500)),
+                      const SizedBox(height: 8),
+                      _buildTextField(
+                        controller: _emailController,
+                        hint: 'Masukkan email',
+                        keyboardType: TextInputType.emailAddress,
+                        readOnly: true, // email tidak bisa diubah
+                        suffix: Icon(Icons.email_outlined,
+                            color: Colors.grey.shade400, size: 20),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Nomor Telepon
+                      Text('Nomor Telepon', style: _p(size: 13, weight: FontWeight.w500)),
+                      const SizedBox(height: 8),
+                      _buildTextField(
+                        controller: _teleponController,
+                        hint: 'Masukkan nomor telepon',
+                        keyboardType: TextInputType.phone,
+                        suffix: Icon(Icons.phone_outlined,
+                            color: Colors.grey.shade400, size: 20),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Tombol Simpan ─────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                color: _bgColor,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isUploading ? null : _simpan,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _accent,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    child: _isUploading
+                        ? const SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Text('Simpan',
+                            style: _p(size: 15, weight: FontWeight.w600, color: Colors.white)),
+>>>>>>> Stashed changes
                   ),
                 ),
             ],
@@ -645,11 +914,13 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
     required String hint,
     TextInputType keyboardType = TextInputType.text,
     Widget? suffix,
+    bool readOnly = false,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: readOnly ? Colors.grey.shade100 : Colors.white,
         borderRadius: BorderRadius.circular(12),
+<<<<<<< Updated upstream
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -657,23 +928,36 @@ class _InformasiPribadiScreenState extends State<InformasiPribadiScreen> {
             offset: const Offset(0, 2),
           ),
         ],
+=======
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04),
+            blurRadius: 6, offset: const Offset(0, 2))],
+>>>>>>> Stashed changes
       ),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+<<<<<<< Updated upstream
         enabled: !_isLoading,
         style: _p(size: 14),
+=======
+        readOnly: readOnly,
+        style: _p(size: 14, color: readOnly ? Colors.grey.shade500 : _textDark),
+>>>>>>> Stashed changes
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: _p(size: 14, color: Colors.grey.shade400),
           suffixIcon: suffix,
           border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none),
+              borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
           filled: true,
+<<<<<<< Updated upstream
           fillColor: Colors.white,
           contentPadding: const EdgeInsets.symmetric(
               horizontal: 16, vertical: 14),
+=======
+          fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+>>>>>>> Stashed changes
         ),
       ),
     );
