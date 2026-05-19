@@ -1,5 +1,3 @@
-// lib/features/booking/screens/detail_riwayat_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -53,6 +51,8 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
             bookingData['foto'] = (fotoList is List && fotoList.isNotEmpty)
                 ? fotoList[0].toString()
                 : '';
+
+            bookingData['harga_per_jam'] = lapanganDoc['harga'] ?? 0;
           }
         }
 
@@ -60,13 +60,6 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
           _booking = bookingData;
           _isLoading = false;
         });
-
-        // Tambah ini untuk debug
-        debugPrint('=== DATA BOOKING ===');
-        debugPrint('selected_times: ${bookingData['selected_times']}');
-        debugPrint('tipe selected_times: ${bookingData['selected_times'].runtimeType}');
-        debugPrint('jam_main: ${bookingData['jam_main']}');
-        debugPrint('tanggal_main: ${bookingData['tanggal_main']}');
       }
     } catch (e) {
       setState(() => _isLoading = false);
@@ -150,6 +143,12 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
     ];
     return '${dt.day} ${bulan[dt.month]} ${dt.year}';
+  }
+
+  int _hitungDurasi(String? jamMain) {
+    if (jamMain == null || jamMain.isEmpty) return 1;
+    final slots = jamMain.split(',');
+    return slots.length;
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -356,19 +355,14 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
 
   Widget _buildDetailJadwal(Map<String, dynamic> b) {
     final tanggal = _formatTanggal(b['tanggal_main'] as String?);
-    
-    final rawTimes = b['selected_times'];
-    final selectedTimes = (rawTimes is List)
-        ? rawTimes.map((e) => e.toString()).toList()
-        : <String>[];
 
-    final jamMulai = selectedTimes.isNotEmpty
-        ? selectedTimes.first.split(' - ').first
-        : '-';
-    final jamSelesai = selectedTimes.isNotEmpty
-        ? selectedTimes.last.split(' - ').last
-        : '-';
-    final durasi = selectedTimes.length;
+    final jamMain = b['selected_times'] as String? ?? b['jam_main'] as String? ?? '-';
+    
+    final durasi =_hitungDurasi(jamMain);
+    
+    final slots = jamMain.split(',');
+    final jamMulai = slots.first.split(' - ').first.trim();
+    final jamSelesai = slots.last.split(' - ').last.trim();
     final penyewa = b['customer_name'] ?? '-';
 
     return Container(
@@ -449,7 +443,7 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
     final biayaLayanan = (b['biaya_layanan'] as num?)?.toInt() ?? 5000;
     final diskon = (b['diskon'] as num?)?.toInt() ?? 0;
     final rawTimes = b['selected_times'];
-    final durasi = (rawTimes is List) ? rawTimes.length : 1;
+    final durasi = _hitungDurasi(rawTimes);
     final kodePromo = b['kode_promo'] as String?;
     final sewaLapangan = hargaPerJam * durasi; // 
 
