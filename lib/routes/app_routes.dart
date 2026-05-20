@@ -6,16 +6,10 @@ import 'package:appbookinglapangan/features/auth/screens/register_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/pilih_jadwal.dart';
 import 'package:appbookinglapangan/features/booking/screens/payment_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/paymentSucces_screen.dart';
-<<<<<<< Updated upstream
+
 import 'package:appbookinglapangan/features/booking/screens/field_detail.dart';
 import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
 import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
-<<<<<<< HEAD
-import 'package:appbookinglapangan/features/booking/screens/field_detail.dart'; // ← tambah ini
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> 75cb3ee6c850909598aa50bcd448fd0b454d666a
 import 'package:appbookinglapangan/features/profile/screens/profile_screen.dart';
 
 class AppRoutes {
@@ -26,14 +20,11 @@ class AppRoutes {
   static const String pilihJadwal = '/pilihJadwal';
   static const String payment = '/payment';
   static const String paymentSucces = '/paymentSucces';
-<<<<<<< Updated upstream
   static const String riwayatBooking = '/riwayatBooking';
   static const String testDetail = '/test-detail'; // ← tambah ini
   static const String profile_screen = '/profile';
-=======
   static const String profile_screen = '/profile';
   
->>>>>>> Stashed changes
 
   static const String cariLapangan = '/cariLapangan';
   static Map<String, WidgetBuilder> routes = {
@@ -42,14 +33,11 @@ class AppRoutes {
     home: (context) => const HomeScreen(),
     register: (context) => const RegisterScreen(),
     paymentSucces: (context) => const PaymentSuccessPage(),
-<<<<<<< Updated upstream
     riwayatBooking: (context) => const RiwayatBookingScreen(),
     testDetail: (context) => const DetailLapanganPage(
       lapanganId: 'XUSohGidinXPG2emvk7I',
     ),
     cariLapangan: (context) => const PencarianLapanganScreen(),
-=======
->>>>>>> Stashed changes
     profile_screen: (context) => const ProfileScreen(),
   };
 
