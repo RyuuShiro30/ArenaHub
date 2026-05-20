@@ -2,7 +2,6 @@ import 'package:appbookinglapangan/core/constant/constant.dart';
 import 'package:flutter/material.dart';
 import 'package:appbookinglapangan/routes/app_routes.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:appbookinglapangan/features/profile/screens/profile_screen.dart'; 
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../data/model/riwayat_booking_model.dart';
 import '../widgets/riwayat_booking_card.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../screens/detail_riwayat.dart';
 
 class RiwayatBookingScreen extends StatefulWidget {
   const RiwayatBookingScreen({super.key});
@@ -239,8 +240,20 @@ class _RiwayatBookingScreenState
           separatorBuilder: (_, __) => const SizedBox(height: 14),
           itemBuilder: (context, index) => RiwayatBookingCard(
             booking: list[index],
-            onLihatDetail: () {},
+
+            onLihatDetail: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DetailRiwayatPage(
+                    bookingId: docs[index].id,
+                  ),
+                ),
+              );
+            },
+
             onBeriUlasan: () {},
+
             onPesanLagi: () {},
           ),
         );

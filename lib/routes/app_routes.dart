@@ -10,9 +10,12 @@ import 'package:appbookinglapangan/features/booking/screens/paymentSucces_screen
 import 'package:appbookinglapangan/features/booking/screens/field_detail.dart';
 import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
 import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
+<<<<<<< HEAD
 import 'package:appbookinglapangan/features/booking/screens/field_detail.dart'; // ← tambah ini
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> 75cb3ee6c850909598aa50bcd448fd0b454d666a
 import 'package:appbookinglapangan/features/profile/screens/profile_screen.dart';
 
 class AppRoutes {
