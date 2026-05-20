@@ -112,12 +112,9 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
             duration: const Duration(seconds: 2),
           ),
         );
-<<<<<<< Updated upstream
         // Kembali ke ProfileScreen setelah SnackBar tampil
         await Future.delayed(const Duration(milliseconds: 1500));
         if (mounted) Navigator.pop(context);
-=======
->>>>>>> Stashed changes
       }
     } on FirebaseAuthException catch (e) {
       switch (e.code) {

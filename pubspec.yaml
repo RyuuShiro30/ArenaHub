@@ -21,6 +21,7 @@ dependencies:
   url_launcher: ^6.3.0
   google_sign_in: ^6.2.2
   cloudinary_public: ^0.23.1 
+  firebase_storage: ^12.3.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

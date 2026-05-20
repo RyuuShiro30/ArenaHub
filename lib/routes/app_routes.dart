@@ -23,9 +23,8 @@ class AppRoutes {
   static const String riwayatBooking = '/riwayatBooking';
   static const String testDetail = '/test-detail'; // ← tambah ini
   static const String profile_screen = '/profile';
-  static const String profile_screen = '/profile';
-  
 
+  
   static const String cariLapangan = '/cariLapangan';
   static Map<String, WidgetBuilder> routes = {
     splash: (context) => const SplashScreen(),
