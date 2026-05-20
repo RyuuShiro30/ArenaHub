@@ -5,6 +5,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:appbookinglapangan/firebase_options.dart';
 import 'kelola_jadwal/kelola_jadwal_screen.dart';
+import 'dashboard/dashboardAdmin.dart';
+import 'profile/profileAdmin.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,12 +27,12 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Admin ArenaHub',
       theme: ThemeData(
-        textTheme: GoogleFonts.poppinsTextTheme(
+        textTheme: GoogleFonts.plusJakartaSansTextTheme(
           Theme.of(context).textTheme,
         ),
         useMaterial3: true,
       ),
-      home: const KelolaJadwalScreen(),
+      home: const ProfileAdminScreen(), 
     );
   }
 }

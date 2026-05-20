@@ -6,9 +6,11 @@ import 'package:appbookinglapangan/features/auth/screens/register_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/pilih_jadwal.dart';
 import 'package:appbookinglapangan/features/booking/screens/payment_screen.dart';
 import 'package:appbookinglapangan/features/booking/screens/paymentSucces_screen.dart';
+
 import 'package:appbookinglapangan/features/booking/screens/field_detail.dart';
 import 'package:appbookinglapangan/features/riwayat/screens/riwayat_booking_screen.dart';
 import 'package:appbookinglapangan/features/auth/screens/pencarian_lapangan_screen.dart';
+import 'package:appbookinglapangan/features/booking/screens/field_detail.dart'; 
 import 'package:appbookinglapangan/features/profile/screens/profile_screen.dart';
 
 class AppRoutes {
@@ -22,7 +24,7 @@ class AppRoutes {
   static const String riwayatBooking = '/riwayatBooking';
   static const String testDetail = '/test-detail'; // ← tambah ini
   static const String profile_screen = '/profile';
-
+  
   static const String cariLapangan = '/cariLapangan';
   static Map<String, WidgetBuilder> routes = {
     splash: (context) => const SplashScreen(),
