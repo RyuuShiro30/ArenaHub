@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../auth/login.dart';
 
 class ProfileAdminScreen extends StatefulWidget {
   const ProfileAdminScreen({super.key});
@@ -88,9 +89,9 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
         if (mounted) {
           setState(() {
             _namaAwal  = data['fullName'] ?? 'Admin ArenaHub';
-            _emailAwal = data['email']    ?? 'administrator@arenahub.com';
-            _status    = data['status']   ?? 'Aktif';
-            _level     = data['level']    ?? 'Super';
+            _emailAwal = data['email']    ?? '';
+            _status    = _formatStatus(data['status'] ?? 'active');
+            _level     = data['level']   ?? 'Super';
             _adminName = _namaAwal;
             _adminRole = _level;
             _namaController.text  = _namaAwal;
@@ -98,38 +99,18 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
             _loading = false;
           });
         }
-      } else {
-        final docRef = await _firestore.collection('admin_profile').add({
-          'fullName':  'Admin ArenaHub',
-          'email':     'administrator@arenahub.com',
-          'status':    'Aktif',
-          'level':     'Super',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        _adminDocId = docRef.id;
-        if (mounted) {
-          setState(() {
-            _namaAwal  = 'Admin ArenaHub';
-            _emailAwal = 'administrator@arenahub.com';
-            _adminName = _namaAwal;
-            _namaController.text  = _namaAwal;
-            _emailController.text = _emailAwal;
-            _loading = false;
-          });
-        }
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _namaAwal  = 'Admin ArenaHub';
-          _emailAwal = 'administrator@arenahub.com';
-          _adminName = _namaAwal;
-          _namaController.text  = _namaAwal;
-          _emailController.text = _emailAwal;
-          _loading = false;
-        });
-      }
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // Format status dari Firestore ke tampilan
+  String _formatStatus(String s) {
+    switch (s.toLowerCase()) {
+      case 'active': case 'aktif': return 'Aktif';
+      case 'inactive': case 'nonaktif': return 'Nonaktif';
+      default: return s;
     }
   }
 
@@ -152,6 +133,11 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
           'email':     email,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+      }
+      // Update juga Firebase Auth email jika berubah
+      final user = _auth.currentUser;
+      if (user != null && email != user.email) {
+        await user.verifyBeforeUpdateEmail(email);
       }
       if (sandi.isNotEmpty) {
         if (sandi.length < 8) {
@@ -221,8 +207,11 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     if (confirm == true) {
       await _auth.signOut();
       if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(
-            context, '/login', (route) => false);
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminLoginPage()),
+          (route) => false,
+        );
       }
     }
   }
