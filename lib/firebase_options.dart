@@ -64,6 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '721961424361',
     projectId: 'arenahub-98b15',
     storageBucket: 'arenahub-98b15.firebasestorage.app',
+    androidClientId: '721961424361-6vetooe0hsnknqjn9alcpvgbslsf7qgg.apps.googleusercontent.com',
     iosClientId: '721961424361-5qe1u50cb57e96riuldl09g30jus643q.apps.googleusercontent.com',
     iosBundleId: 'com.example.appbookinglapangan',
   );
@@ -74,6 +75,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '721961424361',
     projectId: 'arenahub-98b15',
     storageBucket: 'arenahub-98b15.firebasestorage.app',
+    androidClientId: '721961424361-6vetooe0hsnknqjn9alcpvgbslsf7qgg.apps.googleusercontent.com',
     iosClientId: '721961424361-5qe1u50cb57e96riuldl09g30jus643q.apps.googleusercontent.com',
     iosBundleId: 'com.example.appbookinglapangan',
   );
