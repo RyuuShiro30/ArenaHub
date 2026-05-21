@@ -24,7 +24,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   static const Color _green  = Color(0xFF22C55E);
   static const Color _orange = Color(0xFFF59E0B);
 
-  bool _expanded    = false;
+  bool _expanded    = true;
   int  _selectedNav = 0;
 
   static const double _collapsedW = 56;
@@ -102,6 +102,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  bool _isSuccess(String s) {
+    final v = s.toLowerCase().trim();
+    return v == 'pembayaran selesai' || v == 'selesai' ||
+        v == 'paid' || v.contains('selesai');
+  }
+
+  bool _isPending(String s) {
+    final v = s.toLowerCase().trim();
+    return v == 'pending' || v == 'menunggu' || v.contains('pending');
+  }
+
+  bool _isGagal(String s) {
+    final v = s.toLowerCase().trim();
+    return v == 'gagal' || v == 'cancelled' || v == 'batal' ||
+        v.contains('gagal') || v.contains('cancel') || v.contains('batal');
+  }
+
+  String _bulanIni() {
+    const bulan = [
+      '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    final now = DateTime.now();
+    return '${bulan[now.month]} ${now.year}';
+  }
+
   String _rp(double v) =>
       'Rp ${NumberFormat('#,###', 'id_ID').format(v.toInt())}';
 
@@ -127,22 +153,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Color _sc(String? s) {
-    switch (s?.toLowerCase()) {
-      case 'paid': case 'selesai': case 'aktif': return _blue;
-      case 'pending': case 'menunggu':           return _orange;
-      case 'cancelled': case 'batal':            return const Color(0xFFEF4444);
-      default: return _muted;
-    }
+    if (s == null) return _muted;
+    if (_isSuccess(s)) return _blue;
+    if (_isPending(s)) return _orange;
+    if (_isGagal(s)) return const Color(0xFFEF4444);
+    return _muted;
   }
 
   String _sl(String? s) {
-    switch (s?.toLowerCase()) {
-      case 'paid': case 'selesai':        return 'SELESAI';
-      case 'aktif':                       return 'AKTIF';
-      case 'pending': case 'menunggu':    return 'MENUNGGU';
-      case 'cancelled': case 'batal':     return 'BATAL';
-      default: return (s ?? '-').toUpperCase();
-    }
+    if (s == null) return '-';
+    if (_isSuccess(s)) return 'SELESAI';
+    if (_isPending(s)) return 'PENDING';
+    if (_isGagal(s)) return 'GAGAL';
+    return s.toUpperCase();
   }
 
   TextStyle _t({double size = 14, FontWeight weight = FontWeight.normal,
@@ -170,6 +193,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   final start      = DateTime(now.year, now.month, 1);
                   final startLast  = DateTime(now.year, now.month - 1, 1);
                   final endLast    = DateTime(now.year, now.month, 1);
+                  final end        = DateTime(now.year, now.month + 1, 1);
                   final todayStart = DateTime(now.year, now.month, now.day);
                   final todayEnd   = todayStart.add(const Duration(days: 1));
 
@@ -179,8 +203,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           .toList()
                       : <Map<String, dynamic>>[];
 
-                  // Booking hari ini
+                  // Booking hari ini - pakai tanggal_main (format "2026-05-21")
+                  final todayStr = '${DateTime.now().year}-'
+                      '${DateTime.now().month.toString().padLeft(2, '0')}-'
+                      '${DateTime.now().day.toString().padLeft(2, '0')}';
                   final bookingHariIni = allBookings.where((b) {
+                    final tanggalMain = b['tanggal_main']?.toString() ?? '';
+                    if (tanggalMain.isNotEmpty) return tanggalMain == todayStr;
+                    // fallback ke tanggal_booking jika tanggal_main kosong
                     final ts = b['tanggal_booking'];
                     if (ts == null) return false;
                     final dt = (ts as Timestamp).toDate();
@@ -189,15 +219,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                   // Pendapatan bulan ini & bulan lalu
                   double pendapatanIni = 0, pendapatanLalu = 0;
+
                   for (final b in allBookings) {
                     final ts = b['tanggal_booking'];
                     if (ts == null) continue;
-                    final dt    = (ts as Timestamp).toDate();
-                    final harga = double.tryParse(b['total_harga'].toString()) ?? 0;
-                    if (b['status_pembayaran'] == 'paid' && dt.isAfter(start)) {
+                    final dt     = (ts as Timestamp).toDate();
+                    final harga  = double.tryParse(b['total_harga']?.toString() ?? '0') ?? 0;
+                    final status = (b['status_pembayaran'] ?? '').toString();
+
+                    if (_isSuccess(status) && dt.isAfter(start) && dt.isBefore(end)) {
                       pendapatanIni += harga;
                     }
-                    if (b['status_pembayaran'] == 'paid' &&
+                    if (_isSuccess(status) &&
                         dt.isAfter(startLast) && dt.isBefore(endLast)) {
                       pendapatanLalu += harga;
                     }
@@ -271,6 +304,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                     growth:         growth,
                                     isLoading:      isLoading,
                                     bookingTerbaru: bookingList,
+                                    allBookings:    allBookings,
                                   )),
                                   const SizedBox(width: 16),
                                   Expanded(flex: 2, child: _buildBookingAktifCard(
@@ -320,9 +354,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Logo ──────────────────────────────────────────────────
-            GestureDetector(
-              onTap: () => setState(() => _expanded = !_expanded),
-              child: Container(
+            Container(
                 height: 64,
                 padding: EdgeInsets.symmetric(horizontal: _expanded ? 14 : 10),
                 decoration: BoxDecoration(
@@ -364,7 +396,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 ]),
               ),
-            ),
 
             const SizedBox(height: 12),
 
@@ -422,6 +453,47 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
             const Spacer(),
 
+            // ── Logout button ─────────────────────────────────────────
+            GestureDetector(
+              onTap: _logout,
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(width: 3, height: 20),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.logout_rounded,
+                        color: Color(0xFFEF4444), size: 20),
+                    AnimatedOpacity(
+                      opacity: _expanded ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 150),
+                      child: SizedBox(
+                        width: _expanded ? _expandedW - 80 : 0,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 10),
+                          child: Text('Keluar',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFEF4444),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             // ── Admin info ───────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(12),
@@ -468,6 +540,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ],
               ),
             ),
+
           ],
         ),
       ),
@@ -485,32 +558,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         Text(titles[_selectedNav],
             style: _t(size: 17, weight: FontWeight.w700)),
         const Spacer(),
-        PopupMenuButton<String>(
-          onSelected: (val) { if (val == 'logout') _logout(); },
-          offset: const Offset(0, 46),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          itemBuilder: (_) => [
-            PopupMenuItem(
-              value: 'logout',
-              child: Row(children: [
-                const Icon(Icons.logout_rounded,
-                    color: Color(0xFFEF4444), size: 18),
-                const SizedBox(width: 10),
-                Text('Keluar',
-                    style: _t(size: 13, weight: FontWeight.w600,
-                        color: const Color(0xFFEF4444))),
-              ]),
-            ),
-          ],
-          child: Container(
-            width: 38, height: 38,
-            decoration: BoxDecoration(color: _bg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _border)),
-            child: Icon(Icons.settings_outlined, size: 20, color: _muted),
-          ),
-        ),
       ]),
     );
   }
@@ -522,6 +569,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     required double growth,
     required bool isLoading,
     required List<Map<String, dynamic>> bookingTerbaru,
+    required List<Map<String, dynamic>> allBookings,
   }) {
     final isUp = growth >= 0;
     return Container(
@@ -574,7 +622,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           OutlinedButton(
             onPressed: () => _showDetailTransaksi(
-              pendapatanIni:  pendapatanIni,
+              allBookings:    allBookings,
               bookingTerbaru: bookingTerbaru,
             ),
             style: OutlinedButton.styleFrom(
@@ -626,6 +674,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             : Text(total.toString(),
                 style: _t(size: 40, weight: FontWeight.w800,
                     color: Colors.white)),
+        const SizedBox(height: 6),
+        Text('Data diperbarui secara real-time',
+            style: _t(size: 12, color: Colors.white70)),
       ]),
     );
   }
@@ -939,30 +990,53 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _showDetailTransaksi({
-    required double pendapatanIni,
+    required List<Map<String, dynamic>> allBookings,
     required List<Map<String, dynamic>> bookingTerbaru,
   }) {
-    final selesai = bookingTerbaru.where((b) =>
-        b['status_pembayaran'] == 'paid' ||
-        b['status_pembayaran'] == 'selesai').length;
-    final pending = bookingTerbaru.where((b) =>
-        b['status_pembayaran'] == 'pending' ||
-        b['status_pembayaran'] == 'menunggu').length;
-    final batal = bookingTerbaru.where((b) =>
-        b['status_pembayaran'] == 'cancelled' ||
-        b['status_pembayaran'] == 'batal').length;
+    // Rekap bulan ini (dinamis, real-time)
+    final now   = DateTime.now();
+    final start = DateTime(now.year, now.month, 1);
+    final end   = DateTime(now.year, now.month + 1, 1);
+
+    double totalPendapatan = 0;
+    int selesai = 0, pending = 0, batal = 0;
+
+    for (final b in allBookings) {
+      final ts = b['tanggal_booking'];
+      if (ts != null) {
+        final dt = (ts as Timestamp).toDate();
+        if (dt.isBefore(start) || !dt.isBefore(end)) continue;
+      }
+
+      final s     = (b['status_pembayaran'] ?? '').toString();
+      final harga = double.tryParse(b['total_harga']?.toString() ?? '0') ?? 0;
+
+      if (_isSuccess(s)) {
+        selesai++;
+        totalPendapatan += harga;
+      } else if (_isPending(s)) {
+        pending++;
+      } else if (_isGagal(s)) {
+        batal++;
+      }
+    }
 
     showDialog(
       context: context,
       builder: (_) => Dialog(
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: 680,
-          padding: const EdgeInsets.all(28),
-          child: Column(mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 680,
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
             Row(children: [
               Text('Detail Transaksi',
                   style: _t(size: 18, weight: FontWeight.w700)),
@@ -972,11 +1046,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 onPressed: () => Navigator.pop(context),
               ),
             ]),
-            Text('Ringkasan transaksi bulan ini',
+            Text('Rekap transaksi ${_bulanIni()}',
                 style: _t(size: 13, color: _muted)),
             const SizedBox(height: 20),
             Row(children: [
-              _dCard('Total Pendapatan', _rp(pendapatanIni),
+              _dCard('Total Pendapatan', _rp(totalPendapatan),
                   _blue, Icons.payments_outlined),
               const SizedBox(width: 10),
               _dCard('Selesai', '$selesai booking',
@@ -1009,9 +1083,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ...bookingTerbaru.take(5).map((b) {
                   final total =
                       double.tryParse(b['total_harga'].toString()) ?? 0;
-                  final status =
-                      b['status_pembayaran'] ?? b['status'] ?? '';
-                  final dc = _sc(status);
+                  // Baca semua kemungkinan field status
+                  final rawStatus = (b['status_pembayaran'] ?? b['status'] ?? '').toString();
+                  final dc = _sc(rawStatus);
+                  final label = _sl(rawStatus);
                   return Column(children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(
@@ -1039,7 +1114,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             decoration: BoxDecoration(
                                 color: dc.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(20)),
-                            child: Text(_sl(status),
+                            child: Text(label,
                                 style: _t(size: 11,
                                     weight: FontWeight.w700,
                                     color: dc),
@@ -1074,6 +1149,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             ),
           ]),
+        ),
+      ),
         ),
       ),
     );
