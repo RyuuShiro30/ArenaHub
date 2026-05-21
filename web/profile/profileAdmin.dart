@@ -27,7 +27,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   static const Color _green  = Color(0xFF22C55E);
 
   // ── Sidebar state ────────────────────────────────────────────────────────
-  bool _expanded    = false;
+  bool _expanded    = true; // collapsed by default
   int  _selectedNav = 4; // Profil = index 4
 
   static const double _collapsedW = 56;
@@ -296,6 +296,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                               Expanded(child: _buildDetailForm()),
                             ],
                           ),
+
                         ],
                       ),
                     ),
@@ -318,9 +319,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Logo
-            GestureDetector(
-              onTap: () => setState(() => _expanded = !_expanded),
-              child: Container(
+            Container(
                 height: 64,
                 padding: EdgeInsets.symmetric(
                     horizontal: _expanded ? 14 : 10),
@@ -363,7 +362,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                   ),
                 ]),
               ),
-            ),
 
             const SizedBox(height: 12),
 
@@ -376,10 +374,10 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                   setState(() => _selectedNav = i);
                   // Navigasi ke halaman lain sesuai index
                   if (i != 4) {
-                    Navigator.pushReplacementNamed(
-                      context,
-                      _navRoutes[i]!,
-                    );
+                    final route = _navRoutes[i];
+                    if (route != null) {
+                      Navigator.pushReplacementNamed(context, route);
+                    }
                   }
                 },
                 child: Container(
@@ -430,6 +428,47 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
 
             const Spacer(),
 
+            // ── Logout button ─────────────────────────────────────────
+            GestureDetector(
+              onTap: _logout,
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(width: 3, height: 20),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.logout_rounded,
+                        color: Color(0xFFEF4444), size: 20),
+                    AnimatedOpacity(
+                      opacity: _expanded ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 150),
+                      child: SizedBox(
+                        width: _expanded ? _expandedW - 80 : 0,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 10),
+                          child: Text('Keluar',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFEF4444),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             // Admin info
             Container(
               padding: const EdgeInsets.all(12),
@@ -474,6 +513,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                 ],
               ),
             ),
+
           ],
         ),
       ),
@@ -497,32 +537,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
       child: Row(children: [
         Text('Profil', style: _t(size: 17, weight: FontWeight.w700)),
         const Spacer(),
-        PopupMenuButton<String>(
-          onSelected: (val) { if (val == 'logout') _logout(); },
-          offset: const Offset(0, 46),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          itemBuilder: (_) => [
-            PopupMenuItem(
-              value: 'logout',
-              child: Row(children: [
-                const Icon(Icons.logout_rounded,
-                    color: Color(0xFFEF4444), size: 18),
-                const SizedBox(width: 10),
-                Text('Keluar',
-                    style: _t(size: 13, weight: FontWeight.w600,
-                        color: const Color(0xFFEF4444))),
-              ]),
-            ),
-          ],
-          child: Container(
-            width: 38, height: 38,
-            decoration: BoxDecoration(color: _bg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _border)),
-            child: Icon(Icons.settings_outlined, size: 20, color: _muted),
-          ),
-        ),
       ]),
     );
   }
@@ -774,4 +788,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
       ),
     );
   }
+
+
 }
