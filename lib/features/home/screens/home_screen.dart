@@ -484,94 +484,110 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Schedule List ─────────────────────────────────────────────────────────
   Widget _buildScheduleList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('lapangan').limit(3).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(
-              child: Text('Tidak ada jadwal tersedia',
-                  style: _p(color: Colors.grey)));
-        }
+  final now = DateTime.now();
+  final todayStart = DateTime(now.year, now.month, now.day);
+  final todayEnd   = todayStart.add(const Duration(days: 1));
 
-        final docs = snapshot.data!.docs;
-        return Column(
-          children: docs.map((doc) {
-            final data  = doc.data() as Map<String, dynamic>;
-            final name  = data['nama_lapangan'] ?? 'Lapangan';
-            final price = data['harga'] ?? 0;
-            const time  = '08.00 - 09.00';
+  return StreamBuilder<QuerySnapshot>(
+    stream: _firestore
+        .collection('jadwal')
+        .where('status', isEqualTo: 'tersedia')
+        .where('tanggal', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
+        .where('tanggal', isLessThan: Timestamp.fromDate(todayEnd))
+        .limit(4)
+        .snapshots(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Center(
+            child: Text('Tidak ada jadwal tersedia hari ini',
+                style: _p(color: Colors.grey)),
+          ),
+        );
+      }
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2))
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 11, vertical: 9),
-                    decoration: BoxDecoration(
-                      color: _accent.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(time,
+      final docs = snapshot.data!.docs;
+      return Column(
+        children: docs.map((doc) {
+          final data  = doc.data() as Map<String, dynamic>;
+          final name  = data['nama_lapangan']     ?? 'Lapangan';
+          final price = data['harga']             ?? 0;
+          final time  = data['waktu_operasional'] ?? '-';
+          final jenis = data['jenis_lapangan']    ?? '';
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2))
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 11, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: _accent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(time,
+                      style: _p(
+                          size: 13,
+                          weight: FontWeight.bold,
+                          color: _primaryDark)),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name,
+                          style: _p(
+                              size: 13,
+                              weight: FontWeight.w600,
+                              color: _textDark)),
+                      const SizedBox(height: 2),
+                      Text(jenis,
+                          style: _p(size: 11, color: Colors.grey.shade500)),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(_formatHarga(price),
                         style: _p(
                             size: 13,
                             weight: FontWeight.bold,
-                            color: _primaryDark)),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name,
-                            style: _p(
-                                size: 13,
-                                weight: FontWeight.w600,
-                                color: _textDark)),
-                        const SizedBox(height: 2),
-                        Text('Tersedia',
-                            style:
-                                _p(size: 11, color: Colors.green.shade600)),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(_formatHarga(price),
-                          style: _p(
-                              size: 13,
-                              weight: FontWeight.bold,
-                              color: _accent)),
-                      const SizedBox(height: 2),
-                      Text('/ jam',
-                          style:
-                              _p(size: 11, color: Colors.grey.shade400)),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
+                            color: _accent)),
+                    const SizedBox(height: 2),
+                    Text('/ jam',
+                        style: _p(size: 11, color: Colors.grey.shade400)),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      );
+    },
+  );
+}
 
   // ── Last Booking ──────────────────────────────────────────────────────────
   Widget _buildLastBooking() {
