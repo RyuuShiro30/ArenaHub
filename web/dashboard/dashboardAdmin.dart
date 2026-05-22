@@ -178,8 +178,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       GoogleFonts.plusJakartaSans(fontSize: size, fontWeight: weight,
           color: color, letterSpacing: spacing);
 
-  // ── Konten per nav index ──────────────────────────────────────────────────
-  // PERUBAHAN UTAMA: pisah konten body ke method ini
   Widget _buildBody() {
     switch (_selectedNav) {
       case 1:
@@ -189,10 +187,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       default:
         return _buildDashboardContent();
     }
-    // case 2, 3, 4 bisa ditambahin nanti (Kelola Lapangan, Jadwal, Profil)
   }
 
-  // ── BUILD ─────────────────────────────────────────────────────────────────
+//build
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -351,8 +348,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ── SIDEBAR ───────────────────────────────────────────────────────────────
-  // (sama persis, tidak ada perubahan)
+  //sidebar
   Widget _buildSidebar() {
     return ClipRect(
       child: AnimatedContainer(
@@ -520,7 +516,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ── TOP BAR (dashboard only) ──────────────────────────────────────────────
+  //topbar
   Widget _buildTopBar() {
     final titles = ['Dashboard', 'Kelola Booking',
         'Kelola Lapangan', 'Kelola Jadwal', 'Profil'];
@@ -535,7 +531,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ── Semua method dashboard di bawah ini tidak diubah sama sekali ──────────
   Widget _buildDashboardContent() => const SizedBox(); // placeholder
 
   Widget _buildPerformaCard({
