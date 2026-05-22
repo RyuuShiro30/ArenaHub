@@ -34,24 +34,6 @@ class _HomeScreenState extends State<HomeScreen> {
   static const Color _bgColor     = Color(0xFFF4F6F9);
   static const Color _textDark    = Color(0xFF1A2B3C);
 
-  final List<Map<String, dynamic>> _sportCategories = [
-    {
-      'name' : 'Futsal',
-      'image': 'https://res.cloudinary.com/dewncgzjd/image/upload/v1778238273/photo-1575361204480-aadea25e6e68_xyp6yg.jpg',
-      'color': const Color(0xFF0D2D6B),
-    },
-    {
-      'name' : 'Basket',
-      'image': 'https://res.cloudinary.com/dewncgzjd/image/upload/v1778238254/photo-1546519638-68e109498ffc_x5qddl.jpg',
-      'color': const Color(0xFF8B3A0F),
-    },
-    {
-      'name' : 'Bulutangkis',
-      'image': 'https://res.cloudinary.com/dewncgzjd/image/upload/v1778238604/glen-carrie-imHF66HA3VY-unsplash_fyjbit.jpg',
-      'color': const Color(0xFF1A3A6E),
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -431,56 +413,110 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ── Sport Grid ────────────────────────────────────────────────────────────
-  Widget _buildSportGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.1,
-      ),
-      itemCount: _sportCategories.length,
-      itemBuilder: (context, i) {
-        final sport = _sportCategories[i];
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.network(
-                sport['image'] as String,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    Container(color: sport['color'] as Color),
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      (sport['color'] as Color).withOpacity(0.88)
-                    ],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
+Widget _buildSportGrid() {
+  return StreamBuilder<QuerySnapshot>(
+    stream: _firestore.collection('lapangan').snapshots(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        return Center(
+          child: Text('Tidak ada cabang olahraga',
+              style: _p(color: Colors.grey)),
+        );
+      }
+
+      // Ambil unik per jenis_lapangan
+      final Map<String, Map<String, dynamic>> uniqueJenis = {};
+      for (final doc in snapshot.data!.docs) {
+        final data  = doc.data() as Map<String, dynamic>;
+        final jenis = data['jenis_lapangan'] as String? ?? '';
+        if (jenis.isNotEmpty && !uniqueJenis.containsKey(jenis)) {
+          uniqueJenis[jenis] = data;
+        }
+      }
+
+      final categories = uniqueJenis.values.toList();
+
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.1,
+        ),
+        itemCount: categories.length,
+        itemBuilder: (context, i) {
+          final data     = categories[i];
+          final name     = data['jenis_lapangan'] as String? ?? '';
+          final fotoList = data['foto'] as List<dynamic>?;
+          final imageUrl = (fotoList != null && fotoList.isNotEmpty)
+              ? fotoList[0] as String
+              : '';
+
+          // Warna per jenis
+          Color cardColor;
+          switch (name.toLowerCase()) {
+            case 'futsal':
+              cardColor = const Color(0xFF0D2D6B);
+              break;
+            case 'basket':
+              cardColor = const Color(0xFF8B3A0F);
+              break;
+            case 'bulutangkis':
+              cardColor = const Color(0xFF1A3A6E);
+              break;
+            case 'padel':
+              cardColor = const Color(0xFF1A5C3A);
+              break;
+            default:
+              cardColor = const Color(0xFF2D2D2D);
+          }
+
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            Container(color: cardColor),
+                      )
+                    : Container(color: cardColor),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        cardColor.withOpacity(0.88),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
                   ),
                 ),
-              ),
-              Positioned(
-                bottom: 14, left: 14,
-                child: Text(sport['name'] as String,
-                    style: _p(
-                        size: 15,
-                        weight: FontWeight.bold,
-                        color: Colors.white)),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+                Positioned(
+                  bottom: 14, left: 14,
+                  child: Text(name,
+                      style: _p(
+                          size: 15,
+                          weight: FontWeight.bold,
+                          color: Colors.white)),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
 
   // ── Schedule List ─────────────────────────────────────────────────────────
   Widget _buildScheduleList() {
