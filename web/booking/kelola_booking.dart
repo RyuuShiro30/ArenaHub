@@ -63,6 +63,20 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     return v.toString();
   }
 
+  String _dateTime(dynamic v) {
+    if (v == null) return '-';
+    if (v is Timestamp) {
+      return DateFormat('d MMMM yyyy, HH:mm', 'id_ID').format(v.toDate());
+    }
+    if (v is String && v.length >= 10) {
+      try {
+        final dt = DateTime.parse(v);
+        return DateFormat('d MMMM yyyy, HH:mm', 'id_ID').format(dt);
+      } catch (_) { return v; }
+    }
+    return v.toString();
+  }
+
   String _initials(String name) {
     final p = name.trim().split(' ');
     return p.length >= 2
@@ -185,8 +199,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                         iconColor: _blue,
                         label: 'Total Booking',
                         value: stats['total'].toString(),
-                        sub: '+12% dari bulan lalu',
-                        subColor: _green,
                       ),
                       const SizedBox(width: 12),
                       _statCard(
@@ -194,9 +206,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                         iconColor: _orange,
                         label: 'Menunggu Verifikasi',
                         value: stats['pending'].toString(),
-                        sub: stats['pending'] > 0
-                            ? 'Butuh perhatian segera' : 'Semua clear',
-                        subColor: stats['pending'] > 0 ? _orange : _green,
                       ),
                       const SizedBox(width: 12),
                       _statCard(
@@ -204,8 +213,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                         iconColor: _green,
                         label: 'Pendapatan Hari Ini',
                         value: _rp(stats['pendapatanHariIni']),
-                        sub: '85% target harian',
-                        subColor: _green,
                       ),
                       const SizedBox(width: 12),
                       _statCard(
@@ -213,8 +220,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                         iconColor: _red,
                         label: 'Dibatalkan',
                         value: stats['batal'].toString(),
-                        sub: '-2% dari rata-rata',
-                        subColor: _red,
                       ),
                     ]),
                     const SizedBox(height: 20),
@@ -235,9 +240,9 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
   Widget _buildTopBar() {
     return Container(
       height: 60,
-      color: _white,
       padding: const EdgeInsets.symmetric(horizontal: 28),
       decoration: BoxDecoration(
+          color: _white,
           border: Border(bottom: BorderSide(color: _border))),
       child: Row(children: [
         // Search bar
@@ -291,8 +296,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     required Color iconColor,
     required String label,
     required String value,
-    required String sub,
-    required Color subColor,
   }) {
     return Expanded(
       child: Container(
@@ -320,8 +323,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
           Text(value,
               style: _t(size: 24, weight: FontWeight.w800),
               maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 4),
-          Text(sub, style: _t(size: 12, color: subColor, weight: FontWeight.w500)),
         ]),
       ),
     );
@@ -414,10 +415,9 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
         _th('NAMA PENGGUNA', 3),
         _th('NAMA LAPANGAN', 2),
         _th('TANGGAL BOOKING', 2),
-        _th('WAKTU BOOKING', 2),
         _th('TOTAL HARGA', 2),
         _th('STATUS', 2),
-        _th('AKSI', 1),
+        _th('AKSI', 2),
       ]),
     );
   }
@@ -433,7 +433,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     final name   = b['customer_name'] ?? '-';
     final lap    = b['nama_lapangan'] ?? '-';
     final tgl    = _tanggal(b['tanggal_main'] ?? b['tanggal_booking']);
-    final jam    = _jamRange(b['selected_times']);
     final total  = _rp(b['total_harga']);
     final status = (b['status_pembayaran'] ?? '').toString();
     final sc     = _statusColor(status);
@@ -465,21 +464,14 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
           ])),
 
           // Lapangan
-          Expanded(flex: 2, child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-                color: _blueBg, borderRadius: BorderRadius.circular(20)),
-            child: Text(lap, style: _t(size: 12, color: _blue, weight: FontWeight.w500),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-          )),
+          Expanded(flex: 2, child: Text(lap,
+              style: _t(size: 13, weight: FontWeight.w500))),
 
           // Tanggal
           Expanded(flex: 2, child: Text(tgl,
               style: _t(size: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
 
-          // Waktu
-          Expanded(flex: 2, child: Text(jam,
-              style: _t(size: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
+
 
           // Total
           Expanded(flex: 2, child: Text(total,
@@ -506,7 +498,7 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
           )),
 
           // Aksi
-          Expanded(flex: 1, child: Row(
+          Expanded(flex: 2, child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               _iconBtn(Icons.visibility_outlined, _muted,
@@ -584,8 +576,8 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16)),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Padding(
+          constraints: const BoxConstraints(maxWidth: 480, maxHeight: 600),
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(28),
             child: Column(mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -606,7 +598,7 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
               _detailRow('Lapangan', b['nama_lapangan'] ?? '-'),
               _detailRow('Tanggal Main', _tanggal(b['tanggal_main'])),
               _detailRow('Jam Main', b['jam_main']?.toString() ?? '-'),
-              _detailRow('Waktu Booking', _jamRange(b['selected_times'])),
+              _detailRow('Waktu Booking', _dateTime(b['tanggal_booking'])),
               _detailRow('Durasi', '${(b['selected_times'] is List ? (b['selected_times'] as List).length : 0)} jam'),
               const Divider(height: 24),
               _detailRow('Biaya Layanan',  _rp(b['biaya_layanan'])),
