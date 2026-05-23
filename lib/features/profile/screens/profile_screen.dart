@@ -19,7 +19,13 @@ final ValueNotifier<String> profileNameNotifier =
     ValueNotifier('');
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  /// [isTab] = true  → tampil sebagai tab di HomeScreen (IndexedStack).
+  ///                    Back arrow ke home, bottom nav disembunyikan
+  ///                    (HomeScreen sudah punya nav-bar sendiri).
+  /// [isTab] = false → di-push sebagai route biasa, bottom nav muncul.
+  final bool isTab;
+
+  const ProfileScreen({super.key, this.isTab = false});
 
   @override
   State<ProfileScreen> createState() =>
@@ -207,6 +213,29 @@ class _ProfileScreenState
       letterSpacing: spacing,
       height: height,
     );
+  }
+
+  // ── Back handler ────────────────────────────────
+  void _handleBack() {
+    if (widget.isTab) {
+      // Sebagai tab → ke home
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.home,
+        (route) => false,
+      );
+    } else {
+      // Sebagai route → pop biasa
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      } else {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.home,
+          (route) => false,
+        );
+      }
+    }
   }
 
   // ── Informasi Pribadi ───────────────────────────
@@ -461,9 +490,8 @@ class _ProfileScreenState
                         color:
                             _primaryDark,
                       ),
-                      onPressed: () =>
-                          Navigator.pop(
-                              context),
+                      // ← FIX: tidak blank lagi
+                      onPressed: _handleBack,
                     ),
                   ),
                   Text(
@@ -638,7 +666,10 @@ class _ProfileScreenState
             ),
           ),
 
-          _buildBottomNav(),
+          // ── Bottom Nav ───────────────────────
+          // Sembunyikan kalau isTab=true karena
+          // HomeScreen sudah punya nav-bar sendiri
+          if (!widget.isTab) _buildBottomNav(),
         ],
       ),
     );
