@@ -1,24 +1,27 @@
-import 'package:appbookinglapangan/core/constant/constant.dart';
 import 'package:flutter/material.dart';
-import 'package:appbookinglapangan/routes/app_routes.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:appbookinglapangan/firebase_options.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:appbookinglapangan/firebase_options.dart';
+import 'auth/login.dart';
+import 'dashboard/dashboardAdmin.dart';
+import 'profile/profileAdmin.dart';
+import 'field/add_field.dart';
+import 'field/kelola_lapangan.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await dotenv.load(fileName: ".env");
-  
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
   await initializeDateFormatting('id_ID', null);
-  
-  runApp(const MyApp()); // ← cukup sekali di paling bawah
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -27,19 +30,26 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
+      title: 'Admin ArenaHub',
+
       theme: ThemeData(
-        textTheme: GoogleFonts.poppinsTextTheme(
+        textTheme: GoogleFonts.plusJakartaSansTextTheme(
           Theme.of(context).textTheme,
         ),
-        primaryColor: AppColors.primary,
-        scaffoldBackgroundColor: AppColors.background,
         useMaterial3: true,
       ),
-      initialRoute: AppRoutes.login,
-      routes: AppRoutes.routes,
-      onGenerateRoute: AppRoutes.generateRoute,
+
+      // HALAMAN PERTAMA
+      home: const KelolaLapanganScreen(),
+
+      // ROUTES
+      routes: {
+        '/dashboard': (context) => const AdminDashboardScreen(),
+        '/profile': (context) => const ProfileAdminScreen(),
+        '/field': (context) => const KelolaLapanganScreen(),
+        '/add_field': (context) => const AddFieldScreen(),
+      },
     );
   }
 }

@@ -387,7 +387,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline_rounded, color: _blue, size: 20),
+                const Icon(Icons.info_outline_rounded, color: _blue, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -500,7 +500,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
               OutlinedButton(
                 onPressed: _batalkan,
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: _border),
+                  side: const BorderSide(color: _border),
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
@@ -604,7 +604,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
               color: _red.withOpacity(0.08),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(Icons.logout_rounded, color: _red, size: 22),
+            child: const Icon(Icons.logout_rounded, color: _red, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
