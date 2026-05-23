@@ -438,6 +438,7 @@ Widget _buildSportGrid() {
       }
 
       final categories = uniqueJenis.values.toList();
+      
 
       return GridView.builder(
         shrinkWrap: true,
@@ -455,7 +456,7 @@ Widget _buildSportGrid() {
           final fotoList = data['foto'] as List<dynamic>?;
           final imageUrl = (fotoList != null && fotoList.isNotEmpty)
               ? fotoList[0] as String
-              : '';
+              : data['image_url'] as String? ?? '';
 
           // Warna per jenis
           Color cardColor;
