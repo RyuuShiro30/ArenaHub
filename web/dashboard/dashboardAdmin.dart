@@ -26,7 +26,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   static const Color _green  = Color(0xFF22C55E);
   static const Color _orange = Color(0xFFF59E0B);
 
-  bool _expanded    = true;
+  final bool _expanded    = true;
   int  _selectedNav = 0;
 
   static const double _collapsedW = 56;
@@ -141,11 +141,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     try {
       final dt  = (ts as Timestamp).toDate();
       final now = DateTime.now();
-      if (dt.day == now.day && dt.month == now.month && dt.year == now.year)
+      if (dt.day == now.day && dt.month == now.month && dt.year == now.year) {
         return 'Hari Ini, ${DateFormat('HH:mm').format(dt)}';
+      }
       final tmr = now.add(const Duration(days: 1));
-      if (dt.day == tmr.day && dt.month == tmr.month)
+      if (dt.day == tmr.day && dt.month == tmr.month) {
         return 'Esok, ${DateFormat('HH:mm').format(dt)}';
+      }
       return DateFormat('d MMM, HH:mm', 'id_ID').format(dt);
     } catch (_) { return '-'; }
   }
@@ -362,7 +364,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Container(
                 height: 64,
                 padding: EdgeInsets.symmetric(horizontal: _expanded ? 14 : 10),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                     border: Border(bottom: BorderSide(color: _border))),
                 child: Row(children: [
                   Container(
@@ -478,7 +480,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                   border: Border(top: BorderSide(color: _border))),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Container(
@@ -661,7 +663,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: LinearProgressIndicator(
             value: pct / 100,
             backgroundColor: _border,
-            valueColor: AlwaysStoppedAnimation<Color>(_blue),
+            valueColor: const AlwaysStoppedAnimation<Color>(_blue),
             minHeight: 6,
           ),
         ),
@@ -783,7 +785,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ]),
         ),
         const SizedBox(height: 8),
-        Divider(color: _border, height: 1),
+        const Divider(color: _border, height: 1),
         if (isLoading)
           const Padding(padding: EdgeInsets.all(32),
               child: CircularProgressIndicator())
@@ -862,13 +864,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           Expanded(flex: 1,
             child: IconButton(
-              icon: Icon(Icons.more_vert_rounded, size: 18, color: _muted),
+              icon: const Icon(Icons.more_vert_rounded, size: 18, color: _muted),
               onPressed: () => _showActions(b),
             ),
           ),
         ]),
       ),
-      Divider(color: _border, height: 1, indent: 24, endIndent: 24),
+      const Divider(color: _border, height: 1, indent: 24, endIndent: 24),
     ]);
   }
 

@@ -302,7 +302,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final int serviceFee = 5000;
+    const int serviceFee = 5000;
     final int basePrice = widget.totalHarga - serviceFee;
 
     return Scaffold(
@@ -365,7 +365,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                Container(
+                SizedBox(
                   height: 140,
                   width: double.infinity,
                   child: widget.imagePath.isNotEmpty

@@ -637,7 +637,7 @@ class _InformasiPribadiScreenState
                           const EdgeInsets
                               .all(8),
                       decoration:
-                          BoxDecoration(
+                          const BoxDecoration(
                         color:
                             _accent,
                         shape: BoxShape
