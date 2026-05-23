@@ -24,8 +24,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
   // ── Date & slot state ─────────────────────────────────────────
   DateTime selectedDate = DateTime.now();
   List<String> selectedTimes = [];
-  List<String> times = [];       // slot dari Firestore
-  List<String> fullTimes = [];   // slot tidak tersedia / dipesan
+  List<String> times = [];
+  List<String> fullTimes = [];
   bool isLoadingSlot = false;
 
   // ── Colors ────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
       isLoadingSlot = true;
       times         = [];
       fullTimes     = [];
-      selectedTimes = []; // reset pilihan saat ganti tanggal
+      selectedTimes = [];
     });
 
     final startOfDay = DateTime(
@@ -106,6 +106,13 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
           bookedTimes.add(waktu);
         }
       }
+
+      // ── Sort urut berdasarkan jam mulai ──────────────────────
+      allTimes.sort((a, b) {
+        final aHour = int.tryParse(a.split(':')[0]) ?? 0;
+        final bHour = int.tryParse(b.split(':')[0]) ?? 0;
+        return aHour.compareTo(bHour);
+      });
 
       setState(() {
         times         = allTimes;
@@ -149,11 +156,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
         elevation: 0.5,
         surfaceTintColor: Colors.white,
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: primaryBlue,
-            size: 20,
-          ),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: primaryBlue, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -175,7 +179,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // ── Info lapangan ───────────────────────────
+                      // ── Info lapangan ──────────────────────────
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -187,27 +191,23 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                             ClipRRect(
                               borderRadius: BorderRadius.circular(12),
                               child: fotoUrl.isNotEmpty
-                                  ? Image.network(
-                                      fotoUrl,
+                                  ? Image.network(fotoUrl,
                                       width: 70,
                                       height: 70,
-                                      fit: BoxFit.cover,
-                                    )
+                                      fit: BoxFit.cover)
                                   : Container(
                                       width: 70,
                                       height: 70,
-                                      color: const Color(0xFFE3EAF5),
-                                    ),
+                                      color: const Color(0xFFE3EAF5)),
                             ),
                             const SizedBox(width: 12),
                             Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  namaLapangan,
-                                  style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w800),
-                                ),
+                                Text(namaLapangan,
+                                    style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w800)),
                                 Text('$jenisLapangan • $jenisFloor'),
                                 const SizedBox(height: 4),
                                 Text(
@@ -225,12 +225,14 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
 
                       const SizedBox(height: 20),
 
-                      // ── Header bulan + icon kalender ────────────
+                      // ── Header bulan + kalender ────────────────
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment:
+                            MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            DateFormat("MMMM yyyy").format(selectedDate),
+                            DateFormat("MMMM yyyy")
+                                .format(selectedDate),
                             style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.w800),
                           ),
@@ -238,15 +240,17 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                             icon: Icon(Icons.calendar_month,
                                 color: primaryBlue),
                             onPressed: () async {
-                              final DateTime? picked = await showDatePicker(
+                              final DateTime? picked =
+                                  await showDatePicker(
                                 context: context,
                                 initialDate: selectedDate,
                                 firstDate: DateTime(2026, 1),
                                 lastDate: DateTime(2026, 12),
                               );
                               if (picked != null) {
-                                setState(() => selectedDate = picked);
-                                _fetchSlot(); // ← refresh slot
+                                setState(
+                                    () => selectedDate = picked);
+                                _fetchSlot();
                               }
                             },
                           ),
@@ -255,28 +259,32 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
 
                       const SizedBox(height: 10),
 
-                      // ── 5 hari horizontal ───────────────────────
+                      // ── 5 hari horizontal ──────────────────────
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: getFiveDays().map((date) {
                             final bool isSelected =
                                 date.day == selectedDate.day &&
-                                date.month == selectedDate.month &&
-                                date.year == selectedDate.year;
+                                    date.month ==
+                                        selectedDate.month &&
+                                    date.year == selectedDate.year;
 
                             return GestureDetector(
                               onTap: () {
-                                setState(() => selectedDate = date);
-                                _fetchSlot(); // ← refresh slot
+                                setState(
+                                    () => selectedDate = date);
+                                _fetchSlot();
                               },
                               child: Container(
                                 width: 60,
                                 height: 80,
-                                margin: const EdgeInsets.only(right: 10),
+                                margin: const EdgeInsets.only(
+                                    right: 10),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius:
+                                      BorderRadius.circular(24),
                                   border: Border.all(
                                     color: isSelected
                                         ? primaryBlue
@@ -302,9 +310,11 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                         MainAxisAlignment.center,
                                     children: [
                                       Text(
-                                        DateFormat("E").format(date),
+                                        DateFormat("E")
+                                            .format(date),
                                         style: GoogleFonts.poppins(
-                                          fontWeight: FontWeight.w800,
+                                          fontWeight:
+                                              FontWeight.w800,
                                           fontSize: 14,
                                           color: isSelected
                                               ? Colors.white
@@ -314,7 +324,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                       Text(
                                         date.day.toString(),
                                         style: GoogleFonts.poppins(
-                                          fontWeight: FontWeight.w800,
+                                          fontWeight:
+                                              FontWeight.w800,
                                           fontSize: 16,
                                           color: isSelected
                                               ? Colors.white
@@ -332,7 +343,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
 
                       const SizedBox(height: 20),
 
-                      // ── Label slot ──────────────────────────────
+                      // ── Label slot ─────────────────────────────
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
@@ -346,31 +357,39 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
 
                       const SizedBox(height: 10),
 
-                      // ── Grid slot ───────────────────────────────
+                      // ── Grid slot ──────────────────────────────
                       isLoadingSlot
                           ? const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 32),
+                              padding: EdgeInsets.symmetric(
+                                  vertical: 32),
                               child: Center(
-                                  child: CircularProgressIndicator()),
+                                  child:
+                                      CircularProgressIndicator()),
                             )
                           : times.isEmpty
                               ? Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 32),
+                                  padding:
+                                      const EdgeInsets.symmetric(
+                                          vertical: 32),
                                   child: Center(
                                     child: Column(
                                       children: [
                                         Icon(
-                                          Icons.calendar_today_outlined,
+                                          Icons
+                                              .calendar_today_outlined,
                                           size: 40,
-                                          color: Colors.grey.shade300,
+                                          color: Colors
+                                              .grey.shade300,
                                         ),
                                         const SizedBox(height: 12),
                                         Text(
                                           'Tidak ada slot tersedia\nuntuk tanggal ini',
-                                          textAlign: TextAlign.center,
-                                          style: GoogleFonts.poppins(
-                                            color: Colors.grey.shade400,
+                                          textAlign:
+                                              TextAlign.center,
+                                          style:
+                                              GoogleFonts.poppins(
+                                            color: Colors
+                                                .grey.shade400,
                                             fontSize: 13,
                                           ),
                                         ),
@@ -391,9 +410,11 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                     mainAxisSpacing: 8,
                                   ),
                                   itemBuilder: (context, index) {
-                                    final String time = times[index];
+                                    final String time =
+                                        times[index];
                                     final bool isSelected =
-                                        selectedTimes.contains(time);
+                                        selectedTimes
+                                            .contains(time);
                                     final bool isFull =
                                         fullTimes.contains(time);
 
@@ -404,9 +425,11 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                               setState(() {
                                                 if (isSelected) {
                                                   selectedTimes
-                                                      .remove(time);
+                                                      .remove(
+                                                          time);
                                                 } else {
-                                                  selectedTimes.add(time);
+                                                  selectedTimes
+                                                      .add(time);
                                                 }
                                               });
                                             },
@@ -416,7 +439,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                               ? Colors.white
                                               : Colors.transparent,
                                           borderRadius:
-                                              BorderRadius.circular(16),
+                                              BorderRadius.circular(
+                                                  16),
                                           border: Border.all(
                                             color: isFull
                                                 ? Colors.transparent
@@ -428,10 +452,13 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                         ),
                                         child: Container(
                                           margin: isSelected
-                                              ? const EdgeInsets.all(2)
+                                              ? const EdgeInsets
+                                                  .all(2)
                                               : EdgeInsets.zero,
-                                          alignment: Alignment.center,
-                                          padding: const EdgeInsets.only(
+                                          alignment:
+                                              Alignment.center,
+                                          padding:
+                                              const EdgeInsets.only(
                                             left: 13.91,
                                             right: 13.9,
                                             top: 12,
@@ -443,22 +470,28 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                                                 : (isSelected
                                                     ? primaryBlue
                                                     : primaryGreen
-                                                        .withOpacity(0.1)),
+                                                        .withOpacity(
+                                                            0.1)),
                                             borderRadius:
                                                 BorderRadius.circular(
-                                                    isSelected ? 14 : 16),
+                                                    isSelected
+                                                        ? 14
+                                                        : 16),
                                           ),
                                           child: Text(
                                             time,
-                                            style: GoogleFonts.poppins(
-                                              fontWeight: FontWeight.w800,
+                                            style:
+                                                GoogleFonts.poppins(
+                                              fontWeight:
+                                                  FontWeight.w800,
                                               fontSize: 12,
                                               decoration: isFull
                                                   ? TextDecoration
                                                       .lineThrough
                                                   : null,
                                               color: isFull
-                                                  ? Colors.grey.shade500
+                                                  ? Colors
+                                                      .grey.shade500
                                                   : (isSelected
                                                       ? Colors.white
                                                       : primaryGreen),
@@ -472,11 +505,13 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
 
                       const SizedBox(height: 20),
 
-                      // ── Legend ──────────────────────────────────
+                      // ── Legend ─────────────────────────────────
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisAlignment:
+                            MainAxisAlignment.center,
                         children: [
-                          legend(primaryGreen.withOpacity(0.2), "Tersedia"),
+                          legend(primaryGreen.withOpacity(0.2),
+                              "Tersedia"),
                           const SizedBox(width: 10),
                           legend(primaryBlue, "Dipilih"),
                           const SizedBox(width: 10),
@@ -489,24 +524,28 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
               ),
             ),
 
-            // ── Bottom bar ──────────────────────────────────────
+            // ── Bottom bar ─────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
-                  BoxShadow(color: Colors.black12, blurRadius: 10),
+                  BoxShadow(
+                      color: Colors.black12, blurRadius: 10),
                 ],
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
                 children: [
                   Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
                       Text(
                         "Total Harga (${selectedTimes.length} Jam)",
-                        style: const TextStyle(fontSize: 12),
+                        style:
+                            const TextStyle(fontSize: 12),
                       ),
                       Text(
                         formatCurrency(totalAmount),
@@ -522,7 +561,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryBlue,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
+                        borderRadius:
+                            BorderRadius.circular(30),
                       ),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 24, vertical: 14),
@@ -533,10 +573,13 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => FormBookingPage(
-                                  lapanganId: widget.lapanganId,
+                                builder: (context) =>
+                                    FormBookingPage(
+                                  lapanganId:
+                                      widget.lapanganId,
                                   selectedDate: selectedDate,
-                                  selectedTimes: selectedTimes,
+                                  selectedTimes:
+                                      selectedTimes,
                                   serviceFee: 5000,
                                 ),
                               ),
@@ -559,7 +602,6 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
     );
   }
 
-  // ── Legend widget ─────────────────────────────────────────────
   Widget legend(Color color, String text) {
     return Row(
       children: [
