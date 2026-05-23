@@ -263,7 +263,7 @@ class KebijakanPrivasiScreen extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.check_circle_rounded, color: _green, size: 20),
+              const Icon(Icons.check_circle_rounded, color: _green, size: 20),
               const SizedBox(width: 10),
               Expanded(
                 child: RichText(

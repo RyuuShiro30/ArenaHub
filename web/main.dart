@@ -7,7 +7,8 @@ import 'package:appbookinglapangan/firebase_options.dart';
 import 'auth/login.dart';
 import 'dashboard/dashboardAdmin.dart';
 import 'profile/profileAdmin.dart';
-import 'kelola_jadwal/kelolaJadwal.dart';
+import 'field/add_field.dart';
+import 'field/kelola_lapangan.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,12 +41,14 @@ class MyApp extends StatelessWidget {
       ),
 
       // HALAMAN PERTAMA
-      home: const AdminLoginPage(),
+      home: const KelolaLapanganScreen(),
 
       // ROUTES
       routes: {
         '/dashboard': (context) => const AdminDashboardScreen(),
         '/profile': (context) => const ProfileAdminScreen(),
+        '/field': (context) => const KelolaLapanganScreen(),
+        '/add_field': (context) => const AddFieldScreen(),
       },
     );
   }
