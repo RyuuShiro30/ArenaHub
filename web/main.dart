@@ -1,27 +1,24 @@
+import 'package:appbookinglapangan/core/constant/constant.dart';
 import 'package:flutter/material.dart';
+import 'package:appbookinglapangan/routes/app_routes.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:appbookinglapangan/firebase_options.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:google_fonts/google_fonts.dart';
-
-import 'package:appbookinglapangan/firebase_options.dart';
-
-import 'auth/login.dart';
-import 'dashboard/dashboardAdmin.dart';
-import 'profile/profileAdmin.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  
   await dotenv.load(fileName: ".env");
-
+  
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
+  
   await initializeDateFormatting('id_ID', null);
-
-  runApp(const MyApp());
+  
+  runApp(const MyApp()); // ← cukup sekali di paling bawah
 }
 
 class MyApp extends StatelessWidget {
@@ -30,24 +27,19 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
-      title: 'Admin ArenaHub',
-
       theme: ThemeData(
-        textTheme: GoogleFonts.plusJakartaSansTextTheme(
+        textTheme: GoogleFonts.poppinsTextTheme(
           Theme.of(context).textTheme,
         ),
+        primaryColor: AppColors.primary,
+        scaffoldBackgroundColor: AppColors.background,
         useMaterial3: true,
       ),
-
-      // HALAMAN PERTAMA
-      home: const AdminLoginPage(),
-
-      // ROUTES
-      routes: {
-        '/dashboard': (context) => const AdminDashboardScreen(),
-        '/profile': (context) => const ProfileAdminScreen(),
-      },
+      initialRoute: AppRoutes.login,
+      routes: AppRoutes.routes,
+      onGenerateRoute: AppRoutes.generateRoute,
     );
   }
 }
