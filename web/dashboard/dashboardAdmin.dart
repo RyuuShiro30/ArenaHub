@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../auth/login.dart';
 import '../booking/kelola_booking.dart'; 
+import '../kelola_jadwal/kelolaJadwal.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -185,6 +186,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 1:
         // ← Kelola Booking: langsung embed widget-nya
         return const KelolaBookingScreen();
+
+      case 3:
+        // ← Kelola Jadwal: buat widget baru dan embed
+        return const KelolaJadwalScreen();
       case 0:
       default:
         return _buildDashboardContent();
@@ -202,6 +207,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: _selectedNav == 1
               // Kelola Booking punya top bar sendiri, langsung tampil
               ? const KelolaBookingScreen()
+              : _selectedNav == 3
+              // Kelola Jadwal punya top bar sendiri, langsung tampil
+              ? const KelolaJadwalScreen()
               // Nav lain pakai struktur Column (top bar + scroll content)
               : StreamBuilder<QuerySnapshot>(
                   stream: _firestore.collection('bookings').snapshots(),

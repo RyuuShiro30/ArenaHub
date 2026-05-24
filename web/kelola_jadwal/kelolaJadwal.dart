@@ -85,6 +85,29 @@ class JadwalModel {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// FILTER LANJUTAN MODEL
+// ══════════════════════════════════════════════════════════════════════════════
+
+enum FilterStatus { semua, tersedia, tidakTersedia, dipesan }
+
+class FilterLanjutan {
+  final FilterStatus status;
+  final String? jamMulai;  // e.g. "06:00"
+  final String? jamSelesai; // e.g. "12:00"
+
+  const FilterLanjutan({
+    this.status = FilterStatus.semua,
+    this.jamMulai,
+    this.jamSelesai,
+  });
+
+  bool get hasFilter =>
+      status != FilterStatus.semua ||
+      jamMulai != null ||
+      jamSelesai != null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -104,6 +127,7 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
   late DateTimeRange _selectedRange;
   int _currentPage  = 1;
   final int _perPage = 5;
+  FilterLanjutan _filter = const FilterLanjutan();
 
   @override
   void initState() {
@@ -132,17 +156,51 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
         .snapshots();
   }
 
-  // ── Sort list: tanggal dulu, lalu waktu mulai ─────────────────
+  // ── FIX #3: Sort urut tanggal + waktu mulai ───────────────────
   List<JadwalModel> _sortedList(List<JadwalModel> list) {
     final sorted = List<JadwalModel>.from(list);
     sorted.sort((a, b) {
       final tglCmp = a.tanggal.compareTo(b.tanggal);
       if (tglCmp != 0) return tglCmp;
-      final aH = int.tryParse(a.waktuMulai.split(':')[0]) ?? 0;
-      final bH = int.tryParse(b.waktuMulai.split(':')[0]) ?? 0;
-      return aH.compareTo(bH);
+      // Parse jam:menit untuk sort yang akurat
+      final aParts = a.waktuMulai.split(':');
+      final bParts = b.waktuMulai.split(':');
+      final aMin = (int.tryParse(aParts[0]) ?? 0) * 60 +
+          (int.tryParse(aParts.length > 1 ? aParts[1] : '0') ?? 0);
+      final bMin = (int.tryParse(bParts[0]) ?? 0) * 60 +
+          (int.tryParse(bParts.length > 1 ? bParts[1] : '0') ?? 0);
+      return aMin.compareTo(bMin);
     });
     return sorted;
+  }
+
+  // ── Apply filter lanjutan ─────────────────────────────────────
+  List<JadwalModel> _applyFilter(List<JadwalModel> list) {
+    return list.where((j) {
+      // Filter status
+      if (_filter.status != FilterStatus.semua) {
+        final target = switch (_filter.status) {
+          FilterStatus.tersedia      => StatusJadwal.tersedia,
+          FilterStatus.tidakTersedia => StatusJadwal.tidakTersedia,
+          FilterStatus.dipesan       => StatusJadwal.dipesan,
+          _                          => StatusJadwal.tersedia,
+        };
+        if (j.status != target) return false;
+      }
+      // Filter jam mulai
+      if (_filter.jamMulai != null) {
+        final fH = int.tryParse(_filter.jamMulai!.split(':')[0]) ?? 0;
+        final jH = int.tryParse(j.waktuMulai.split(':')[0]) ?? 0;
+        if (jH < fH) return false;
+      }
+      // Filter jam selesai
+      if (_filter.jamSelesai != null) {
+        final fH = int.tryParse(_filter.jamSelesai!.split(':')[0]) ?? 0;
+        final jH = int.tryParse(j.waktuSelesai.split(':')[0]) ?? 0;
+        if (jH > fH) return false;
+      }
+      return true;
+    }).toList();
   }
 
   Future<void> _updateStatus(String id, StatusJadwal s) =>
@@ -152,14 +210,8 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
           .update({'status': JadwalModel.statusToString(s)});
 
   Future<void> _deleteJadwal(JadwalModel j) async {
-    await FirebaseFirestore.instance
-        .collection('jadwal')
-        .doc(j.id)
-        .delete();
-    if (mounted) {
-      _snack('Jadwal ${j.namaLapangan} berhasil dihapus',
-          color: Colors.green.shade700);
-    }
+    await FirebaseFirestore.instance.collection('jadwal').doc(j.id).delete();
+    if (mounted) _snack('Jadwal ${j.namaLapangan} berhasil dihapus', color: Colors.green.shade700);
   }
 
   void _snack(String msg, {Color color = Colors.black87}) =>
@@ -173,6 +225,144 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
       '${DateFormat('d MMM yyyy', 'id_ID').format(r.start)} - '
       '${DateFormat('d MMM yyyy', 'id_ID').format(r.end)}';
 
+  // ── FIX #5: Dialog Filter Lanjutan ───────────────────────────
+  Future<void> _showFilterLanjutan() async {
+    FilterStatus tempStatus = _filter.status;
+    String? tempJamMulai    = _filter.jamMulai;
+    String? tempJamSelesai  = _filter.jamSelesai;
+
+    const jamOptions = [
+      null,'06:00','07:00','08:00','09:00','10:00','11:00',
+      '12:00','13:00','14:00','15:00','16:00','17:00',
+      '18:00','19:00','20:00','21:00','22:00',
+    ];
+
+    await showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setInner) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(children: [
+            Icon(Icons.tune_rounded, size: 20, color: Color(0xFF1565C0)),
+            SizedBox(width: 8),
+            Text('Filter Lanjutan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ]),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Filter Status
+                const Text('Status Ketersediaan',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF444444))),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: [
+                    _filterChip('Semua',        FilterStatus.semua,         tempStatus, (v) => setInner(() => tempStatus = v)),
+                    _filterChip('Tersedia',     FilterStatus.tersedia,      tempStatus, (v) => setInner(() => tempStatus = v)),
+                    _filterChip('Tidak Tersedia', FilterStatus.tidakTersedia, tempStatus, (v) => setInner(() => tempStatus = v)),
+                    _filterChip('Dipesan',      FilterStatus.dipesan,       tempStatus, (v) => setInner(() => tempStatus = v)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                // Filter Rentang Jam
+                const Text('Rentang Jam Operasional',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF444444))),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Dari jam', style: TextStyle(fontSize: 11.5, color: Color(0xFF9E9E9E))),
+                    const SizedBox(height: 4),
+                    _jamDropdown(tempJamMulai, jamOptions, (v) => setInner(() => tempJamMulai = v), hint: 'Semua'),
+                  ])),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Sampai jam', style: TextStyle(fontSize: 11.5, color: Color(0xFF9E9E9E))),
+                    const SizedBox(height: 4),
+                    _jamDropdown(tempJamSelesai, jamOptions, (v) => setInner(() => tempJamSelesai = v), hint: 'Semua'),
+                  ])),
+                ]),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() { _filter = const FilterLanjutan(); _currentPage = 1; });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Reset', style: TextStyle(color: Color(0xFFE53935))),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Batal', style: TextStyle(color: Color(0xFF9E9E9E))),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _filter = FilterLanjutan(
+                    status: tempStatus,
+                    jamMulai: tempJamMulai,
+                    jamSelesai: tempJamSelesai,
+                  );
+                  _currentPage = 1;
+                });
+                Navigator.pop(ctx);
+              },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: _primary, foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+              child: const Text('Terapkan'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, FilterStatus value, FilterStatus current, ValueChanged<FilterStatus> onTap) {
+    final isActive = current == value;
+    return GestureDetector(
+      onTap: () => onTap(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isActive ? _primary : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isActive ? _primary : _borderCol),
+        ),
+        child: Text(label, style: TextStyle(
+            fontSize: 12.5, fontWeight: FontWeight.w600,
+            color: isActive ? Colors.white : const Color(0xFF444444))),
+      ),
+    );
+  }
+
+  Widget _jamDropdown(String? value, List<String?> options,
+      ValueChanged<String?> onChanged, {String hint = 'Pilih'}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+          border: Border.all(color: _borderCol),
+          borderRadius: BorderRadius.circular(8)),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: value,
+          isExpanded: true,
+          hint: Text(hint, style: const TextStyle(fontSize: 13, color: Color(0xFF9E9E9E))),
+          items: options.map((t) => DropdownMenuItem(
+            value: t,
+            child: Text(t ?? hint, style: const TextStyle(fontSize: 13)),
+          )).toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -180,25 +370,19 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
       body: StreamBuilder<QuerySnapshot>(
         stream: _jadwalStream,
         builder: (context, snap) {
-          // ── Sort client-side ──────────────────────────────────
           final rawList = snap.hasData
-              ? snap.data!.docs
-                  .map((d) => JadwalModel.fromFirestore(d))
-                  .toList()
+              ? snap.data!.docs.map((d) => JadwalModel.fromFirestore(d)).toList()
               : <JadwalModel>[];
-          final all = _sortedList(rawList);
+          // FIX #3: sort dulu, lalu apply filter lanjutan
+          final all = _applyFilter(_sortedList(rawList));
 
-          final totalTersedia =
-              all.where((j) => j.status == StatusJadwal.tersedia).length;
-          final totalTidak =
-              all.where((j) => j.status == StatusJadwal.tidakTersedia).length;
-          final unitLapangan =
-              all.map((j) => j.lapanganId).toSet().length;
-          final totalPages =
-              (all.length / _perPage).ceil().clamp(1, 9999);
-          final start = (_currentPage - 1) * _perPage;
-          final end = (start + _perPage).clamp(0, all.length);
-          final pageItems = all.sublist(start, end);
+          final totalTersedia  = all.where((j) => j.status == StatusJadwal.tersedia).length;
+          final totalTidak     = all.where((j) => j.status == StatusJadwal.tidakTersedia).length;
+          final unitLapangan   = all.map((j) => j.lapanganId).toSet().length;
+          final totalPages     = (all.length / _perPage).ceil().clamp(1, 9999);
+          final start          = (_currentPage - 1) * _perPage;
+          final end            = (start + _perPage).clamp(0, all.length);
+          final pageItems      = all.sublist(start, end);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(32),
@@ -207,44 +391,37 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
               children: [
                 // Breadcrumb
                 Row(children: [
-                  Text('ARENAHUB',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade400, letterSpacing: 0.5)),
-                  Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Icon(Icons.chevron_right_rounded, size: 14, color: Colors.grey.shade400)),
-                  Text('MANAJEMEN JADWAL',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5)),
+                  Text('ARENAHUB', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade400, letterSpacing: 0.5)),
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.chevron_right_rounded, size: 14, color: Colors.grey.shade400)),
+                  Text('MANAJEMEN JADWAL', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5)),
                 ]),
                 const SizedBox(height: 12),
 
-                // Title + button
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Kelola Jadwal Lapangan',
-                          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _textDark)),
-                      SizedBox(height: 6),
-                      Text('Atur ketersediaan slot waktu untuk semua unit lapangan secara real-time.',
-                          style: TextStyle(fontSize: 13.5, color: Color(0xFF9E9E9E))),
-                    ]),
-                    const Spacer(),
-                    ElevatedButton.icon(
-                      onPressed: () => showDialog(
-                          context: context,
-                          builder: (_) => const _TambahJadwalDialog()),
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('+ Tambah Jadwal Baru',
-                          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: _primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          elevation: 0),
-                    ),
-                  ],
-                ),
+                // Title + FIX #1: button tanpa icon plus double
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Kelola Jadwal Lapangan',
+                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _textDark)),
+                    SizedBox(height: 6),
+                    Text('Atur ketersediaan slot waktu untuk semua unit lapangan secara real-time.',
+                        style: TextStyle(fontSize: 13.5, color: Color(0xFF9E9E9E))),
+                  ]),
+                  const Spacer(),
+                  // FIX #1: hapus icon plus, cukup text saja
+                  ElevatedButton(
+                    onPressed: () => showDialog(
+                        context: context,
+                        builder: (_) => const _TambahJadwalDialog()),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: _primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 0),
+                    child: const Text('+ Tambah Jadwal Baru',
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                  ),
+                ]),
                 const SizedBox(height: 28),
 
                 // Stats
@@ -310,11 +487,31 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
                     style: OutlinedButton.styleFrom(foregroundColor: _textDark, side: const BorderSide(color: _borderCol), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(width: 10),
-                  ElevatedButton.icon(
-                    onPressed: () => _snack('Filter lanjutan segera hadir'),
-                    icon: const Icon(Icons.tune_rounded, size: 16),
-                    label: const Text('Filter Lanjutan'),
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEEF2FF), foregroundColor: _primary, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  // FIX #5: Filter Lanjutan buka dialog
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _showFilterLanjutan,
+                        icon: const Icon(Icons.tune_rounded, size: 16),
+                        label: const Text('Filter Lanjutan'),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: _filter.hasFilter ? _primary : const Color(0xFFEEF2FF),
+                            foregroundColor: _filter.hasFilter ? Colors.white : _primary,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                      if (_filter.hasFilter)
+                        Positioned(
+                          top: -4, right: -4,
+                          child: Container(
+                            width: 10, height: 10,
+                            decoration: const BoxDecoration(color: Color(0xFFE53935), shape: BoxShape.circle),
+                          ),
+                        ),
+                    ],
                   ),
                 ]),
                 const SizedBox(height: 20),
@@ -354,32 +551,8 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Pagination
-                Row(children: [
-                  Text('Menampilkan ${(_currentPage - 1) * _perPage + 1}-${(_currentPage * _perPage).clamp(0, all.length)} dari ${all.length} entri',
-                      style: const TextStyle(fontSize: 12.5, color: Color(0xFF9E9E9E))),
-                  const Spacer(),
-                  _pgBtn(Icons.chevron_left_rounded, _currentPage > 1 ? () => setState(() => _currentPage--) : null),
-                  const SizedBox(width: 4),
-                  ...List.generate(totalPages > 5 ? 5 : totalPages, (i) {
-                    final pg = i + 1; final isActive = pg == _currentPage;
-                    return Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: GestureDetector(
-                      onTap: () => setState(() => _currentPage = pg),
-                      child: Container(width: 34, height: 34, decoration: BoxDecoration(color: isActive ? _primary : Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: isActive ? _primary : _borderCol)),
-                          child: Center(child: Text('$pg', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isActive ? Colors.white : const Color(0xFF444444))))),
-                    ));
-                  }),
-                  if (totalPages > 5) ...[
-                    const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Text('...', style: TextStyle(color: Color(0xFF9E9E9E)))),
-                    Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: GestureDetector(
-                      onTap: () => setState(() => _currentPage = totalPages),
-                      child: Container(width: 34, height: 34, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderCol)),
-                          child: Center(child: Text('$totalPages', style: const TextStyle(fontSize: 13, color: Color(0xFF444444))))),
-                    )),
-                  ],
-                  const SizedBox(width: 4),
-                  _pgBtn(Icons.chevron_right_rounded, _currentPage < totalPages ? () => setState(() => _currentPage++) : null),
-                ]),
+                // FIX #4: Pagination yang benar — selalu tampilkan halaman aktif
+                _buildPagination(all.length, totalPages),
               ],
             ),
           );
@@ -387,6 +560,82 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
       ),
     );
   }
+
+  // ── FIX #4: Pagination yang benar ────────────────────────────
+  Widget _buildPagination(int totalItems, int totalPages) {
+    final start = (_currentPage - 1) * _perPage + 1;
+    final end   = (_currentPage * _perPage).clamp(0, totalItems);
+
+    // Hitung range halaman yang ditampilkan (selalu include halaman aktif)
+    List<int> pageNumbers = _getPageNumbers(totalPages);
+
+    return Row(children: [
+      Text('Menampilkan $start-$end dari $totalItems entri',
+          style: const TextStyle(fontSize: 12.5, color: Color(0xFF9E9E9E))),
+      const Spacer(),
+      _pgBtn(Icons.chevron_left_rounded,
+          _currentPage > 1 ? () => setState(() => _currentPage--) : null),
+      const SizedBox(width: 4),
+      ...pageNumbers.map((pg) {
+        if (pg == -1) {
+          // Ellipsis
+          return const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text('...', style: TextStyle(color: Color(0xFF9E9E9E))),
+          );
+        }
+        final isActive = pg == _currentPage;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: GestureDetector(
+            onTap: () => setState(() => _currentPage = pg),
+            child: Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(
+                  color: isActive ? _primary : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: isActive ? _primary : _borderCol)),
+              child: Center(child: Text('$pg', style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w600,
+                  color: isActive ? Colors.white : const Color(0xFF444444)))),
+            ),
+          ),
+        );
+      }),
+      const SizedBox(width: 4),
+      _pgBtn(Icons.chevron_right_rounded,
+          _currentPage < totalPages ? () => setState(() => _currentPage++) : null),
+    ]);
+  }
+
+  // Hasilkan list halaman dengan ellipsis yang selalu include halaman aktif
+  List<int> _getPageNumbers(int totalPages) {
+    if (totalPages <= 7) {
+      return List.generate(totalPages, (i) => i + 1);
+    }
+
+    final current = _currentPage;
+    final List<int> pages = [];
+
+    // Selalu tampilkan halaman 1
+    pages.add(1);
+
+    if (current > 3) pages.add(-1); // ellipsis kiri
+
+    // Tampilkan halaman sekitar halaman aktif
+    for (int i = current - 1; i <= current + 1; i++) {
+      if (i > 1 && i < totalPages) pages.add(i);
+    }
+
+    if (current < totalPages - 2) pages.add(-1); // ellipsis kanan
+
+    // Selalu tampilkan halaman terakhir
+    pages.add(totalPages);
+
+    return pages;
+  }
+
+  // ── Widgets helpers ───────────────────────────────────────────
 
   Widget _statsCard({required IconData icon, required String label, required String value, required Color iconColor, required Color iconBg, bool isHighlighted = false}) =>
       Container(
@@ -411,7 +660,9 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     child: Row(children: [
       Expanded(flex: 3, child: Row(children: [
-        ClipRRect(borderRadius: BorderRadius.circular(8), child: j.imagePath.isNotEmpty ? Image.network(j.imagePath, width: 44, height: 44, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imgPH()) : _imgPH()),
+        ClipRRect(borderRadius: BorderRadius.circular(8), child: j.imagePath.isNotEmpty
+            ? Image.network(j.imagePath, width: 44, height: 44, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imgPH())
+            : _imgPH()),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(j.namaLapangan, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _textDark)),
@@ -419,35 +670,71 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
         ])),
       ])),
       Expanded(flex: 2, child: Text(_fmtTgl(j.tanggal), style: const TextStyle(fontSize: 13, color: Color(0xFF444444)))),
-      Expanded(flex: 2, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: const Color(0xFFF0F4FF), borderRadius: BorderRadius.circular(6)), child: Text(j.waktuOperasional, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1565C0))))),
+      Expanded(flex: 2, child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(color: const Color(0xFFF0F4FF), borderRadius: BorderRadius.circular(6)),
+          child: Text(j.waktuOperasional, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1565C0))))),
       Expanded(flex: 2, child: _statusToggle(j)),
-      Expanded(flex: 1, child: IconButton(tooltip: 'Hapus jadwal', icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFE53935)), onPressed: () => _confirmDelete(j))),
+      Expanded(flex: 1, child: IconButton(
+          tooltip: 'Hapus jadwal',
+          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFE53935)),
+          onPressed: () => _confirmDelete(j))),
     ]),
   );
 
-  Widget _imgPH() => Container(width: 44, height: 44, color: const Color(0xFFE3EAF5), child: const Icon(Icons.sports_soccer_rounded, size: 22, color: Color(0xFF1565C0)));
+  Widget _imgPH() => Container(
+      width: 44, height: 44, color: const Color(0xFFE3EAF5),
+      child: const Icon(Icons.sports_soccer_rounded, size: 22, color: Color(0xFF1565C0)));
 
+  // ── FIX #2: Status toggle tanpa double icon ───────────────────
   Widget _statusToggle(JadwalModel j) {
-    if (j.status == StatusJadwal.dipesan) return _badge(label: 'Dipesan', icon: Icons.lock_outline_rounded, textColor: const Color(0xFFF57C00), bg: const Color(0xFFFFF3E0), border: const Color(0xFFFFCC02));
+    if (j.status == StatusJadwal.dipesan) {
+      return _badge(
+          label: 'Dipesan',
+          icon: Icons.lock_outline_rounded,
+          textColor: const Color(0xFFF57C00),
+          bg: const Color(0xFFFFF3E0),
+          border: const Color(0xFFFFCC02));
+    }
     final isTersedia = j.status == StatusJadwal.tersedia;
     return GestureDetector(
-      onTap: () => _updateStatus(j.id, isTersedia ? StatusJadwal.tidakTersedia : StatusJadwal.tersedia),
+      onTap: () => _updateStatus(j.id,
+          isTersedia ? StatusJadwal.tidakTersedia : StatusJadwal.tersedia),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: isTersedia ? const Color(0xFFE8F5E9) : const Color(0xFFFBE9E7), borderRadius: BorderRadius.circular(20), border: Border.all(color: isTersedia ? const Color(0xFF66BB6A) : const Color(0xFFEF9A9A))),
+        decoration: BoxDecoration(
+            color: isTersedia ? const Color(0xFFE8F5E9) : const Color(0xFFFBE9E7),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: isTersedia ? const Color(0xFF66BB6A) : const Color(0xFFEF9A9A))),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(isTersedia ? Icons.check_circle_outline_rounded : Icons.cancel_outlined, size: 13, color: isTersedia ? const Color(0xFF2E7D32) : const Color(0xFFC62828)),
+          // FIX #2: tersedia = ceklis saja, tidak tersedia = X saja (tanpa lingkaran)
+          Icon(
+            isTersedia ? Icons.check_rounded : Icons.close_rounded,
+            size: 14,
+            color: isTersedia ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+          ),
           const SizedBox(width: 5),
-          Text(isTersedia ? '● Tersedia' : 'x Tidak Tersedia', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isTersedia ? const Color(0xFF2E7D32) : const Color(0xFFC62828))),
+          Text(
+            isTersedia ? 'Tersedia' : 'Tidak Tersedia',
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w700,
+                color: isTersedia ? const Color(0xFF2E7D32) : const Color(0xFFC62828)),
+          ),
         ]),
       ),
     );
   }
 
   Widget _badge({required String label, required IconData icon, required Color textColor, required Color bg, required Color border}) =>
-      Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: border)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 13, color: textColor), const SizedBox(width: 5), Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textColor))]));
+      Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: border)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 13, color: textColor),
+            const SizedBox(width: 5),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textColor)),
+          ]));
 
   Future<void> _confirmDelete(JadwalModel j) async {
     final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
@@ -456,13 +743,20 @@ class _KelolaJadwalScreenState extends State<KelolaJadwalScreen> {
       content: Text('Hapus jadwal ${j.namaLapangan} (${j.waktuOperasional}) pada ${_fmtTgl(j.tanggal)}?'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
-        ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE53935), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), child: const Text('Hapus')),
+        ElevatedButton(onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE53935), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+            child: const Text('Hapus')),
       ],
     ));
     if (ok == true) await _deleteJadwal(j);
   }
 
-  Widget _pgBtn(IconData icon, VoidCallback? onTap) => GestureDetector(onTap: onTap, child: Container(width: 34, height: 34, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderCol)), child: Icon(icon, size: 20, color: onTap != null ? const Color(0xFF444444) : const Color(0xFFCCCCCC))));
+  Widget _pgBtn(IconData icon, VoidCallback? onTap) => GestureDetector(
+      onTap: onTap,
+      child: Container(
+          width: 34, height: 34,
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderCol)),
+          child: Icon(icon, size: 20, color: onTap != null ? const Color(0xFF444444) : const Color(0xFFCCCCCC))));
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -479,18 +773,18 @@ class _TambahJadwalDialogState extends State<_TambahJadwalDialog> {
   static const _primary   = Color(0xFF1565C0);
   static const _borderCol = Color(0xFFDDE3EE);
 
-  bool    _isBulkMode    = true;
+  bool    _isBulkMode   = true;
   String? _lapanganId;
-  String  _namaLapangan  = '';
-  String  _jenisLapangan = '';
-  String  _imagePath     = '';
-  int     _harga         = 0;
-  DateTime _tanggal      = DateTime.now();
-  String  _waktuMulai    = '08:00';
-  String  _waktuSelesai  = '09:00';
-  String  _jamBuka       = '06:00';
-  String  _jamTutup      = '21:00';
-  bool    _isSubmitting  = false;
+  String  _namaLapangan = '';
+  String  _jenisLapangan= '';
+  String  _imagePath    = '';
+  int     _harga        = 0;
+  DateTime _tanggal     = DateTime.now();
+  String  _waktuMulai   = '08:00';
+  String  _waktuSelesai = '09:00';
+  String  _jamBuka      = '06:00';
+  String  _jamTutup     = '21:00';
+  bool    _isSubmitting = false;
 
   final List<String> _slots = [
     '06:00','07:00','08:00','09:00','10:00','11:00',
@@ -557,8 +851,7 @@ class _TambahJadwalDialogState extends State<_TambahJadwalDialog> {
   Widget build(BuildContext context) => Dialog(
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     child: Container(
-      width: 580,
-      constraints: const BoxConstraints(maxHeight: 680),
+      width: 580, constraints: const BoxConstraints(maxHeight: 680),
       padding: const EdgeInsets.all(28),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -567,8 +860,6 @@ class _TambahJadwalDialogState extends State<_TambahJadwalDialog> {
           IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded, size: 20)),
         ]),
         const SizedBox(height: 16),
-
-        // Mode toggle
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(color: const Color(0xFFF0F0F0), borderRadius: BorderRadius.circular(10)),
@@ -578,11 +869,9 @@ class _TambahJadwalDialogState extends State<_TambahJadwalDialog> {
           ]),
         ),
         const SizedBox(height: 16),
-
         Expanded(
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Lapangan
               _lbl('Pilih Lapangan'), const SizedBox(height: 6),
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance.collection('lapangan').snapshots(),
@@ -606,8 +895,6 @@ class _TambahJadwalDialogState extends State<_TambahJadwalDialog> {
                 },
               ),
               const SizedBox(height: 14),
-
-              // Tanggal
               _lbl('Tanggal'), const SizedBox(height: 6),
               GestureDetector(onTap: _pickDate, child: _box(child: Row(children: [
                 const Icon(Icons.calendar_today_outlined, size: 16, color: Color(0xFF9E9E9E)),
@@ -615,8 +902,6 @@ class _TambahJadwalDialogState extends State<_TambahJadwalDialog> {
                 Text(DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(_tanggal), style: const TextStyle(fontSize: 14)),
               ]))),
               const SizedBox(height: 14),
-
-              // Bulk mode
               if (_isBulkMode) ...[
                 Row(children: [
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -638,20 +923,15 @@ class _TambahJadwalDialogState extends State<_TambahJadwalDialog> {
                         child: Text('${_previewSlots.length} slot', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF1565C0)))),
                   ]),
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6, runSpacing: 6,
-                    children: _previewSlots.map((s) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFF66BB6A))),
-                      child: Text('${s['mulai']} - ${s['selesai']}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32))),
-                    )).toList(),
-                  ),
+                  Wrap(spacing: 6, runSpacing: 6, children: _previewSlots.map((s) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFF66BB6A))),
+                    child: Text('${s['mulai']} - ${s['selesai']}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32))),
+                  )).toList()),
                 ] else
                   Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFFFF3F3), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFFFCDD2))),
                       child: const Text('Jam buka harus lebih kecil dari jam tutup', style: TextStyle(fontSize: 12, color: Color(0xFFC62828)))),
               ],
-
-              // Single mode
               if (!_isBulkMode) Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   _lbl('Waktu Mulai'), const SizedBox(height: 6),
@@ -666,7 +946,6 @@ class _TambahJadwalDialogState extends State<_TambahJadwalDialog> {
             ]),
           ),
         ),
-
         const SizedBox(height: 20),
         Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           OutlinedButton(onPressed: () => Navigator.pop(context),
