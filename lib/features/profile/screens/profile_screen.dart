@@ -1007,7 +1007,7 @@ class _ProfileScreenState
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor:
+            activeThumbColor:
                 Colors.white,
             activeTrackColor:
                 _accent,

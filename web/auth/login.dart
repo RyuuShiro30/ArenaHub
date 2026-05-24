@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// ─── Model ───────────────────────────────────────────────────────────────────
+// model
 
 class AdminProfile {
   final String email;
@@ -34,7 +34,7 @@ class AdminProfile {
   }
 }
 
-// ─── Login Page ──────────────────────────────────────────────────────────────
+// login page
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
