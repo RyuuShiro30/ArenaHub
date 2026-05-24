@@ -109,18 +109,56 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
 
-      final snapshot = await FirebaseFirestore.instance
+      // Query pakai 'tanggal_main' (field utama sejak payment baru)
+      final snap1 = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('lapangan_id', isEqualTo: widget.lapanganId)
+          .where('tanggal_main', isEqualTo: dateStr)
+          .get();
+
+      // Query pakai 'tanggal' (field lama / kompatibilitas)
+      final snap2 = await FirebaseFirestore.instance
           .collection('bookings')
           .where('lapangan_id', isEqualTo: widget.lapanganId)
           .where('tanggal', isEqualTo: dateStr)
-          .where('status', whereIn: ['confirmed', 'pending'])
           .get();
 
+      // Gabung dan deduplikasi berdasarkan ID dokumen
+      final seenIds = <String>{};
+      final allDocs = <QueryDocumentSnapshot>[];
+      for (final doc in [...snap1.docs, ...snap2.docs]) {
+        if (seenIds.add(doc.id)) allDocs.add(doc);
+      }
+
+      // Status yang dianggap "sudah dipesan"
+      const validStatuses = {
+        'sudah dibayar',
+        'pembayaran selesai',
+        'confirmed',
+        'pending',
+      };
+
       final booked = <String>{};
-      for (final doc in snapshot.docs) {
-        final slots = doc.data()['slots'] ?? doc.data()['selected_times'];
-        if (slots is List) {
-          booked.addAll(slots.map((e) => e.toString()));
+      for (final doc in allDocs) {
+        final data = doc.data() as Map<String, dynamic>;
+
+        // Cek status: dukung 'status_pembayaran' maupun 'status'
+        final statusPembayaran =
+            data['status_pembayaran']?.toString() ?? '';
+        final statusAlt = data['status']?.toString() ?? '';
+        if (!validStatuses.contains(statusPembayaran) &&
+            !validStatuses.contains(statusAlt)) {
+          continue; // Lewati booking yang gagal / tidak valid
+        }
+
+        // Baca slot: dukung List (field 'slots') maupun String (field 'selected_times'/'jam_main')
+        final slotField = data['slots'] ?? data['selected_times'] ?? data['jam_main'];
+        if (slotField is List) {
+          booked.addAll(slotField.map((e) => e.toString()));
+        } else if (slotField is String && slotField.isNotEmpty) {
+          booked.addAll(
+            slotField.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty),
+          );
         }
       }
 
@@ -136,6 +174,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage> {
       if (mounted) setState(() => isLoadingSlot = false);
     }
   }
+
 
   List<DateTime> getFiveDays() {
     return List.generate(5, (i) => selectedDate.add(Duration(days: i - 2)));

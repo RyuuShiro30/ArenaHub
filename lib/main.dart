@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'data/service/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,9 @@ void main() async {
   );
   
   await initializeDateFormatting('id_ID', null);
+  
+  // Inisialisasi notifikasi lokal
+  await NotificationService().init();
   
   runApp(const MyApp()); // ← cukup sekali di paling bawah
 }
