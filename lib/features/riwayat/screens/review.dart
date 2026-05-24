@@ -56,22 +56,35 @@ class _ReviewPageState extends State<ReviewPage> {
           .doc(widget.bookingId)
           .get();
       if (doc.exists) {
+        final bookingData = doc.data()!;
+
+        // Fetch lapangan untuk ambil foto & harga
+        final lapanganId = bookingData['lapangan_id'] ?? '';
+        if (lapanganId.isNotEmpty) {
+          final lapanganDoc = await FirebaseFirestore.instance
+              .collection('lapangan')
+              .doc(lapanganId)
+              .get();
+          if (lapanganDoc.exists) {
+            final fotoList = lapanganDoc.data()?['foto'];
+            bookingData['foto'] = (fotoList is List && fotoList.isNotEmpty)
+                ? fotoList[0].toString()
+                : '';
+            bookingData['harga_per_jam'] = lapanganDoc.data()?['harga'] ?? 0;
+          }
+        }
+
         setState(() {
-          _booking = doc.data();
+          _booking = bookingData;
           _isPageLoading = false;
         });
       } else {
-        setState(() {
-          _isPageLoading = false;
-        });
+        setState(() => _isPageLoading = false);
       }
     } catch (e) {
-      setState(() {
-        _isPageLoading = false;
-      });
+      setState(() => _isPageLoading = false);
     }
   }
-
   // label rating overall
 
   String get _labelOverall {
@@ -148,21 +161,33 @@ class _ReviewPageState extends State<ReviewPage> {
           .where('lapangan_id', isEqualTo: lapanganId)
           .get();
 
-      final semuaRating = ulasanSnapshot.docs
-          .map((doc) => (doc.data()['rating_overall'] as num).toDouble())
-          .toList();
+      final docs = ulasanSnapshot.docs;
 
-      final ratingBaru = semuaRating.isEmpty
-          ? 0.0
-          : semuaRating.reduce((a, b) => a + b) / semuaRating.length;
+      double _rata(String field) {
+        final list = docs
+            .map((d) => (d.data()[field] as num?)?.toDouble() ?? 0)
+            .where((v) => v > 0)
+            .toList();
+        return list.isEmpty ? 0.0 : list.reduce((a, b) => a + b) / list.length;
+      }
+
+      final ratingBaru = _rata('rating_overall');
+      final ratingKebersihan = _rata('rating_kebersihan');
+      final ratingFasilitas = _rata('rating_fasilitas');
+      final ratingPelayanan = _rata('rating_pelayanan');
+      final ratingKondisi = _rata('rating_kondisi');
 
       // 3. Update rating_rata dan jumlah_ulasan di collection 'lapangan'
       await firestore
           .collection('lapangan')
           .doc(lapanganId)
           .update({
-        'rating': double.parse(ratingBaru.toStringAsFixed(1)),
-        'jumlah_ulasan': semuaRating.length,
+        'rating_overall': double.parse(ratingBaru.toStringAsFixed(1)),
+        'jumlah_ulasan': docs.length,
+        'rating_kebersihan': double.parse(ratingKebersihan.toStringAsFixed(1)),
+        'rating_fasilitas': double.parse(ratingFasilitas.toStringAsFixed(1)),
+        'rating_pelayanan': double.parse(ratingPelayanan.toStringAsFixed(1)),
+        'rating_kondisi': double.parse(ratingKondisi.toStringAsFixed(1)),
       });
       // 4. Update status booking jadi sudah direview
       await firestore

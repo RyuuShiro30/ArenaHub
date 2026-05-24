@@ -142,7 +142,7 @@ class DetailLapanganData {
       lokasi: map['lokasi'] ?? '',
       hargaPerJam: map['harga'] ?? 0,
       deskripsi: map['deskripsi_lapangan'] ?? '',
-      ratingRata: (map['rating_rata'] ?? 0).toDouble(),
+      ratingRata: (map['rating_overall'] ?? 0).toDouble(),
       jumlahUlasan: map['jumlah_ulasan'] ?? 0,
       fotoPaths: map['foto'] != null ? List<String>.from(map['foto']) : [],
       fasilitas: (map['fasilitas'] as List? ?? [])
@@ -211,6 +211,14 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
           .map((doc) => UlasanItem.fromMap(doc.data()))
           .toList();
 
+      final countSnapshot = await FirebaseFirestore.instance
+          .collection('ulasan')
+          .where('lapangan_id', isEqualTo: widget.lapanganId)
+          .count()
+          .get();
+
+      final totalUlasan = countSnapshot.count ?? 0;
+
       setState(() {
         _data = DetailLapanganData(
           id: lapangan.id,
@@ -221,7 +229,7 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
           hargaPerJam: lapangan.hargaPerJam,
           deskripsi: lapangan.deskripsi,
           ratingRata: lapangan.ratingRata,
-          jumlahUlasan: lapangan.jumlahUlasan,
+          jumlahUlasan: totalUlasan,
           fotoPaths: lapangan.fotoPaths,
           fasilitas: lapangan.fasilitas,
           ulasan: ulasan,
@@ -334,12 +342,6 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
           fontSize: 18,
         ),
       ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.share_rounded, color: _primaryColor, size: 22),
-          onPressed: _tampilkanShare,
-        ),
-      ],
     );
   }
 
