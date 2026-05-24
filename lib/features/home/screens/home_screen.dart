@@ -8,6 +8,7 @@ import '../../../../routes/app_routes.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../auth/screens/pencarian_lapangan_screen.dart';
 import '../../riwayat/screens/riwayat_booking_screen.dart';
+import '../../booking/screens/pilih_jadwal.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -201,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Tab 2 - Riwayat
               const RiwayatBookingScreen(),
               // Tab 3 - Profil
-              const ProfileScreen(),
+              const ProfileScreen(isTab: true),
             ],
           ),
         ),
@@ -520,111 +521,227 @@ Widget _buildSportGrid() {
 }
 
   // ── Schedule List ─────────────────────────────────────────────────────────
-  Widget _buildScheduleList() {
-  final now = DateTime.now();
-  final todayStart = DateTime(now.year, now.month, now.day);
-  final todayEnd   = todayStart.add(const Duration(days: 1));
 
-  return StreamBuilder<QuerySnapshot>(
-    stream: _firestore
-        .collection('jadwal')
-        .where('status', isEqualTo: 'tersedia')
-        .where('tanggal', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
-        .where('tanggal', isLessThan: Timestamp.fromDate(todayEnd))
-        .limit(4)
-        .snapshots(),
-    builder: (context, snapshot) {
-      if (snapshot.connectionState == ConnectionState.waiting) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Center(
-            child: Text('Tidak ada jadwal tersedia hari ini',
-                style: _p(color: Colors.grey)),
-          ),
+  // Semua slot waktu yang tersedia di lapangan
+  static const List<String> _allSlots = [
+    '06.00 - 07.00', '07.00 - 08.00', '08.00 - 09.00',
+    '09.00 - 10.00', '10.00 - 11.00', '11.00 - 12.00',
+    '12.00 - 13.00', '13.00 - 14.00', '14.00 - 15.00',
+    '15.00 - 16.00', '16.00 - 17.00', '17.00 - 18.00',
+    '18.00 - 19.00', '19.00 - 20.00', '20.00 - 21.00',
+  ];
+
+  /// Mengambil daftar lapangan beserta slot tersedia pertama hari ini.
+  Future<List<Map<String, dynamic>>> _fetchAvailableSlots() async {
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    // 1. Ambil semua lapangan
+    final lapanganSnap = await _firestore.collection('lapangan').get();
+
+    // 2. Ambil semua booking hari ini (field tanggal_main)
+    final bookSnap1 = await _firestore
+        .collection('bookings')
+        .where('tanggal_main', isEqualTo: todayStr)
+        .get();
+
+    // 3. Ambil juga booking dengan field 'tanggal' (kompatibilitas lama)
+    final bookSnap2 = await _firestore
+        .collection('bookings')
+        .where('tanggal', isEqualTo: todayStr)
+        .get();
+
+    // 4. Gabung & deduplikasi booking
+    final seenIds = <String>{};
+    final allBookings = <QueryDocumentSnapshot>[];
+    for (final doc in [...bookSnap1.docs, ...bookSnap2.docs]) {
+      if (seenIds.add(doc.id)) allBookings.add(doc);
+    }
+
+    // 5. Hitung slot yang sudah terisi per lapangan
+    const validStatuses = {
+      'sudah dibayar', 'pembayaran selesai', 'confirmed', 'pending',
+    };
+    final bookedByLapangan = <String, Set<String>>{};
+    for (final doc in allBookings) {
+      final data = doc.data() as Map<String, dynamic>;
+      final lapId = data['lapangan_id']?.toString() ?? '';
+      if (lapId.isEmpty) continue;
+
+      final statusPembayaran = data['status_pembayaran']?.toString() ?? '';
+      final statusAlt        = data['status']?.toString() ?? '';
+      if (!validStatuses.contains(statusPembayaran) &&
+          !validStatuses.contains(statusAlt)) continue;
+
+      final slotField = data['slots'] ?? data['selected_times'] ?? data['jam_main'];
+      final bookedSlots = bookedByLapangan.putIfAbsent(lapId, () => {});
+      if (slotField is List) {
+        bookedSlots.addAll(slotField.map((e) => e.toString()));
+      } else if (slotField is String && slotField.isNotEmpty) {
+        bookedSlots.addAll(
+          slotField.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty),
         );
       }
+    }
 
-      final docs = snapshot.data!.docs;
-      return Column(
-        children: docs.map((doc) {
-          final data  = doc.data() as Map<String, dynamic>;
-          final name  = data['nama_lapangan']     ?? 'Lapangan';
-          final price = data['harga']             ?? 0;
-          final time  = data['waktu_operasional'] ?? '-';
-          final jenis = data['jenis_lapangan']    ?? '';
+    // 6. Temukan slot pertama yang masih kosong untuk setiap lapangan
+    final result = <Map<String, dynamic>>[];
+    for (final lapDoc in lapanganSnap.docs) {
+      final d = lapDoc.data();
+      final bookedSlots = bookedByLapangan[lapDoc.id] ?? {};
+      String? firstFree;
+      for (final s in _allSlots) {
+        if (!bookedSlots.contains(s)) { firstFree = s; break; }
+      }
+      if (firstFree == null) continue; // lapangan penuh hari ini
+      result.add({
+        'id'   : lapDoc.id,
+        'nama' : d['nama_lapangan']  ?? 'Lapangan',
+        'jenis': d['jenis_lapangan'] ?? '',
+        'harga': (d['harga'] as num?)?.toInt() ?? 0,
+        'slot' : firstFree,
+        'foto' : (d['foto'] is List && (d['foto'] as List).isNotEmpty)
+                     ? (d['foto'] as List).first.toString()
+                     : '',
+        // Kirim data lapangan lengkap untuk navigasi ke PilihJadwalPage
+        'jenis_floor': d['jenis_floor'] ?? '',
+      });
+      if (result.length >= 4) break;
+    }
+    return result;
+  }
 
+  Widget _buildScheduleList() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _fetchAvailableSlots(),
+      builder: (context, snapshot) {
+        // Loading
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            height: 80,
+            alignment: Alignment.center,
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          );
+        }
+
+        // Error
+        if (snapshot.hasError) {
+          return Container(
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2))
-              ],
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 11, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: _accent.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(time,
-                      style: _p(
-                          size: 13,
-                          weight: FontWeight.bold,
-                          color: _primaryDark)),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name,
-                          style: _p(
-                              size: 13,
-                              weight: FontWeight.w600,
-                              color: _textDark)),
-                      const SizedBox(height: 2),
-                      Text(jenis,
-                          style: _p(size: 11, color: Colors.grey.shade500)),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(_formatHarga(price),
-                        style: _p(
-                            size: 13,
-                            weight: FontWeight.bold,
-                            color: _accent)),
-                    const SizedBox(height: 2),
-                    Text('/ jam',
-                        style: _p(size: 11, color: Colors.grey.shade400)),
-                  ],
-                ),
-              ],
+            child: Center(
+              child: Text('Gagal memuat jadwal', style: _p(color: Colors.grey)),
             ),
           );
-        }).toList(),
-      );
-    },
-  );
-}
+        }
+
+        final items = snapshot.data ?? [];
+
+        // Kosong
+        if (items.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Center(
+              child: Text('Tidak ada jadwal tersedia hari ini',
+                  style: _p(color: Colors.grey)),
+            ),
+          );
+        }
+
+        // Tampilkan kartu slot tersedia
+        return Column(
+          children: items.map((item) {
+            final name  = item['nama']  as String;
+            final jenis = item['jenis'] as String;
+            final harga = item['harga'] as int;
+            final slot  = item['slot']  as String;
+            final lapId = item['id']    as String;
+
+            return GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PilihJadwalPage(
+                    lapanganId   : lapId,
+                    namaLapangan : name,
+                    jenisLapangan: jenis,
+                    jenisFloor   : item['jenis_floor'] as String,
+                    fotoUrl      : item['foto'] as String,
+                    pricePerHour : harga,
+                  ),
+                ),
+              ),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Chip waktu slot
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: _accent.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        slot,
+                        style: _p(size: 12, weight: FontWeight.bold, color: _primaryDark),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    // Nama & jenis lapangan
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name,
+                              style: _p(size: 13, weight: FontWeight.w600, color: _textDark)),
+                          const SizedBox(height: 2),
+                          Text(jenis,
+                              style: _p(size: 11, color: Colors.grey.shade500)),
+                        ],
+                      ),
+                    ),
+                    // Harga & label pesan
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          NumberFormat.currency(
+                            locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0,
+                          ).format(harga),
+                          style: _p(size: 13, weight: FontWeight.bold, color: _accent),
+                        ),
+                        const SizedBox(height: 2),
+                        Text('/ jam', style: _p(size: 11, color: Colors.grey.shade400)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
 
   // ── Last Booking ──────────────────────────────────────────────────────────
   Widget _buildLastBooking() {
