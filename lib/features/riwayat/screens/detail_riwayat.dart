@@ -293,9 +293,9 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
                     width: double.infinity,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) =>
-                        _PlaceholderGambar(height: 180),
+                        const _PlaceholderGambar(height: 180),
                   )
-                : _PlaceholderGambar(height: 180),
+                : const _PlaceholderGambar(height: 180),
           ),
           Padding(
             padding: const EdgeInsets.all(16),

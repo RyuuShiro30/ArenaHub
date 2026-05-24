@@ -342,7 +342,7 @@ class _KeamananSandiScreenState extends State<KeamananSandiScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.info_outline_rounded, color: _accent, size: 20),
+                            const Icon(Icons.info_outline_rounded, color: _accent, size: 20),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(
