@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 
 class PusatBantuanScreen extends StatefulWidget {
   const PusatBantuanScreen({super.key});
@@ -10,14 +10,17 @@ class PusatBantuanScreen extends StatefulWidget {
 }
 
 class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
-  // ── Colors ───────────────────────────────────────────────────────────────────
   static const Color _primaryDark = Color(0xFF0D2D6B);
   static const Color _accent      = Color(0xFF1A4FAF);
   static const Color _bgColor     = Color(0xFFF4F6F9);
   static const Color _textDark    = Color(0xFF1A2B3C);
   static const Color _green       = Color(0xFF1A6B4A);
 
-  // ── State accordion ───────────────────────────────────────────────────────────
+  // ← Ganti dengan email admin ArenaHub kamu
+  static const String _adminEmail   = 'adminarenahub@gmail.com';
+  static const String _emailSubject = 'Bantuan - ArenaHub';
+  static const String _emailBody    = 'Halo Tim ArenaHub,\n\nSaya membutuhkan bantuan mengenai:\n\n';
+
   bool _tentangExpanded = false;
 
   final List<Map<String, dynamic>> _faqList = [
@@ -49,26 +52,41 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
         color: color, letterSpacing: spacing, height: height);
   }
 
-  // ── Buka email ────────────────────────────────────────────────────────────────
-  void _hubungiEmail() {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Row(
-        children: [
-          const Icon(Icons.email_outlined, color: Colors.white, size: 20),
-          const SizedBox(width: 10),
-          Text('Fitur email akan segera tersedia!',
-              style: _p(size: 13, color: Colors.white)),
-        ],
-      ),
-      backgroundColor: _green,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      duration: const Duration(seconds: 2),
-    ),
-  );
-}
+  Future<void> _hubungiEmail() async {
+    // Encode manual agar spasi tidak jadi '+'
+    final String subject = Uri.encodeComponent(_emailSubject);
+    final String body    = Uri.encodeComponent(_emailBody);
+    final Uri emailUri   = Uri.parse(
+      'mailto:$_adminEmail?subject=$subject&body=$body',
+    );
+
+    try {
+      await launchUrl(emailUri, mode: LaunchMode.platformDefault);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(children: [
+            const Icon(Icons.email_outlined, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Hubungi kami di: $_adminEmail',
+                style: _p(size: 13, color: Colors.white),
+              ),
+            ),
+          ]),
+          backgroundColor: _green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -76,7 +94,6 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Top Bar putih ─────────────────────────────────────────────
             Container(
               color: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -86,16 +103,16 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: IconButton(
-                      icon: const Icon(Icons.arrow_back_rounded, color: _primaryDark),
+                      icon: const Icon(Icons.arrow_back_rounded,
+                          color: _primaryDark),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ),
-                  Text('Pusat Bantuan', style: _p(size: 17, weight: FontWeight.w600)),
+                  Text('Pusat Bantuan',
+                      style: _p(size: 17, weight: FontWeight.w600)),
                 ],
               ),
             ),
-
-            // ── Scrollable Content ────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -103,24 +120,14 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 20),
-
-                    // ── Hero Banner ───────────────────────────────────────
                     _buildHeroBanner(),
                     const SizedBox(height: 24),
-
-                    // ── Tentang Arena Hub (accordion) ─────────────────────
                     _buildTentangSection(),
                     const SizedBox(height: 20),
-
-                    // ── FAQ Section ───────────────────────────────────────
                     _buildFaqSection(),
                     const SizedBox(height: 28),
-
-                    // ── Hubungi Kami card ─────────────────────────────────
                     _buildHubungiCard(),
                     const SizedBox(height: 20),
-
-                    // ── Footer ────────────────────────────────────────────
                     Center(
                       child: Text('© 2026 ArenaHub',
                           style: _p(size: 12, color: Colors.grey.shade400)),
@@ -136,7 +143,6 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
     );
   }
 
-  // ── Hero Banner ───────────────────────────────────────────────────────────────
   Widget _buildHeroBanner() {
     return Container(
       width: double.infinity,
@@ -151,7 +157,6 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
       ),
       child: Stack(
         children: [
-          // Decorative circles
           Positioned(
             right: -20, top: -20,
             child: Container(
@@ -172,7 +177,6 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
               ),
             ),
           ),
-          // Text
           Padding(
             padding: const EdgeInsets.all(22),
             child: Column(
@@ -181,7 +185,8 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
               children: [
                 Text(
                   'Halo! Apa yang bisa kami\nbantu hari ini?',
-                  style: _p(size: 18, weight: FontWeight.bold, color: Colors.white, height: 1.3),
+                  style: _p(size: 18, weight: FontWeight.bold,
+                      color: Colors.white, height: 1.3),
                 ),
               ],
             ),
@@ -191,35 +196,35 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
     );
   }
 
-  // ── Tentang Arena Hub (single accordion) ─────────────────────────────────────
   Widget _buildTentangSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header row (clickable)
         InkWell(
-          onTap: () => setState(() => _tentangExpanded = !_tentangExpanded),
+          onTap: () =>
+              setState(() => _tentangExpanded = !_tentangExpanded),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, color: _accent, size: 20),
+                Icon(Icons.info_outline_rounded, color: _accent, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text('Tentang Arena Hub',
-                      style: _p(size: 15, weight: FontWeight.w600, color: _accent)),
+                      style: _p(size: 15,
+                          weight: FontWeight.w600, color: _accent)),
                 ),
                 Icon(
-                  _tentangExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                  _tentangExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
                   color: _accent, size: 22,
                 ),
               ],
             ),
           ),
         ),
-
-        // Expanded content
         AnimatedCrossFade(
           firstChild: const SizedBox.shrink(),
           secondChild: Container(
@@ -247,23 +252,20 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
     );
   }
 
-  // ── FAQ Section ───────────────────────────────────────────────────────────────
   Widget _buildFaqSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Section title
         Row(
           children: [
-            const Icon(Icons.quiz_outlined, color: _accent, size: 20),
+            Icon(Icons.quiz_outlined, color: _accent, size: 20),
             const SizedBox(width: 8),
             Text('Pertanyaan Umum (FAQ)',
-                style: _p(size: 15, weight: FontWeight.w600, color: _accent)),
+                style: _p(size: 15,
+                    weight: FontWeight.w600, color: _accent)),
           ],
         ),
         const SizedBox(height: 14),
-
-        // FAQ accordion items
         ...List.generate(_faqList.length, (i) {
           final item = _faqList[i];
           return Container(
@@ -277,13 +279,17 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
               ],
             ),
             child: Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
-                tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                tilePadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 4),
+                childrenPadding:
+                    const EdgeInsets.fromLTRB(16, 0, 16, 14),
                 title: Text(
                   item['question'] as String,
-                  style: _p(size: 13, weight: FontWeight.w600, color: _textDark),
+                  style: _p(size: 13,
+                      weight: FontWeight.w600, color: _textDark),
                 ),
                 trailing: Icon(
                   item['expanded'] as bool
@@ -295,10 +301,8 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
                   setState(() => _faqList[i]['expanded'] = expanded);
                 },
                 children: [
-                  Text(
-                    item['answer'] as String,
-                    style: _p(size: 13, color: Colors.grey.shade600),
-                  ),
+                  Text(item['answer'] as String,
+                      style: _p(size: 13, color: Colors.grey.shade600)),
                 ],
               ),
             ),
@@ -308,7 +312,6 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
     );
   }
 
-  // ── Hubungi Kami Card ─────────────────────────────────────────────────────────
   Widget _buildHubungiCard() {
     return Container(
       width: double.infinity,
@@ -323,37 +326,47 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
       ),
       child: Column(
         children: [
-          // Icon
           Container(
             width: 56, height: 56,
             decoration: const BoxDecoration(
               color: _primaryDark,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.headset_mic_rounded, color: Colors.white, size: 28),
+            child: const Icon(Icons.headset_mic_rounded,
+                color: Colors.white, size: 28),
           ),
           const SizedBox(height: 14),
           Text('Hubungi Kami',
-              style: _p(size: 16, weight: FontWeight.bold, color: _primaryDark)),
+              style: _p(size: 16,
+                  weight: FontWeight.bold, color: _primaryDark)),
           const SizedBox(height: 6),
           Text(
             'Jika Anda butuh bantuan lebih lanjut,\nsilakan hubungi kami.',
             textAlign: TextAlign.center,
             style: _p(size: 13, color: Colors.grey.shade600),
           ),
+          const SizedBox(height: 4),
+          // Tampilkan alamat email
+          Text(
+            _adminEmail,
+            style: _p(size: 13, weight: FontWeight.w600, color: _accent),
+          ),
           const SizedBox(height: 18),
-          // Hubungi Disini button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: _hubungiEmail,
-              icon: const Icon(Icons.email_outlined, color: Colors.white, size: 18),
+              icon: const Icon(Icons.email_outlined,
+                  color: Colors.white, size: 18),
               label: Text('Hubungi Disini',
-                  style: _p(size: 14, weight: FontWeight.w600, color: Colors.white)),
+                  style: _p(size: 14,
+                      weight: FontWeight.w600, color: Colors.white)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _green,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
             ),
