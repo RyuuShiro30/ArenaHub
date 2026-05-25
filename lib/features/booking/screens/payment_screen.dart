@@ -230,13 +230,22 @@ class _PaymentScreenState extends State<PaymentScreen> {
             'phone': widget.phone,
             'total_harga': widget.totalHarga,
             'status_pembayaran': statusPembayaran,
-            'tanggal_booking': FieldValue.serverTimestamp(), // Waktu transaksi
+            // Field kompatibilitas — dibaca oleh pilih_jadwal.dart & home_screen
+            'status': status == 'settlement' ? 'confirmed' : status,
+            'tanggal_booking': FieldValue.serverTimestamp(),
             'tanggal_main': widget.selectedDate,
+            'tanggal': widget.selectedDate, // alias untuk tanggal_main
             'jam_main': widget.jamMain,
-            'selected_times': widget.jamMain, // ← tambah ini
-            'kode_promo': widget.kodePromo ?? '',   // ← tambah ini
-            'diskon': widget.diskon,                // ← tambah ini
-            'biaya_layanan': widget.totalHarga - widget.subtotal + widget.diskon, // ← tambah ini
+            'selected_times': widget.jamMain,
+            // Slots sebagai List<String> agar mudah diproses
+            'slots': widget.jamMain
+                .split(',')
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList(),
+            'kode_promo': widget.kodePromo ?? '',
+            'diskon': widget.diskon,
+            'biaya_layanan': widget.totalHarga - widget.subtotal + widget.diskon,
           }, SetOptions(merge: true));
           // update pemakaian promo kalau ada
           if (widget.kodePromo != null && widget.kodePromo!.isNotEmpty) {
@@ -258,7 +267,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
           });
 
           // 3. PINDAH KE HALAMAN SUKSES
-          // Kita kirim currentOrderId sebagai argumen agar bisa dibaca di halaman tujuan
           Navigator.pushNamedAndRemoveUntil(
             context,
             AppRoutes.paymentSucces,
@@ -274,13 +282,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
               .set({
             'order_id': currentOrderId,
             'nama_lapangan': widget.namaLapangan,
+            'lapangan_id': widget.lapanganId,
             'customer_name': widget.customerName,
             'email': widget.email,
             'phone': widget.phone,
             'total_harga': widget.totalHarga,
             'status_pembayaran': statusPembayaran,
+            'status': 'gagal',
             'tanggal_booking': FieldValue.serverTimestamp(),
             'tanggal_main': widget.selectedDate,
+            'tanggal': widget.selectedDate,
           }, SetOptions(merge: true));
 
           setState(() => isLoading = false);
@@ -302,7 +313,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final int serviceFee = 5000;
+    const int serviceFee = 5000;
     final int basePrice = widget.totalHarga - serviceFee;
 
     return Scaffold(
@@ -365,7 +376,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                Container(
+                SizedBox(
                   height: 140,
                   width: double.infinity,
                   child: widget.imagePath.isNotEmpty

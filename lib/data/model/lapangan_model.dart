@@ -39,7 +39,7 @@ class LapanganModel {
       lokasi: data['lokasi'] ?? '',
       harga: (data['harga'] as num?)?.toInt() ?? 0,
       kapasitas: (data['kapasitas'] as num?)?.toInt() ?? 0,
-      rating: (data['rating'] as num?)?.toDouble() ?? 0.0,
+      rating: (data['rating_overall'] as num?)?.toDouble() ?? 0.0,
       mapsUrl: data['maps_url'] ?? '',
       iconUrl: data['icon_url'] ?? '',
       foto: List<String>.from(data['foto'] ?? []),

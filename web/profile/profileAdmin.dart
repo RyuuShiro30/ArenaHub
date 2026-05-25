@@ -555,24 +555,26 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
               color: _blueBg,
               border: Border.all(color: _blue.withOpacity(0.3), width: 3),
             ),
-            child: const Icon(Icons.person_rounded,
-                size: 56, color: Color(0xFF93B4F0)),
-          ),
-          Positioned(
-            bottom: 4, right: 4,
-            child: Container(
-              width: 32, height: 32,
-              decoration: BoxDecoration(
-                color: _blue,
-                shape: BoxShape.circle,
-                border: Border.all(color: _white, width: 2.5),
-                boxShadow: [
-                  BoxShadow(color: _blue.withOpacity(0.3),
-                      blurRadius: 6, offset: const Offset(0, 2)),
-                ],
-              ),
-              child: const Icon(Icons.edit_rounded,
-                  size: 15, color: Colors.white),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline_rounded, color: _blue, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Catatan Keamanan',
+                          style: _t(size: 13, weight: FontWeight.w700, color: _blue)),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Pastikan kata sandi Anda memiliki minimal 8 karakter dengan kombinasi angka dan simbol untuk keamanan maksimal.',
+                        style: _t(size: 12, color: _muted, spacing: 0.1),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ]),
@@ -697,19 +699,45 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
             style: _t(size: 12, color: _muted)),
         const SizedBox(height: 32),
 
-        Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          OutlinedButton(
-            onPressed: _batalkan,
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: _border),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 28, vertical: 14),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Batalkan',
-                style: _t(size: 14, weight: FontWeight.w600,
-                    color: _text)),
+          // Buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Batalkan
+              OutlinedButton(
+                onPressed: _batalkan,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: _border),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text('Batalkan',
+                    style: _t(size: 14, weight: FontWeight.w600, color: _text)),
+              ),
+              const SizedBox(width: 14),
+
+              // Simpan Perubahan
+              ElevatedButton(
+                onPressed: _saving ? null : _simpanPerubahan,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _blue,
+                  disabledBackgroundColor: _blue.withOpacity(0.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20, height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text('Simpan Perubahan',
+                        style: _t(size: 14, weight: FontWeight.w600, color: Colors.white)),
+              ),
+            ],
           ),
           const SizedBox(width: 14),
           ElevatedButton(
@@ -778,5 +806,55 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     );
   }
 
-
+  // ── Logout Card ────────────────────────────────────────────────────────
+  Widget _buildLogoutCard() {
+    return Container(
+      width: 380,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: _red.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.logout_rounded, color: _red, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Keluar Sesi',
+                    style: _t(size: 14, weight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('Keluar dari semua perangkat yang terhubung.',
+                    style: _t(size: 12, color: _muted)),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: _keluarSesi,
+                  child: Text('Keluar Sekarang',
+                      style: _t(size: 13, weight: FontWeight.w700, color: _red)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

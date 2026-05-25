@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'konfirmasi_booking.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../data/model/booking_model.dart';
+import 'promo.dart';
 
 class FormBookingPage extends StatefulWidget {
   final String lapanganId;
@@ -435,6 +436,24 @@ class _FormBookingPageState extends State<FormBookingPage> {
                   fontWeight: FontWeight.w600,
                   fontSize: 15,
                   color: Color(0xFF1A1A2E),
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => PromoPage()),
+                  );
+                },
+                child: const Text(
+                  'Lihat Promo',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: _primaryColor,
+                    decoration: TextDecoration.underline,
+                  ),
                 ),
               ),
             ],
