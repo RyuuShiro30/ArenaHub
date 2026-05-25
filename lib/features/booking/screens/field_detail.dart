@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:appbookinglapangan/features/booking/screens/pilih_jadwal.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'semua_ulasan.dart';
 
 // --- Model ---
 
@@ -678,7 +679,17 @@ class _DetailLapanganPageState extends State<DetailLapanganPage> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SemuaUlasanPage(
+                        lapanganId: _data!.id,
+                        namaLapangan: _data!.namaLapangan,
+                      ),
+                    ),
+                  );
+                },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _primaryColor,
                   side: const BorderSide(color: Color(0xFFDDE3EE)),
