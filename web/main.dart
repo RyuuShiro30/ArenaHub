@@ -30,7 +30,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Admin ArenaHub',
-
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -40,16 +39,13 @@ class MyApp extends StatelessWidget {
         Locale('id', 'ID'),
         Locale('en', 'US'),
       ],
-
       theme: ThemeData(
         textTheme: GoogleFonts.plusJakartaSansTextTheme(
           Theme.of(context).textTheme,
         ),
         useMaterial3: true,
       ),
-
-      home: const AdminDashboardScreen(),
-
+      home: const AdminLoginPage(),
       routes: {
         '/dashboard': (context) => const AdminDashboardScreen(),
         '/profile': (context) => const ProfileAdminScreen(),
