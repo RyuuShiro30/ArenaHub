@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../auth/login.dart';
 import '../booking/kelola_booking.dart'; 
 import '../kelola_jadwal/kelolaJadwal.dart';
+import '../promo/kelola_promo.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -36,8 +37,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final List<Map<String, dynamic>> _navItems = [
     {'icon': Icons.dashboard_rounded,            'label': 'Dashboard'},
     {'icon': Icons.confirmation_number_outlined, 'label': 'Kelola Booking'},
-    {'icon': Icons.sports_soccer_rounded,        'label': 'Kelola Lapangan'},
+    {'icon': Icons.percent_rounded,        'label': 'Kelola Promo'},
     {'icon': Icons.event_note_outlined,          'label': 'Kelola Jadwal'},
+    {'icon': Icons.sports_soccer_rounded, 'label': 'Kelola Lapangan'},
     {'icon': Icons.person_outline_rounded,       'label': 'Profil'},
   ];
 
@@ -186,7 +188,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 1:
         // ← Kelola Booking: langsung embed widget-nya
         return const KelolaBookingScreen();
-
+      case 2:
+        return const KelolaPromoScreen();
       case 3:
         // ← Kelola Jadwal: buat widget baru dan embed
         return const KelolaJadwalScreen();
@@ -207,6 +210,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: _selectedNav == 1
               // Kelola Booking punya top bar sendiri, langsung tampil
               ? const KelolaBookingScreen()
+              : _selectedNav == 2
+              ? const KelolaPromoScreen()
               : _selectedNav == 3
               // Kelola Jadwal punya top bar sendiri, langsung tampil
               ? const KelolaJadwalScreen()
@@ -529,7 +534,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   //topbar
   Widget _buildTopBar() {
     final titles = ['Dashboard', 'Kelola Booking',
-        'Kelola Lapangan', 'Kelola Jadwal', 'Profil'];
+        'Kelola Promo', 'Kelola Jadwal', 'Kelola Lapangan','Profil'];
     return Container(
       height: 60, color: _white,
       padding: const EdgeInsets.symmetric(horizontal: 28),

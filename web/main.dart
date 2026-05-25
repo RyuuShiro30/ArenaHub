@@ -11,6 +11,7 @@ import 'profile/profileAdmin.dart';
 import 'field/add_field.dart';
 import 'field/kelola_lapangan.dart';
 import 'booking/kelola_booking.dart';
+import 'promo/kelola_promo.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,13 +46,16 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
+
       home: const AdminLoginPage(),
+      
       routes: {
         '/dashboard': (context) => const AdminDashboardScreen(),
         '/profile': (context) => const ProfileAdminScreen(),
         '/field': (context) => const KelolaLapanganScreen(),
         '/add_field': (context) => const AddFieldScreen(),
         '/booking': (context) => const KelolaBookingScreen(),
+        '/promo': (context) => const KelolaPromoScreen(),
       },
     );
   }
