@@ -271,7 +271,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
         Text('Kelola Booking',
             style: _t(size: 17, weight: FontWeight.w700)),
         const Spacer(),
-        Icon(Icons.settings_outlined, color: _muted, size: 22),
       ]),
     );
   }
