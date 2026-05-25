@@ -18,7 +18,7 @@ class NotificationService {
     tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const ios = DarwinInitializationSettings(
+    const ios     = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
@@ -32,6 +32,12 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+
+    // Request exact alarm permission (Android 12+)
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestExactAlarmsPermission();
   }
 
   // ── Schedule notif dari data Firestore ────────────────────────────────────
@@ -54,41 +60,44 @@ class NotificationService {
       if (email.isEmpty) return;
 
       // Ambil semua booking user yang akan datang
-      final now = DateTime.now();
+      final now      = DateTime.now();
       final todayStr = '${now.year}-'
           '${now.month.toString().padLeft(2, '0')}-'
           '${now.day.toString().padLeft(2, '0')}';
 
+      // Query tanpa filter status — filter manual di bawah
       final snapshot = await FirebaseFirestore.instance
           .collection('bookings')
           .where('email', isEqualTo: email)
-          .where('status_pembayaran', whereIn: [
-            'sudah dibayar',
-            'pembayaran selesai',
-            'selesai',
-            'pending',
-          ])
           .get();
 
       int notifId = 1000; // mulai dari ID 1000
 
       for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final tanggalMain = data['tanggal_main']?.toString() ?? '';
-        final jamMain = data['jam_main']?.toString() ?? '';
-        final namaLapangan =
-            data['nama_lapangan']?.toString() ?? 'Lapangan';
+        final data           = doc.data();
+        final tanggalMain    = data['tanggal_main']?.toString() ?? '';
+        final jamMain        = data['jam_main']?.toString() ?? '';
+        final namaLapangan   = data['nama_lapangan']?.toString() ?? 'Lapangan';
+        final statusPembayaran = (data['status_pembayaran'] ?? '').toString().toLowerCase();
+
+        // Skip status gagal/cancelled
+        if (statusPembayaran == 'gagal' || statusPembayaran == 'cancelled' ||
+            statusPembayaran == 'batal') {
+          continue;
+        }
 
         // Skip kalau tanggal sudah lewat
         if (tanggalMain.isEmpty || tanggalMain.compareTo(todayStr) < 0) {
           continue;
         }
 
+        print('📋 Booking ditemukan: $namaLapangan | $tanggalMain | $jamMain | status: $statusPembayaran');
+
         await _scheduleReminder(
-          id: notifId++,
+          id:           notifId++,
           namaLapangan: namaLapangan,
-          tanggalMain: tanggalMain,
-          jamMain: jamMain,
+          tanggalMain:  tanggalMain,
+          jamMain:      jamMain,
         );
       }
 
@@ -103,34 +112,31 @@ class NotificationService {
     required int id,
     required String namaLapangan,
     required String tanggalMain, // "2026-05-23"
-    required String jamMain, // "08.00 - 09.00" atau "08.00 - 09.00, 09.00 - 10.00"
+    required String jamMain,     // "08.00 - 09.00" atau "08.00 - 09.00, 09.00 - 10.00"
   }) async {
     try {
       // Ambil jam pertama
       final firstSlot = jamMain.split(',').first.trim();
-      final jamStr = firstSlot.split(' - ').first.trim(); // "08.00"
-      final jamParts = jamStr.replaceAll('.', ':').split(':');
+      final jamStr    = firstSlot.split(' - ').first.trim(); // "08.00"
+      // Handle both '08.00' and '08:00' formats
+      final jamParts  = jamStr.replaceAll('.', ':').trim().split(':');
 
       if (jamParts.length < 2) return;
 
-      final hour = int.tryParse(jamParts[0]) ?? 0;
+      final hour   = int.tryParse(jamParts[0]) ?? 0;
       final minute = int.tryParse(jamParts[1]) ?? 0;
 
       final dateParts = tanggalMain.split('-');
       if (dateParts.length < 3) return;
 
-      final year = int.tryParse(dateParts[0]) ?? 0;
+      final year  = int.tryParse(dateParts[0]) ?? 0;
       final month = int.tryParse(dateParts[1]) ?? 0;
-      final day = int.tryParse(dateParts[2]) ?? 0;
+      final day   = int.tryParse(dateParts[2]) ?? 0;
 
       // Waktu main
       final waktuMain = tz.TZDateTime(
         tz.getLocation('Asia/Jakarta'),
-        year,
-        month,
-        day,
-        hour,
-        minute,
+        year, month, day, hour, minute,
       );
 
       // Notif 2 jam sebelum main
@@ -160,7 +166,7 @@ class NotificationService {
         '$namaLapangan mulai dalam 2 jam! Jangan sampai telat ya 🏃',
         waktuNotif,
         const NotificationDetails(android: androidDetails, iOS: iosDetails),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        androidScheduleMode: AndroidScheduleMode.inexact,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
       );
