@@ -2,45 +2,81 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:html' as html;
+import '../auth/login.dart';
+import '../admin_notifiers.dart';
+import 'package:http_parser/http_parser.dart';
 
 class ProfileAdminScreen extends StatefulWidget {
   const ProfileAdminScreen({super.key});
-
   @override
   State<ProfileAdminScreen> createState() => _ProfileAdminScreenState();
 }
 
 class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   final _firestore = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
+  final _auth      = FirebaseAuth.instance;
 
-  // ── Colors ──────────────────────────────────────────────────────────────
-  static const Color _blue     = Color(0xFF2563EB);
-  static const Color _blueBg   = Color(0xFFEFF6FF);
-  static const Color _blueLt   = Color(0xFFDBEAFE);
-  static const Color _bg       = Color(0xFFF4F6F9);
-  static const Color _white    = Color(0xFFFFFFFF);
-  static const Color _text     = Color(0xFF1A2B3C);
-  static const Color _muted    = Color(0xFF6B7280);
-  static const Color _border   = Color(0xFFE5E7EB);
-  static const Color _red      = Color(0xFFEF4444);
-  static const Color _green    = Color(0xFF22C55E);
+  // ── Cloudinary config ────────────────────────────────────────────────────
+  static const String _cloudName    = 'dewncgzjd';
+  static const String _uploadPreset = 'admin_profile';
 
-  // ── Controllers ────────────────────────────────────────────────────────
+  // ── Colors ───────────────────────────────────────────────────────────────
+  static const Color _blue   = Color(0xFF2563EB);
+  static const Color _blueBg = Color(0xFFEFF6FF);
+  static const Color _blueLt = Color(0xFFDBEAFE);
+  static const Color _bg     = Color(0xFFF4F6F9);
+  static const Color _white  = Color(0xFFFFFFFF);
+  static const Color _text   = Color(0xFF1A2B3C);
+  static const Color _muted  = Color(0xFF6B7280);
+  static const Color _border = Color(0xFFE5E7EB);
+  static const Color _red    = Color(0xFFEF4444);
+  static const Color _green  = Color(0xFF22C55E);
+
+  // ── Sidebar ───────────────────────────────────────────────────────────────
+  bool _expanded    = true;
+  int  _selectedNav = 4;
+
+  static const double _collapsedW = 56;
+  static const double _expandedW  = 220;
+
+  static const Map<int, String> _navRoutes = {
+    0: '/admin-dashboard',
+    1: '/admin-booking',
+    2: '/admin-lapangan',
+    3: '/admin-jadwal',
+    4: '/profile',
+  };
+
+  final List<Map<String, dynamic>> _navItems = [
+    {'icon': Icons.dashboard_rounded,           'label': 'Dashboard'},
+    {'icon': Icons.confirmation_number_outlined, 'label': 'Kelola Booking'},
+    {'icon': Icons.sports_soccer_rounded,       'label': 'Kelola Lapangan'},
+    {'icon': Icons.event_note_outlined,         'label': 'Kelola Jadwal'},
+    {'icon': Icons.person_outline_rounded,      'label': 'Profil'},
+  ];
+
+  // ── Controllers ───────────────────────────────────────────────────────────
   final _namaController  = TextEditingController();
   final _emailController = TextEditingController();
   final _sandiController = TextEditingController();
 
-  // ── State ──────────────────────────────────────────────────────────────
-  bool _obscureSandi = true;
-  bool _loading      = true;
-  bool _saving       = false;
+  // ── State ─────────────────────────────────────────────────────────────────
+  bool    _obscureSandi  = true;
+  bool    _loading       = true;
+  bool    _saving        = false;
+  bool    _uploadingFoto = false;
 
-  String _namaAwal  = '';
-  String _emailAwal = '';
-  String _status    = 'Aktif';
-  String _level     = 'Super';
+  String  _namaAwal   = '';
+  String  _emailAwal  = '';
+  String  _adminName  = 'Admin';
+  String  _adminRole  = 'Administrator';
+  String  _status     = 'Aktif';
+  String  _level      = 'Super';
   String? _adminDocId;
+  String? _fotoUrl;      // URL foto dari Cloudinary
 
   @override
   void initState() {
@@ -56,10 +92,9 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     super.dispose();
   }
 
-  // ── Fetch admin profile from Firestore ─────────────────────────────────
+  // ── Fetch profile ─────────────────────────────────────────────────────────
   Future<void> _fetchAdminProfile() async {
     try {
-      // Try to get admin profile from admin_profile collection
       final snapshot = await _firestore
           .collection('admin_profile')
           .limit(1)
@@ -69,55 +104,108 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
         final doc  = snapshot.docs.first;
         final data = doc.data();
         _adminDocId = doc.id;
-
         if (mounted) {
           setState(() {
             _namaAwal  = data['fullName'] ?? 'Admin ArenaHub';
-            _emailAwal = data['email']    ?? 'administrator@arenahub.com';
-            _status    = data['status']   ?? 'Aktif';
-            _level     = data['level']    ?? 'Super';
+            _emailAwal = data['email']    ?? '';
+            _status    = _formatStatus(data['status'] ?? 'active');
+            _level     = data['level']   ?? 'Super';
+            _adminName = _namaAwal;
+            _adminRole = _level;
+            _fotoUrl   = data['photoUrl'] as String?;
             _namaController.text  = _namaAwal;
             _emailController.text = _emailAwal;
             _loading = false;
           });
         }
       } else {
-        // Create default admin profile document
-        final docRef = await _firestore.collection('admin_profile').add({
-          'fullName':  'Admin ArenaHub',
-          'email':     'administrator@arenahub.com',
-          'status':    'Aktif',
-          'level':     'Super',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        _adminDocId = docRef.id;
-
-        if (mounted) {
-          setState(() {
-            _namaAwal  = 'Admin ArenaHub';
-            _emailAwal = 'administrator@arenahub.com';
-            _namaController.text  = _namaAwal;
-            _emailController.text = _emailAwal;
-            _loading = false;
-          });
-        }
+        if (mounted) setState(() => _loading = false);
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _namaAwal  = 'Admin ArenaHub';
-          _emailAwal = 'administrator@arenahub.com';
-          _namaController.text  = _namaAwal;
-          _emailController.text = _emailAwal;
-          _loading = false;
-        });
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  // ── Save changes to Firestore ──────────────────────────────────────────
+  String _formatStatus(String s) {
+    switch (s.toLowerCase()) {
+      case 'active': case 'aktif': return 'Aktif';
+      case 'inactive': case 'nonaktif': return 'Nonaktif';
+      default: return s;
+    }
+  }
+
+ Future<void> _pilihDanUploadFoto() async {
+  setState(() => _uploadingFoto = true);
+
+  try {
+    // Pakai html file picker untuk web
+    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+    uploadInput.click();
+
+    await uploadInput.onChange.first;
+    if (uploadInput.files == null || uploadInput.files!.isEmpty) {
+      setState(() => _uploadingFoto = false);
+      return;
+    }
+
+    final file   = uploadInput.files!.first;
+    final reader = html.FileReader();
+    reader.readAsArrayBuffer(file);
+    await reader.onLoad.first;
+
+    final bytes   = reader.result as List<int>;
+    final base64  = base64Encode(bytes);
+    final ext     = file.name.split('.').last.toLowerCase();
+    final dataUri = 'data:image/$ext;base64,$base64';
+
+    final uri = Uri.parse('https://api.cloudinary.com/v1_1/$_cloudName/image/upload');
+final request = http.MultipartRequest('POST', uri)
+  ..fields['upload_preset'] = _uploadPreset
+  ..files.add(http.MultipartFile.fromBytes(
+    'file',
+    bytes,
+    filename: 'admin_photo.jpg',
+    contentType: MediaType('image', 'jpeg'),
+  ));
+
+final streamedResponse = await request.send();
+final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final url  = data['secure_url'] as String;
+
+      if (_adminDocId != null) {
+        await _firestore
+            .collection('admin_profile')
+            .doc(_adminDocId)
+            .update({
+          'photoUrl' : url,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _fotoUrl       = url;
+          _uploadingFoto = false;
+        });
+        adminPhotoNotifier.value = url; 
+        _showSnackBar('Foto profil berhasil diperbarui!');
+      }
+    } else {
+       print('CLOUDINARY ERROR: ${response.body}');
+      throw Exception('Upload gagal: ${response.statusCode}');
+    }
+  } catch (e) {
+    if (mounted) {
+      setState(() => _uploadingFoto = false);
+      _showSnackBar('Gagal upload foto: $e', isError: true);
+    }
+  }
+}
+
+  // ── Simpan perubahan ──────────────────────────────────────────────────────
   Future<void> _simpanPerubahan() async {
     if (_saving) return;
 
@@ -133,37 +221,45 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     setState(() => _saving = true);
 
     try {
-      // Update Firestore document
+      // Update Firestore
       if (_adminDocId != null) {
-        await _firestore.collection('admin_profile').doc(_adminDocId).update({
-          'fullName':  nama,
-          'email':     email,
+        await _firestore
+            .collection('admin_profile')
+            .doc(_adminDocId)
+            .update({
+          'fullName' : nama,
+          'email'    : email,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
 
-      // Update password if provided
+      // Update email Firebase Auth jika berubah
+      final user = _auth.currentUser;
+      if (user != null && email != user.email) {
+        await user.verifyBeforeUpdateEmail(email);
+      }
+
+      // Update password jika diisi
       if (sandi.isNotEmpty) {
         if (sandi.length < 8) {
           _showSnackBar('Kata sandi minimal 8 karakter', isError: true);
           setState(() => _saving = false);
           return;
         }
-
-        final user = _auth.currentUser;
-        if (user != null) {
-          await user.updatePassword(sandi);
-        }
+        if (user != null) await user.updatePassword(sandi);
       }
 
       if (mounted) {
         setState(() {
           _namaAwal  = nama;
           _emailAwal = email;
+          _adminName = nama;
           _sandiController.clear();
           _saving = false;
         });
         _showSnackBar('Profil berhasil diperbarui!');
+        adminNameNotifier.value = nama;
+  adminRoleNotifier.value = _level;
       }
     } catch (e) {
       if (mounted) {
@@ -173,7 +269,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     }
   }
 
-  // ── Reset form ─────────────────────────────────────────────────────────
   void _batalkan() {
     setState(() {
       _namaController.text  = _namaAwal;
@@ -182,118 +277,351 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     });
   }
 
-  // ── Snackbar ───────────────────────────────────────────────────────────
+  
+
+  // ── Logout ────────────────────────────────────────────────────────────────
+  void _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Text('Keluar dari Akun?',
+            style: _t(size: 16, weight: FontWeight.w700)),
+        content: Text('Kamu akan keluar dari panel admin.',
+            style: _t(size: 13, color: _muted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Batal', style: _t(size: 14, color: _muted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _red,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            child: Text('Keluar',
+                style: _t(size: 14, weight: FontWeight.w600,
+                    color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await _auth.signOut();
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminLoginPage()),
+          (route) => false,
+        );
+      }
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
   void _showSnackBar(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(children: [
-          Icon(
-            isError ? Icons.error_outline_rounded : Icons.check_circle_rounded,
-            color: Colors.white, size: 20,
-          ),
+          Icon(isError
+              ? Icons.error_outline_rounded
+              : Icons.check_circle_rounded,
+              color: Colors.white, size: 20),
           const SizedBox(width: 10),
-          Expanded(child: Text(msg, style: _t(size: 13, color: Colors.white))),
+          Expanded(child: Text(msg,
+              style: _t(size: 13, color: Colors.white))),
         ]),
         backgroundColor: isError ? _red : _green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  // ── Logout ─────────────────────────────────────────────────────────────
-  void _keluarSesi() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Keluar Sesi?', style: _t(size: 16, weight: FontWeight.w700)),
-        content: Text(
-          'Anda akan keluar dari semua perangkat yang terhubung.',
-          style: _t(size: 13, color: _muted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Batal', style: _t(size: 14, color: _muted)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _auth.signOut();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: Text('Keluar', style: _t(size: 14, weight: FontWeight.w600, color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+  String _initials(String name) {
+    final p = name.trim().split(' ');
+    return p.length >= 2
+        ? '${p[0][0]}${p[1][0]}'.toUpperCase()
+        : name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
-  // ── Text style helper ──────────────────────────────────────────────────
   TextStyle _t({double size = 14, FontWeight weight = FontWeight.normal,
       Color color = _text, double spacing = 0}) =>
       GoogleFonts.plusJakartaSans(fontSize: size, fontWeight: weight,
           color: color, letterSpacing: spacing);
 
-  // ── BUILD ──────────────────────────────────────────────────────────────
+  // ── BUILD ─────────────────────────────────────────────────────────────────
   @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: _blue));
-    }
-
-    return Material(
-      color: _bg,
-      child: SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header ───────────────────────────────────────────────────
-          Text('Profil Saya',
-              style: _t(size: 24, weight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text('Kelola informasi akun dan preferensi keamanan Anda di ArenaHub.',
-              style: _t(size: 14, color: _muted)),
-          const SizedBox(height: 28),
-
-          // ── Main content: Profile Card + Detail Form ────────────────
-          Row(
+Widget build(BuildContext context) {
+  return _loading
+      ? const Center(child: CircularProgressIndicator(color: _blue))
+      : SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ─── LEFT: Profile Card ─────────────────────────────────
-              SizedBox(
-                width: 300,
-                child: _buildProfileCard(),
+              Text('Profil Saya',
+                  style: _t(size: 24, weight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text(
+                'Kelola informasi akun dan preferensi keamanan Anda di ArenaHub.',
+                style: _t(size: 14, color: _muted),
               ),
-              const SizedBox(width: 24),
-
-              // ─── RIGHT: Detail Information ──────────────────────────
-              Expanded(child: _buildDetailForm()),
+              const SizedBox(height: 28),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 300, child: _buildProfileCard()),
+                  const SizedBox(width: 24),
+                  Expanded(child: _buildDetailForm()),
+                ],
+              ),
             ],
           ),
+        );
+}
 
-          const SizedBox(height: 24),
+  // ── SIDEBAR ───────────────────────────────────────────────────────────────
+  Widget _buildSidebar() {
+    return ClipRect(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        width: _expanded ? _expandedW : _collapsedW,
+        color: _white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Logo
+            Container(
+              height: 64,
+              padding: EdgeInsets.symmetric(
+                  horizontal: _expanded ? 14 : 10),
+              decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: _border))),
+              child: Row(children: [
+                Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(
+                      color: _blue,
+                      borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.sports_soccer_rounded,
+                      color: Colors.white, size: 20),
+                ),
+                AnimatedOpacity(
+                  opacity: _expanded ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: SizedBox(
+                    width: _expandedW - 36 - 14 - 14,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ArenaHub',
+                              style: _t(size: 14, weight: FontWeight.w800,
+                                  color: _blue),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          Text('PANEL ADMINISTRASI',
+                              style: _t(size: 8, weight: FontWeight.w600,
+                                  color: _muted, spacing: 0.5),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
 
-          // ── Logout Section ──────────────────────────────────────────
-          Align(
-            alignment: Alignment.centerRight,
-            child: _buildLogoutCard(),
-          ),
-        ],
-      ),
+            const SizedBox(height: 12),
+
+            // Nav items
+            ...List.generate(_navItems.length, (i) {
+              final active = _selectedNav == i;
+              final item   = _navItems[i];
+              return GestureDetector(
+                onTap: () {
+                  setState(() => _selectedNav = i);
+                  if (i != 4) {
+                    final route = _navRoutes[i];
+                    if (route != null) {
+                      Navigator.pushReplacementNamed(context, route);
+                    }
+                  }
+                },
+                child: Container(
+                  margin: EdgeInsets.symmetric(
+                      horizontal: _expanded ? 8 : 4, vertical: 2),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: _expanded ? 10 : 4, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: active ? _blueBg : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        width: 3, height: 20,
+                        margin: EdgeInsets.only(right: _expanded ? 7 : 2),
+                        decoration: BoxDecoration(
+                          color: active ? _blue : Colors.transparent,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      Icon(item['icon'] as IconData,
+                          color: active ? _blue : _muted, size: 20),
+                      AnimatedOpacity(
+                        opacity: _expanded ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 150),
+                        child: SizedBox(
+                          width: _expanded ? _expandedW - 80 : 0,
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 10),
+                            child: Text(item['label'] as String,
+                                style: _t(size: 13,
+                                    weight: active
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: active ? _blue : _muted),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+
+            const Spacer(),
+
+            // Logout button
+            GestureDetector(
+              onTap: _logout,
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 10),
+                decoration: BoxDecoration(
+                  color: _red.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(width: 3, height: 20),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.logout_rounded,
+                        color: _red, size: 20),
+                    AnimatedOpacity(
+                      opacity: _expanded ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 150),
+                      child: SizedBox(
+                        width: _expanded ? _expandedW - 80 : 0,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 10),
+                          child: Text('Keluar',
+                              style: TextStyle(fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _red),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Admin info
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: _border))),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Avatar sidebar — tampilkan foto kalau ada
+                  Container(
+                    width: 36, height: 36,
+                    decoration: const BoxDecoration(
+                        shape: BoxShape.circle, color: _blue),
+                    child: ClipOval(
+                      child: _fotoUrl != null
+                          ? Image.network(_fotoUrl!, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  Center(child: Text(_initials(_adminName),
+                                      style: _t(size: 13,
+                                          weight: FontWeight.w700,
+                                          color: Colors.white))))
+                          : Center(child: Text(_initials(_adminName),
+                              style: _t(size: 13, weight: FontWeight.w700,
+                                  color: Colors.white))),
+                    ),
+                  ),
+                  AnimatedOpacity(
+                    opacity: _expanded ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 150),
+                    child: SizedBox(
+                      width: _expanded
+                          ? _expandedW - 36 - 12 - 12 - 10
+                          : 0,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_adminName,
+                                style: _t(size: 12,
+                                    weight: FontWeight.w700),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            Text(_adminRole,
+                                style: _t(size: 10, color: _muted),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ── Profile Card (Left Side) ───────────────────────────────────────────
+  // ── TOP BAR ───────────────────────────────────────────────────────────────
+  Widget _buildTopBar() {
+    return Container(
+      height: 60, color: _white,
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Row(children: [
+        Text('Profil', style: _t(size: 17, weight: FontWeight.w700)),
+        const Spacer(),
+      ]),
+    );
+  }
+
+  // ── PROFILE CARD ──────────────────────────────────────────────────────────
   Widget _buildProfileCard() {
     return Container(
       padding: const EdgeInsets.all(28),
@@ -302,127 +630,127 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _border),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.04),
+              blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
-      child: Column(
-        children: [
-          // Avatar
-          Stack(
-            children: [
-              Container(
-                width: 110,
-                height: 110,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _blueBg,
-                  border: Border.all(color: _blue.withOpacity(0.3), width: 3),
-                ),
-                child: const Icon(Icons.person_rounded, size: 56, color: Color(0xFF93B4F0)),
+      child: Column(children: [
+        // ── Avatar + tombol ganti foto ──────────────────────────────
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 110, height: 110,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _blueBg,
+                border: Border.all(
+                    color: _blue.withOpacity(0.3), width: 3),
               ),
-              Positioned(
-                bottom: 4,
-                right: 4,
+              child: ClipOval(
+                child: _uploadingFoto
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                            color: _blue, strokeWidth: 2))
+                    : _fotoUrl != null
+                        ? Image.network(_fotoUrl!, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                Icon(Icons.person_rounded,
+                                    size: 56,
+                                    color: _blue.withOpacity(0.4)))
+                        : Icon(Icons.person_rounded,
+                            size: 56,
+                            color: _blue.withOpacity(0.4)),
+              ),
+            ),
+            // Tombol edit foto
+            Positioned(
+              bottom: 4, right: 4,
+              child: GestureDetector(
+                onTap: _uploadingFoto ? null : _pilihDanUploadFoto,
                 child: Container(
-                  width: 32,
-                  height: 32,
+                  width: 32, height: 32,
                   decoration: BoxDecoration(
                     color: _blue,
                     shape: BoxShape.circle,
                     border: Border.all(color: _white, width: 2.5),
                     boxShadow: [
-                      BoxShadow(
-                        color: _blue.withOpacity(0.3),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
+                      BoxShadow(color: _blue.withOpacity(0.3),
+                          blurRadius: 6, offset: const Offset(0, 2)),
                     ],
                   ),
-                  child: const Icon(Icons.edit_rounded, size: 15, color: Colors.white),
+                  child: const Icon(Icons.camera_alt_rounded,
+                      size: 15, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+
+        Text(_namaAwal,
+            style: _t(size: 18, weight: FontWeight.w700),
+            textAlign: TextAlign.center),
+        const SizedBox(height: 4),
+        Text(_emailAwal,
+            style: _t(size: 13, color: _muted),
+            textAlign: TextAlign.center),
+        const SizedBox(height: 20),
+
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          _buildBadge('Status', _status, _blue),
+          const SizedBox(width: 24),
+          _buildBadge('Level', _level, _blue),
+        ]),
+        const SizedBox(height: 24),
+
+        // Catatan keamanan
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _blueBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _blueLt),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline_rounded,
+                  color: _blue, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Catatan Keamanan',
+                        style: _t(size: 13,
+                            weight: FontWeight.w700, color: _blue)),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Pastikan kata sandi Anda memiliki minimal 8 karakter dengan kombinasi angka dan simbol.',
+                      style: _t(size: 12, color: _muted, spacing: 0.1),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
-
-          // Name
-          Text(
-            _namaAwal,
-            style: _t(size: 18, weight: FontWeight.w700),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-
-          // Email
-          Text(
-            _emailAwal,
-            style: _t(size: 13, color: _muted),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-
-          // Status & Level badges
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildBadge('Status', _status, _blue),
-              const SizedBox(width: 24),
-              _buildBadge('Level', _level, _blue),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Security note
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _blueBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _blueLt),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.info_outline_rounded, color: _blue, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Catatan Keamanan',
-                          style: _t(size: 13, weight: FontWeight.w700, color: _blue)),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Pastikan kata sandi Anda memiliki minimal 8 karakter dengan kombinasi angka dan simbol untuk keamanan maksimal.',
-                        style: _t(size: 12, color: _muted, spacing: 0.1),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 
-  // ── Badge ──────────────────────────────────────────────────────────────
   Widget _buildBadge(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(label, style: _t(size: 12, weight: FontWeight.w600, color: color)),
-        const SizedBox(height: 4),
-        Text(value, style: _t(size: 15, weight: FontWeight.w800, color: _text)),
-      ],
-    );
+    return Column(children: [
+      Text(label,
+          style: _t(size: 12, weight: FontWeight.w600, color: color)),
+      const SizedBox(height: 4),
+      Text(value,
+          style: _t(size: 15, weight: FontWeight.w800, color: _text)),
+    ]);
   }
 
-  // ── Detail Form (Right Side) ───────────────────────────────────────────
+  // ── DETAIL FORM ───────────────────────────────────────────────────────────
   Widget _buildDetailForm() {
     return Container(
       padding: const EdgeInsets.all(28),
@@ -431,11 +759,8 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _border),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.04),
+              blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -445,7 +770,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
               style: _t(size: 20, weight: FontWeight.w700)),
           const SizedBox(height: 28),
 
-          // Nama Lengkap
           _buildLabel('Nama Lengkap'),
           const SizedBox(height: 8),
           _buildTextField(
@@ -455,7 +779,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
           ),
           const SizedBox(height: 22),
 
-          // Alamat Email
           _buildLabel('Alamat Email'),
           const SizedBox(height: 8),
           _buildTextField(
@@ -466,7 +789,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
           ),
           const SizedBox(height: 22),
 
-          // Kata Sandi Baru
           _buildLabel('Kata Sandi Baru'),
           const SizedBox(height: 8),
           _buildTextField(
@@ -479,44 +801,41 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                 _obscureSandi
                     ? Icons.visibility_outlined
                     : Icons.visibility_off_outlined,
-                color: _muted,
-                size: 20,
+                color: _muted, size: 20,
               ),
-              onPressed: () => setState(() => _obscureSandi = !_obscureSandi),
+              onPressed: () =>
+                  setState(() => _obscureSandi = !_obscureSandi),
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            'Kosongkan jika tidak ingin mengubah kata sandi.',
-            style: _t(size: 12, color: _muted),
-          ),
+          Text('Kosongkan jika tidak ingin mengubah kata sandi.',
+              style: _t(size: 12, color: _muted)),
           const SizedBox(height: 32),
 
-          // Buttons
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              // Batalkan
               OutlinedButton(
                 onPressed: _batalkan,
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: _border),
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 28, vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
                 child: Text('Batalkan',
-                    style: _t(size: 14, weight: FontWeight.w600, color: _text)),
+                    style: _t(size: 14, weight: FontWeight.w600,
+                        color: _text)),
               ),
               const SizedBox(width: 14),
-
-              // Simpan Perubahan
               ElevatedButton(
                 onPressed: _saving ? null : _simpanPerubahan,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _blue,
                   disabledBackgroundColor: _blue.withOpacity(0.5),
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 28, vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                   elevation: 0,
@@ -525,10 +844,10 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                     ? const SizedBox(
                         width: 20, height: 20,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
+                            strokeWidth: 2, color: Colors.white))
                     : Text('Simpan Perubahan',
-                        style: _t(size: 14, weight: FontWeight.w600, color: Colors.white)),
+                        style: _t(size: 14, weight: FontWeight.w600,
+                            color: Colors.white)),
               ),
             ],
           ),
@@ -537,12 +856,9 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     );
   }
 
-  // ── Label ──────────────────────────────────────────────────────────────
-  Widget _buildLabel(String text) {
-    return Text(text, style: _t(size: 13, weight: FontWeight.w600));
-  }
+  Widget _buildLabel(String text) =>
+      Text(text, style: _t(size: 13, weight: FontWeight.w600));
 
-  // ── TextField ──────────────────────────────────────────────────────────
   Widget _buildTextField({
     required TextEditingController controller,
     required IconData icon,
@@ -569,63 +885,13 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
             padding: const EdgeInsets.only(left: 14, right: 10),
             child: Icon(icon, size: 20, color: _muted),
           ),
-          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 0, minHeight: 0),
           suffixIcon: suffixIcon,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
         ),
-      ),
-    );
-  }
-
-  // ── Logout Card ────────────────────────────────────────────────────────
-  Widget _buildLogoutCard() {
-    return Container(
-      width: 380,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: _red.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.logout_rounded, color: _red, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Keluar Sesi',
-                    style: _t(size: 14, weight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text('Keluar dari semua perangkat yang terhubung.',
-                    style: _t(size: 12, color: _muted)),
-                const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: _keluarSesi,
-                  child: Text('Keluar Sekarang',
-                      style: _t(size: 13, weight: FontWeight.w700, color: _red)),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
