@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:html' as html;
 import '../auth/login.dart';
+import '../admin_notifiers.dart';
+import 'package:http_parser/http_parser.dart';
 
 class ProfileAdminScreen extends StatefulWidget {
   const ProfileAdminScreen({super.key});
-
   @override
   State<ProfileAdminScreen> createState() => _ProfileAdminScreenState();
 }
@@ -14,6 +18,10 @@ class ProfileAdminScreen extends StatefulWidget {
 class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   final _firestore = FirebaseFirestore.instance;
   final _auth      = FirebaseAuth.instance;
+
+  // ── Cloudinary config ────────────────────────────────────────────────────
+  static const String _cloudName    = 'dewncgzjd';
+  static const String _uploadPreset = 'admin_profile';
 
   // ── Colors ───────────────────────────────────────────────────────────────
   static const Color _blue   = Color(0xFF2563EB);
@@ -27,12 +35,20 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   static const Color _red    = Color(0xFFEF4444);
   static const Color _green  = Color(0xFF22C55E);
 
-  // ── Sidebar state ────────────────────────────────────────────────────────
-  bool _expanded    = true; // collapsed by default
-  int  _selectedNav = 4; // Profil = index 4
+  // ── Sidebar ───────────────────────────────────────────────────────────────
+  bool _expanded    = true;
+  int  _selectedNav = 4;
 
   static const double _collapsedW = 56;
   static const double _expandedW  = 220;
+
+  static const Map<int, String> _navRoutes = {
+    0: '/admin-dashboard',
+    1: '/admin-booking',
+    2: '/admin-lapangan',
+    3: '/admin-jadwal',
+    4: '/profile',
+  };
 
   final List<Map<String, dynamic>> _navItems = [
     {'icon': Icons.dashboard_rounded,           'label': 'Dashboard'},
@@ -42,23 +58,25 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     {'icon': Icons.person_outline_rounded,      'label': 'Profil'},
   ];
 
-  // ── Controllers ──────────────────────────────────────────────────────────
+  // ── Controllers ───────────────────────────────────────────────────────────
   final _namaController  = TextEditingController();
   final _emailController = TextEditingController();
   final _sandiController = TextEditingController();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  bool _obscureSandi = true;
-  bool _loading      = true;
-  bool _saving       = false;
+  bool    _obscureSandi  = true;
+  bool    _loading       = true;
+  bool    _saving        = false;
+  bool    _uploadingFoto = false;
 
-  String _namaAwal    = '';
-  String _emailAwal   = '';
-  String _adminName   = 'Admin';
-  String _adminRole   = 'Administrator';
-  String _status      = 'Aktif';
-  String _level       = 'Super';
+  String  _namaAwal   = '';
+  String  _emailAwal  = '';
+  String  _adminName  = 'Admin';
+  String  _adminRole  = 'Administrator';
+  String  _status     = 'Aktif';
+  String  _level      = 'Super';
   String? _adminDocId;
+  String? _fotoUrl;      // URL foto dari Cloudinary
 
   @override
   void initState() {
@@ -74,7 +92,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     super.dispose();
   }
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Fetch profile ─────────────────────────────────────────────────────────
   Future<void> _fetchAdminProfile() async {
     try {
       final snapshot = await _firestore
@@ -94,18 +112,20 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
             _level     = data['level']   ?? 'Super';
             _adminName = _namaAwal;
             _adminRole = _level;
+            _fotoUrl   = data['photoUrl'] as String?;
             _namaController.text  = _namaAwal;
             _emailController.text = _emailAwal;
             _loading = false;
           });
         }
+      } else {
+        if (mounted) setState(() => _loading = false);
       }
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  // Format status dari Firestore ke tampilan
   String _formatStatus(String s) {
     switch (s.toLowerCase()) {
       case 'active': case 'aktif': return 'Aktif';
@@ -114,9 +134,81 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     }
   }
 
-  // ── Save ──────────────────────────────────────────────────────────────────
+ Future<void> _pilihDanUploadFoto() async {
+  setState(() => _uploadingFoto = true);
+
+  try {
+    // Pakai html file picker untuk web
+    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+    uploadInput.click();
+
+    await uploadInput.onChange.first;
+    if (uploadInput.files == null || uploadInput.files!.isEmpty) {
+      setState(() => _uploadingFoto = false);
+      return;
+    }
+
+    final file   = uploadInput.files!.first;
+    final reader = html.FileReader();
+    reader.readAsArrayBuffer(file);
+    await reader.onLoad.first;
+
+    final bytes   = reader.result as List<int>;
+    final base64  = base64Encode(bytes);
+    final ext     = file.name.split('.').last.toLowerCase();
+    final dataUri = 'data:image/$ext;base64,$base64';
+
+    final uri = Uri.parse('https://api.cloudinary.com/v1_1/$_cloudName/image/upload');
+final request = http.MultipartRequest('POST', uri)
+  ..fields['upload_preset'] = _uploadPreset
+  ..files.add(http.MultipartFile.fromBytes(
+    'file',
+    bytes,
+    filename: 'admin_photo.jpg',
+    contentType: MediaType('image', 'jpeg'),
+  ));
+
+final streamedResponse = await request.send();
+final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final url  = data['secure_url'] as String;
+
+      if (_adminDocId != null) {
+        await _firestore
+            .collection('admin_profile')
+            .doc(_adminDocId)
+            .update({
+          'photoUrl' : url,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _fotoUrl       = url;
+          _uploadingFoto = false;
+        });
+        adminPhotoNotifier.value = url; 
+        _showSnackBar('Foto profil berhasil diperbarui!');
+      }
+    } else {
+       print('CLOUDINARY ERROR: ${response.body}');
+      throw Exception('Upload gagal: ${response.statusCode}');
+    }
+  } catch (e) {
+    if (mounted) {
+      setState(() => _uploadingFoto = false);
+      _showSnackBar('Gagal upload foto: $e', isError: true);
+    }
+  }
+}
+
+  // ── Simpan perubahan ──────────────────────────────────────────────────────
   Future<void> _simpanPerubahan() async {
     if (_saving) return;
+
     final nama  = _namaController.text.trim();
     final email = _emailController.text.trim();
     final sandi = _sandiController.text.trim();
@@ -125,29 +217,38 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
       _showSnackBar('Nama dan Email tidak boleh kosong', isError: true);
       return;
     }
+
     setState(() => _saving = true);
+
     try {
+      // Update Firestore
       if (_adminDocId != null) {
-        await _firestore.collection('admin_profile').doc(_adminDocId).update({
-          'fullName':  nama,
-          'email':     email,
+        await _firestore
+            .collection('admin_profile')
+            .doc(_adminDocId)
+            .update({
+          'fullName' : nama,
+          'email'    : email,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
-      // Update juga Firebase Auth email jika berubah
+
+      // Update email Firebase Auth jika berubah
       final user = _auth.currentUser;
       if (user != null && email != user.email) {
         await user.verifyBeforeUpdateEmail(email);
       }
+
+      // Update password jika diisi
       if (sandi.isNotEmpty) {
         if (sandi.length < 8) {
           _showSnackBar('Kata sandi minimal 8 karakter', isError: true);
           setState(() => _saving = false);
           return;
         }
-        final user = _auth.currentUser;
         if (user != null) await user.updatePassword(sandi);
       }
+
       if (mounted) {
         setState(() {
           _namaAwal  = nama;
@@ -157,6 +258,8 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
           _saving = false;
         });
         _showSnackBar('Profil berhasil diperbarui!');
+        adminNameNotifier.value = nama;
+  adminRoleNotifier.value = _level;
       }
     } catch (e) {
       if (mounted) {
@@ -174,12 +277,15 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     });
   }
 
+  
+
   // ── Logout ────────────────────────────────────────────────────────────────
   void _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
         title: Text('Keluar dari Akun?',
             style: _t(size: 16, weight: FontWeight.w700)),
         content: Text('Kamu akan keluar dari panel admin.',
@@ -216,20 +322,23 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     }
   }
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   void _showSnackBar(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(children: [
-          Icon(
-            isError ? Icons.error_outline_rounded : Icons.check_circle_rounded,
-            color: Colors.white, size: 20,
-          ),
+          Icon(isError
+              ? Icons.error_outline_rounded
+              : Icons.check_circle_rounded,
+              color: Colors.white, size: 20),
           const SizedBox(width: 10),
-          Expanded(child: Text(msg, style: _t(size: 13, color: Colors.white))),
+          Expanded(child: Text(msg,
+              style: _t(size: 13, color: Colors.white))),
         ]),
         backgroundColor: isError ? _red : _green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         duration: const Duration(seconds: 3),
       ),
@@ -250,51 +359,34 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
 
   // ── BUILD ─────────────────────────────────────────────────────────────────
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      body: Row(children: [
-        ClipRect(child: _buildSidebar()),
-        Expanded(
-          child: Column(children: [
-            _buildTopBar(),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: _blue))
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Header
-                          Text('Profil Saya',
-                              style: _t(size: 24, weight: FontWeight.w800)),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Kelola informasi akun dan preferensi keamanan Anda di ArenaHub.',
-                            style: _t(size: 14, color: _muted),
-                          ),
-                          const SizedBox(height: 28),
-
-                          // Main content
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(width: 300, child: _buildProfileCard()),
-                              const SizedBox(width: 24),
-                              Expanded(child: _buildDetailForm()),
-                            ],
-                          ),
-
-                        ],
-                      ),
-                    ),
-            ),
-          ]),
-        ),
-      ]),
-    );
-  }
+Widget build(BuildContext context) {
+  return _loading
+      ? const Center(child: CircularProgressIndicator(color: _blue))
+      : SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Profil Saya',
+                  style: _t(size: 24, weight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text(
+                'Kelola informasi akun dan preferensi keamanan Anda di ArenaHub.',
+                style: _t(size: 14, color: _muted),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 300, child: _buildProfileCard()),
+                  const SizedBox(width: 24),
+                  Expanded(child: _buildDetailForm()),
+                ],
+              ),
+            ],
+          ),
+        );
+}
 
   // ── SIDEBAR ───────────────────────────────────────────────────────────────
   Widget _buildSidebar() {
@@ -309,48 +401,48 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
           children: [
             // Logo
             Container(
-                height: 64,
-                padding: EdgeInsets.symmetric(
-                    horizontal: _expanded ? 14 : 10),
-                decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: _border))),
-                child: Row(children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(
-                        color: _blue,
-                        borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.sports_soccer_rounded,
-                        color: Colors.white, size: 20),
-                  ),
-                  AnimatedOpacity(
-                    opacity: _expanded ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: SizedBox(
-                      width: _expandedW - 36 - 14 - 14,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 10),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('ArenaHub',
-                                style: _t(size: 14, weight: FontWeight.w800,
-                                    color: _blue),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
-                            Text('PANEL ADMINISTRASI',
-                                style: _t(size: 8, weight: FontWeight.w600,
-                                    color: _muted, spacing: 0.5),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
-                          ],
-                        ),
+              height: 64,
+              padding: EdgeInsets.symmetric(
+                  horizontal: _expanded ? 14 : 10),
+              decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: _border))),
+              child: Row(children: [
+                Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(
+                      color: _blue,
+                      borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.sports_soccer_rounded,
+                      color: Colors.white, size: 20),
+                ),
+                AnimatedOpacity(
+                  opacity: _expanded ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: SizedBox(
+                    width: _expandedW - 36 - 14 - 14,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ArenaHub',
+                              style: _t(size: 14, weight: FontWeight.w800,
+                                  color: _blue),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          Text('PANEL ADMINISTRASI',
+                              style: _t(size: 8, weight: FontWeight.w600,
+                                  color: _muted, spacing: 0.5),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ],
                       ),
                     ),
                   ),
-                ]),
-              ),
+                ),
+              ]),
+            ),
 
             const SizedBox(height: 12),
 
@@ -361,7 +453,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
               return GestureDetector(
                 onTap: () {
                   setState(() => _selectedNav = i);
-                  // Navigasi ke halaman lain sesuai index
                   if (i != 4) {
                     final route = _navRoutes[i];
                     if (route != null) {
@@ -402,7 +493,8 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                             child: Text(item['label'] as String,
                                 style: _t(size: 13,
                                     weight: active
-                                        ? FontWeight.w700 : FontWeight.w500,
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
                                     color: active ? _blue : _muted),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
@@ -417,7 +509,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
 
             const Spacer(),
 
-            // ── Logout button ─────────────────────────────────────────
+            // Logout button
             GestureDetector(
               onTap: _logout,
               child: Container(
@@ -425,7 +517,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withOpacity(0.08),
+                  color: _red.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -434,20 +526,18 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                     const SizedBox(width: 3, height: 20),
                     const SizedBox(width: 6),
                     const Icon(Icons.logout_rounded,
-                        color: Color(0xFFEF4444), size: 20),
+                        color: _red, size: 20),
                     AnimatedOpacity(
                       opacity: _expanded ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 150),
                       child: SizedBox(
                         width: _expanded ? _expandedW - 80 : 0,
-                        child: const Padding(
-                          padding: EdgeInsets.only(left: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 10),
                           child: Text('Keluar',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFFEF4444),
-                              ),
+                              style: TextStyle(fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _red),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis),
                         ),
@@ -466,28 +556,39 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Avatar sidebar — tampilkan foto kalau ada
                   Container(
                     width: 36, height: 36,
                     decoration: const BoxDecoration(
                         shape: BoxShape.circle, color: _blue),
-                    child: Center(
-                      child: Text(_initials(_adminName),
-                          style: _t(size: 13, weight: FontWeight.w700,
-                              color: Colors.white)),
+                    child: ClipOval(
+                      child: _fotoUrl != null
+                          ? Image.network(_fotoUrl!, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  Center(child: Text(_initials(_adminName),
+                                      style: _t(size: 13,
+                                          weight: FontWeight.w700,
+                                          color: Colors.white))))
+                          : Center(child: Text(_initials(_adminName),
+                              style: _t(size: 13, weight: FontWeight.w700,
+                                  color: Colors.white))),
                     ),
                   ),
                   AnimatedOpacity(
                     opacity: _expanded ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 150),
                     child: SizedBox(
-                      width: _expanded ? _expandedW - 36 - 12 - 12 - 10 : 0,
+                      width: _expanded
+                          ? _expandedW - 36 - 12 - 12 - 10
+                          : 0,
                       child: Padding(
                         padding: const EdgeInsets.only(left: 10),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(_adminName,
-                                style: _t(size: 12, weight: FontWeight.w700),
+                                style: _t(size: 12,
+                                    weight: FontWeight.w700),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
                             Text(_adminRole,
@@ -502,21 +603,11 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                 ],
               ),
             ),
-
           ],
         ),
       ),
     );
   }
-
-  // Route map — sesuaikan dengan named routes di app kamu
-  static const Map<int, String> _navRoutes = {
-    0: '/admin-dashboard',
-    1: '/admin-booking',
-    2: '/admin-lapangan',
-    3: '/admin-jadwal',
-    4: '/admin-profil',
-  };
 
   // ── TOP BAR ───────────────────────────────────────────────────────────────
   Widget _buildTopBar() {
@@ -539,45 +630,62 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _border),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12, offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.04),
+              blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(children: [
-        // Avatar
-        Stack(children: [
-          Container(
-            width: 110, height: 110,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _blueBg,
-              border: Border.all(color: _blue.withOpacity(0.3), width: 3),
+        // ── Avatar + tombol ganti foto ──────────────────────────────
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 110, height: 110,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _blueBg,
+                border: Border.all(
+                    color: _blue.withOpacity(0.3), width: 3),
+              ),
+              child: ClipOval(
+                child: _uploadingFoto
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                            color: _blue, strokeWidth: 2))
+                    : _fotoUrl != null
+                        ? Image.network(_fotoUrl!, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                Icon(Icons.person_rounded,
+                                    size: 56,
+                                    color: _blue.withOpacity(0.4)))
+                        : Icon(Icons.person_rounded,
+                            size: 56,
+                            color: _blue.withOpacity(0.4)),
+              ),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.info_outline_rounded, color: _blue, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Catatan Keamanan',
-                          style: _t(size: 13, weight: FontWeight.w700, color: _blue)),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Pastikan kata sandi Anda memiliki minimal 8 karakter dengan kombinasi angka dan simbol untuk keamanan maksimal.',
-                        style: _t(size: 12, color: _muted, spacing: 0.1),
-                      ),
+            // Tombol edit foto
+            Positioned(
+              bottom: 4, right: 4,
+              child: GestureDetector(
+                onTap: _uploadingFoto ? null : _pilihDanUploadFoto,
+                child: Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: _blue,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: _white, width: 2.5),
+                    boxShadow: [
+                      BoxShadow(color: _blue.withOpacity(0.3),
+                          blurRadius: 6, offset: const Offset(0, 2)),
                     ],
                   ),
+                  child: const Icon(Icons.camera_alt_rounded,
+                      size: 15, color: Colors.white),
                 ),
-              ],
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
         const SizedBox(height: 18),
 
         Text(_namaAwal,
@@ -596,6 +704,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
         ]),
         const SizedBox(height: 24),
 
+        // Catatan keamanan
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -603,25 +712,29 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _blueLt),
           ),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(Icons.info_outline_rounded, color: _blue, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Catatan Keamanan',
-                      style: _t(size: 13, weight: FontWeight.w700,
-                          color: _blue)),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Pastikan kata sandi Anda memiliki minimal 8 karakter dengan kombinasi angka dan simbol.',
-                    style: _t(size: 12, color: _muted, spacing: 0.1),
-                  ),
-                ],
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline_rounded,
+                  color: _blue, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Catatan Keamanan',
+                        style: _t(size: 13,
+                            weight: FontWeight.w700, color: _blue)),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Pastikan kata sandi Anda memiliki minimal 8 karakter dengan kombinasi angka dan simbol.',
+                      style: _t(size: 12, color: _muted, spacing: 0.1),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         ),
       ]),
     );
@@ -646,84 +759,83 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _border),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12, offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.04),
+              blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Detail Informasi',
-            style: _t(size: 20, weight: FontWeight.w700)),
-        const SizedBox(height: 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Detail Informasi',
+              style: _t(size: 20, weight: FontWeight.w700)),
+          const SizedBox(height: 28),
 
-        _buildLabel('Nama Lengkap'),
-        const SizedBox(height: 8),
-        _buildTextField(
-          controller: _namaController,
-          icon: Icons.person_outline_rounded,
-          hint: 'Masukkan nama lengkap',
-        ),
-        const SizedBox(height: 22),
-
-        _buildLabel('Alamat Email'),
-        const SizedBox(height: 8),
-        _buildTextField(
-          controller: _emailController,
-          icon: Icons.email_outlined,
-          hint: 'Masukkan alamat email',
-          keyboardType: TextInputType.emailAddress,
-        ),
-        const SizedBox(height: 22),
-
-        _buildLabel('Kata Sandi Baru'),
-        const SizedBox(height: 8),
-        _buildTextField(
-          controller: _sandiController,
-          icon: Icons.lock_outline_rounded,
-          hint: '••••••••••••',
-          obscure: _obscureSandi,
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscureSandi
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined,
-              color: _muted, size: 20,
-            ),
-            onPressed: () =>
-                setState(() => _obscureSandi = !_obscureSandi),
+          _buildLabel('Nama Lengkap'),
+          const SizedBox(height: 8),
+          _buildTextField(
+            controller: _namaController,
+            icon: Icons.person_outline_rounded,
+            hint: 'Masukkan nama lengkap',
           ),
-        ),
-        const SizedBox(height: 6),
-        Text('Kosongkan jika tidak ingin mengubah kata sandi.',
-            style: _t(size: 12, color: _muted)),
-        const SizedBox(height: 32),
+          const SizedBox(height: 22),
 
-          // Buttons
+          _buildLabel('Alamat Email'),
+          const SizedBox(height: 8),
+          _buildTextField(
+            controller: _emailController,
+            icon: Icons.email_outlined,
+            hint: 'Masukkan alamat email',
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 22),
+
+          _buildLabel('Kata Sandi Baru'),
+          const SizedBox(height: 8),
+          _buildTextField(
+            controller: _sandiController,
+            icon: Icons.lock_outline_rounded,
+            hint: '••••••••••••',
+            obscure: _obscureSandi,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureSandi
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                color: _muted, size: 20,
+              ),
+              onPressed: () =>
+                  setState(() => _obscureSandi = !_obscureSandi),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text('Kosongkan jika tidak ingin mengubah kata sandi.',
+              style: _t(size: 12, color: _muted)),
+          const SizedBox(height: 32),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              // Batalkan
               OutlinedButton(
                 onPressed: _batalkan,
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: _border),
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 28, vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
                 child: Text('Batalkan',
-                    style: _t(size: 14, weight: FontWeight.w600, color: _text)),
+                    style: _t(size: 14, weight: FontWeight.w600,
+                        color: _text)),
               ),
               const SizedBox(width: 14),
-
-              // Simpan Perubahan
               ElevatedButton(
                 onPressed: _saving ? null : _simpanPerubahan,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _blue,
                   disabledBackgroundColor: _blue.withOpacity(0.5),
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 28, vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                   elevation: 0,
@@ -732,37 +844,15 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                     ? const SizedBox(
                         width: 20, height: 20,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
+                            strokeWidth: 2, color: Colors.white))
                     : Text('Simpan Perubahan',
-                        style: _t(size: 14, weight: FontWeight.w600, color: Colors.white)),
+                        style: _t(size: 14, weight: FontWeight.w600,
+                            color: Colors.white)),
               ),
             ],
           ),
-          const SizedBox(width: 14),
-          ElevatedButton(
-            onPressed: _saving ? null : _simpanPerubahan,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _blue,
-              disabledBackgroundColor: _blue.withOpacity(0.5),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 28, vertical: 14),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: _saving
-                ? const SizedBox(
-                    width: 20, height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : Text('Simpan Perubahan',
-                    style: _t(size: 14, weight: FontWeight.w600,
-                        color: Colors.white)),
-          ),
-        ]),
-      ]),
+        ],
+      ),
     );
   }
 
@@ -802,58 +892,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
           contentPadding:
               const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
         ),
-      ),
-    );
-  }
-
-  // ── Logout Card ────────────────────────────────────────────────────────
-  Widget _buildLogoutCard() {
-    return Container(
-      width: 380,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: _red.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.logout_rounded, color: _red, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Keluar Sesi',
-                    style: _t(size: 14, weight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text('Keluar dari semua perangkat yang terhubung.',
-                    style: _t(size: 12, color: _muted)),
-                const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: _keluarSesi,
-                  child: Text('Keluar Sekarang',
-                      style: _t(size: 13, weight: FontWeight.w700, color: _red)),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -7,6 +7,9 @@ import '../auth/login.dart';
 import '../booking/kelola_booking.dart'; 
 import '../kelola_jadwal/kelolaJadwal.dart';
 import '../promo/kelola_promo.dart';
+import '../profile/profileAdmin.dart';
+import '../field/kelola_lapangan.dart';
+import '../admin_notifiers.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -53,21 +56,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _fetchAdminSession();
   }
 
-  Future<void> _fetchAdminSession() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return;
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists && mounted) {
-        final data = doc.data()!;
-        setState(() {
-          _adminName  = data['fullName'] ?? user.displayName ?? 'Admin';
-          _adminEmail = data['email']    ?? user.email ?? '';
-          _adminRole  = data['role']     ?? 'Administrator';
-        });
-      }
-    } catch (_) {}
-  }
+Future<void> _fetchAdminSession() async {
+  try {
+    final snap = await _firestore.collection('admin_profile').limit(1).get();
+    if (snap.docs.isNotEmpty && mounted) {
+      final data  = snap.docs.first.data();
+      final nama  = data['fullName'] ?? 'Admin';
+      final role  = data['level']   ?? 'Administrator';
+      final photo = data['photoUrl'] as String?; // ← tambah ini
+      setState(() {
+        _adminName = nama;
+        _adminRole = role;
+      });
+      adminNameNotifier.value  = nama;
+      adminRoleNotifier.value  = role;
+      adminPhotoNotifier.value = photo; 
+    }
+  } catch (_) {}
+}
 
   void _logout() async {
     final confirm = await showDialog<bool>(
@@ -207,15 +213,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       body: Row(children: [
         ClipRect(child: _buildSidebar()),
         Expanded(
-          child: _selectedNav == 1
-              // Kelola Booking punya top bar sendiri, langsung tampil
-              ? const KelolaBookingScreen()
-              : _selectedNav == 2
-              ? const KelolaPromoScreen()
-              : _selectedNav == 3
-              // Kelola Jadwal punya top bar sendiri, langsung tampil
-              ? const KelolaJadwalScreen()
-              // Nav lain pakai struktur Column (top bar + scroll content)
+        child: _selectedNav == 1
+            ? const KelolaBookingScreen()
+            : _selectedNav == 2
+            ? const KelolaPromoScreen()
+            : _selectedNav == 3
+            ? const KelolaJadwalScreen()
+            : _selectedNav == 4
+            ? const KelolaLapanganScreen()
+            : _selectedNav == 5
+            ? const ProfileAdminScreen()
               : StreamBuilder<QuerySnapshot>(
                   stream: _firestore.collection('bookings').snapshots(),
                   builder: (context, bookingSnap) {
@@ -364,172 +371,211 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   //sidebar
-  Widget _buildSidebar() {
-    return ClipRect(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeInOut,
-        width: _expanded ? _expandedW : _collapsedW,
-        color: _white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-                height: 64,
-                padding: EdgeInsets.symmetric(horizontal: _expanded ? 14 : 10),
-                decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: _border))),
-                child: Row(children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(
-                        color: _blue,
-                        borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.sports_soccer_rounded,
-                        color: Colors.white, size: 20),
-                  ),
-                  AnimatedOpacity(
-                    opacity: _expanded ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: SizedBox(
-                      width: _expandedW - 36 - 14 - 14,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 10),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('ArenaHub',
-                                style: _t(size: 14, weight: FontWeight.w800, color: _blue),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                            Text('PANEL ADMINISTRASI',
-                                style: _t(size: 8, weight: FontWeight.w600,
-                                    color: _muted, spacing: 0.5),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ])),
-            const SizedBox(height: 12),
-            ...List.generate(_navItems.length, (i) {
-              final active = _selectedNav == i;
-              final item   = _navItems[i];
-              return GestureDetector(
-                onTap: () => setState(() => _selectedNav = i),
-                child: Container(
-                  margin: EdgeInsets.symmetric(
-                      horizontal: _expanded ? 8 : 4, vertical: 2),
-                  padding: EdgeInsets.symmetric(
-                      horizontal: _expanded ? 10 : 4, vertical: 10),
+ Widget _buildSidebar() {
+  return ClipRect(
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeInOut,
+      width: _expanded ? _expandedW : _collapsedW,
+      color: _white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+              height: 64,
+              padding: EdgeInsets.symmetric(horizontal: _expanded ? 14 : 10),
+              decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: _border))),
+              child: Row(children: [
+                Container(
+                  width: 36, height: 36,
                   decoration: BoxDecoration(
-                    color: active ? _blueBg : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: 3, height: 20,
-                      margin: EdgeInsets.only(right: _expanded ? 7 : 2),
-                      decoration: BoxDecoration(
-                        color: active ? _blue : Colors.transparent,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    Icon(item['icon'] as IconData,
-                        color: active ? _blue : _muted, size: 20),
-                    AnimatedOpacity(
-                      opacity: _expanded ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 150),
-                      child: SizedBox(
-                        width: _expanded ? _expandedW - 80 : 0,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 10),
-                          child: Text(item['label'] as String,
-                              style: _t(size: 13,
-                                  weight: active ? FontWeight.w700 : FontWeight.w500,
-                                  color: active ? _blue : _muted),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ),
-                  ]),
+                      color: _blue,
+                      borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.sports_soccer_rounded,
+                      color: Colors.white, size: 20),
                 ),
-              );
-            }),
-            const Spacer(),
-            GestureDetector(
-              onTap: _logout,
+                AnimatedOpacity(
+                  opacity: _expanded ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: SizedBox(
+                    width: _expandedW - 36 - 14 - 14,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ArenaHub',
+                              style: _t(size: 14, weight: FontWeight.w800, color: _blue),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text('PANEL ADMINISTRASI',
+                              style: _t(size: 8, weight: FontWeight.w600,
+                                  color: _muted, spacing: 0.5),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ])),
+          const SizedBox(height: 12),
+          ...List.generate(_navItems.length, (i) {
+            final active = _selectedNav == i;
+            final item   = _navItems[i];
+            return GestureDetector(
+              onTap: () => setState(() => _selectedNav = i),
               child: Container(
-                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                margin: EdgeInsets.symmetric(
+                    horizontal: _expanded ? 8 : 4, vertical: 2),
+                padding: EdgeInsets.symmetric(
+                    horizontal: _expanded ? 10 : 4, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withOpacity(0.08),
+                  color: active ? _blueBg : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const SizedBox(width: 3, height: 20),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.logout_rounded,
-                      color: Color(0xFFEF4444), size: 20),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 3, height: 20,
+                    margin: EdgeInsets.only(right: _expanded ? 7 : 2),
+                    decoration: BoxDecoration(
+                      color: active ? _blue : Colors.transparent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Icon(item['icon'] as IconData,
+                      color: active ? _blue : _muted, size: 20),
                   AnimatedOpacity(
                     opacity: _expanded ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 150),
                     child: SizedBox(
                       width: _expanded ? _expandedW - 80 : 0,
-                      child: const Padding(
-                        padding: EdgeInsets.only(left: 10),
-                        child: Text('Keluar',
-                            style: TextStyle(fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFFEF4444)),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: Text(item['label'] as String,
+                            style: _t(size: 13,
+                                weight: active ? FontWeight.w700 : FontWeight.w500,
+                                color: active ? _blue : _muted),
                             maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
                     ),
                   ),
                 ]),
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: _border))),
+            );
+          }),
+          const Spacer(),
+          GestureDetector(
+            onTap: _logout,
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(
-                  width: 36, height: 36,
-                  decoration: const BoxDecoration(
-                      shape: BoxShape.circle, color: _blue),
-                  child: Center(child: Text(_initials(_adminName),
-                      style: _t(size: 13, weight: FontWeight.w700,
-                          color: Colors.white))),
-                ),
+                const SizedBox(width: 3, height: 20),
+                const SizedBox(width: 6),
+                const Icon(Icons.logout_rounded,
+                    color: Color(0xFFEF4444), size: 20),
                 AnimatedOpacity(
                   opacity: _expanded ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 150),
                   child: SizedBox(
-                    width: _expanded ? _expandedW - 36 - 12 - 12 - 10 : 0,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                        Text(_adminName,
-                            style: _t(size: 12, weight: FontWeight.w700),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(_adminRole,
-                            style: _t(size: 10, color: _muted),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ]),
+                    width: _expanded ? _expandedW - 80 : 0,
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 10),
+                      child: Text('Keluar',
+                          style: TextStyle(fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFEF4444)),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
                     ),
                   ),
                 ),
               ]),
             ),
-          ],
-        ),
+          ),
+
+          // ── Admin info — foto + nama + role ─────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: _border))),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+
+              // ← AVATAR: tampilkan foto kalau ada, fallback ke inisial
+              ValueListenableBuilder<String?>(
+                valueListenable: adminPhotoNotifier,
+                builder: (_, photoUrl, __) {
+                  return ValueListenableBuilder<String>(
+                    valueListenable: adminNameNotifier,
+                    builder: (_, name, __) {
+                      return Container(
+                        width: 36, height: 36,
+                        decoration: const BoxDecoration(
+                            shape: BoxShape.circle, color: _blue),
+                        child: ClipOval(
+                          child: photoUrl != null
+                              ? Image.network(
+                                  photoUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Center(
+                                    child: Text(_initials(name),
+                                        style: _t(size: 13,
+                                            weight: FontWeight.w700,
+                                            color: Colors.white)),
+                                  ),
+                                )
+                              : Center(
+                                  child: Text(_initials(name),
+                                      style: _t(size: 13,
+                                          weight: FontWeight.w700,
+                                          color: Colors.white)),
+                                ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+
+              AnimatedOpacity(
+                opacity: _expanded ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 150),
+                child: SizedBox(
+                  width: _expanded ? _expandedW - 36 - 12 - 12 - 10 : 0,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ValueListenableBuilder<String>(
+                          valueListenable: adminNameNotifier,
+                          builder: (_, name, __) => Text(name,
+                              style: _t(size: 12, weight: FontWeight.w700),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                        ValueListenableBuilder<String>(
+                          valueListenable: adminRoleNotifier,
+                          builder: (_, role, __) => Text(role,
+                              style: _t(size: 10, color: _muted),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   //topbar
   Widget _buildTopBar() {
