@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:appbookinglapangan/features/riwayat/screens/detail_riwayat.dart'; // sesuaikan path import
 
 class PaymentSuccessPage extends StatefulWidget {
   const PaymentSuccessPage({super.key});
@@ -168,7 +169,7 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
         children: [
           Container(
             width: double.infinity,
-            color: headerBgColor, // Background dinamis menyesuaikan status
+            color: headerBgColor,
             padding: const EdgeInsets.symmetric(vertical: 30),
             child: Column(
               children: [
@@ -249,7 +250,15 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
                 ),
                 const SizedBox(height: 30),
                 ElevatedButton(
-                  onPressed: () {},
+                  // ── PERUBAHAN: Navigasi ke DetailRiwayatPage dengan bookingId ──
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DetailRiwayatPage(bookingId: bookingId),
+                      ),
+                    );
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0D47A1),
                     minimumSize: const Size(double.infinity, 50),

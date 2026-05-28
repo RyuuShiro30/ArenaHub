@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz_data;
 import '../../../../routes/app_routes.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../auth/screens/pencarian_lapangan_screen.dart';
@@ -35,8 +37,65 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Inisialisasi timezone sekali saja di level HomeScreen
+    tz_data.initializeTimeZones();
     _fetchUserData();
   }
+
+  // ── WIB helpers ────────────────────────────────────────────────────────────
+
+  /// Waktu saat ini dalam WIB (UTC+7 / Asia/Jakarta).
+  DateTime _nowWib() {
+    final wib    = tz.getLocation('Asia/Jakarta');
+    final nowWib = tz.TZDateTime.now(wib);
+    return DateTime(
+      nowWib.year, nowWib.month, nowWib.day,
+      nowWib.hour, nowWib.minute, nowWib.second,
+    );
+  }
+
+  /// String tanggal hari ini dalam WIB, format yyyy-MM-dd.
+  String _todayWibStr() =>
+      DateFormat('yyyy-MM-dd').format(_nowWib());
+
+  /// Jam akhir dari slot "06.00 - 07.00" → 7.0
+  double _slotEndHour(String slot) {
+    final part     = slot.split(' - ').last.trim();
+    final segments = part.split('.');
+    final hour     = int.tryParse(segments[0]) ?? 0;
+    final minute   = int.tryParse(segments.length > 1 ? segments[1] : '0') ?? 0;
+    return hour + minute / 60.0;
+  }
+
+  /// Jam mulai dari slot "06.00 - 07.00" → 6.0
+  double _slotStartHour(String slot) {
+    final part     = slot.split(' - ').first.trim();
+    final segments = part.split('.');
+    final hour     = int.tryParse(segments[0]) ?? 0;
+    final minute   = int.tryParse(segments.length > 1 ? segments[1] : '0') ?? 0;
+    return hour + minute / 60.0;
+  }
+
+  /// Slot waktu standar yang dipakai di PilihJadwalPage (acuan ketersediaan).
+  static const List<String> _allSlots = [
+    "06.00 - 07.00", "07.00 - 08.00", "08.00 - 09.00",
+    "09.00 - 10.00", "10.00 - 11.00", "11.00 - 12.00",
+    "12.00 - 13.00", "13.00 - 14.00", "14.00 - 15.00",
+    "15.00 - 16.00", "16.00 - 17.00", "17.00 - 18.00",
+    "18.00 - 19.00", "19.00 - 20.00", "20.00 - 21.00",
+  ];
+
+  /// Slot yang belum lewat berdasarkan WIB realtime (sama dengan logika PilihJadwalPage).
+  /// Slot dianggap lewat jika jam AKHIR-nya sudah <= jam WIB sekarang.
+  List<String> _availableSlotsToday() {
+    final nowWib      = _nowWib();
+    final currentHour = nowWib.hour + nowWib.minute / 60.0;
+    return _allSlots
+        .where((slot) => _slotEndHour(slot) > currentHour)
+        .toList();
+  }
+
+  // ── User data ──────────────────────────────────────────────────────────────
 
   Future<void> _fetchUserData() async {
     try {
@@ -113,6 +172,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -176,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Header ────────────────────────────────────────────────────────────────
+  // ── Header ─────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Row(
       children: [
@@ -245,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Featured Card ─────────────────────────────────────────────────────────
+  // ── Featured Card ──────────────────────────────────────────────────────────
   Widget _buildFeaturedCard() {
     return Container(
       width: double.infinity,
@@ -339,7 +400,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _sectionTitle(String title) =>
       Text(title, style: _p(size: 16, weight: FontWeight.bold, color: _textDark));
 
-  // ── Sport Grid — StreamBuilder ─────────────────────────────────────────────
+  // ── Sport Grid ─────────────────────────────────────────────────────────────
   Widget _buildSportGrid() {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore.collection('lapangan').snapshots(),
@@ -419,224 +480,210 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Schedule List — StreamBuilder real-time ───────────────────────────────
-// Ganti seluruh method _buildScheduleList() di home_screen.dart dengan ini:
+  // ── Schedule List ──────────────────────────────────────────────────────────
+  //
+  // Menampilkan slot tersedia hari ini secara realtime WIB.
+  // Slot yang sudah lewat (jam akhir <= jam WIB sekarang) tidak ditampilkan,
+  // konsisten dengan logika di PilihJadwalPage._isSlotPassed().
+  //
+  // Untuk setiap lapangan, ditampilkan slot paling awal yang:
+  //   1. Belum lewat waktu WIB realtime
+  //   2. Belum dibooking (status confirmed/pending di Firestore)
+  Widget _buildScheduleList() {
+    final todayStr         = _todayWibStr();
+    final availableToday   = _availableSlotsToday(); // slot belum lewat WIB
 
-Widget _buildScheduleList() {
-  final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    // Jika semua slot hari ini sudah habis (misal sudah malam)
+    if (availableToday.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(color: Colors.white,
+            borderRadius: BorderRadius.circular(14)),
+        child: Center(child: Text('Tidak ada slot tersedia hari ini',
+            style: _p(color: Colors.grey))),
+      );
+    }
 
-  return StreamBuilder<QuerySnapshot>(
-    stream: _firestore.collection('lapangan').snapshots(),
-    builder: (context, lapSnap) {
-      if (lapSnap.connectionState == ConnectionState.waiting) {
-        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-      }
-      if (!lapSnap.hasData || lapSnap.data!.docs.isEmpty) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: Colors.white,
-              borderRadius: BorderRadius.circular(14)),
-          child: Center(child: Text('Tidak ada jadwal tersedia hari ini',
-              style: _p(color: Colors.grey))),
-        );
-      }
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('lapangan').snapshots(),
+      builder: (context, lapSnap) {
+        if (lapSnap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+        }
+        if (!lapSnap.hasData || lapSnap.data!.docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: Colors.white,
+                borderRadius: BorderRadius.circular(14)),
+            child: Center(child: Text('Tidak ada jadwal tersedia hari ini',
+                style: _p(color: Colors.grey))),
+          );
+        }
 
-      return StreamBuilder<QuerySnapshot>(
-        stream: _firestore
-            .collection('jadwal')
-            .where('status', isEqualTo: 'tersedia')
-            .snapshots(),
-        builder: (context, jadwalSnap) {
-          if (!jadwalSnap.hasData) {
-            return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-          }
+        // Stream booking hari ini (tanggal WIB)
+        return StreamBuilder<QuerySnapshot>(
+          stream: _firestore
+              .collection('bookings')
+              .where('tanggal', isEqualTo: todayStr)
+              .where('status', whereIn: ['confirmed', 'pending'])
+              .snapshots(),
+          builder: (context, bookSnap) {
 
-          return StreamBuilder<QuerySnapshot>(
-            stream: _firestore
-                .collection('bookings')
-                .where('tanggal_main', isEqualTo: todayStr)
-                .snapshots(),
-            builder: (context, bookSnap) {
-              // Kumpulkan slot yang sudah dipesan per lapangan
-              final bookedSlots = <String, Set<String>>{};
-              if (bookSnap.hasData) {
-                const validStatuses = {
-                  'sudah dibayar', 'pembayaran selesai', 'confirmed', 'pending',
-                };
-                for (final doc in bookSnap.data!.docs) {
-                  final data  = doc.data() as Map<String, dynamic>;
-                  final lapId = data['lapangan_id']?.toString() ?? '';
-                  final spay  = data['status_pembayaran']?.toString().toLowerCase() ?? '';
-                  final salt  = data['status']?.toString().toLowerCase() ?? '';
-                  if (!validStatuses.contains(spay) && !validStatuses.contains(salt)) continue;
+            // Kumpulkan slot yang sudah dipesan per lapangan hari ini
+            final bookedSlots = <String, Set<String>>{};
+            if (bookSnap.hasData) {
+              for (final doc in bookSnap.data!.docs) {
+                final data  = doc.data() as Map<String, dynamic>;
+                final lapId = data['lapangan_id']?.toString() ?? '';
+                if (lapId.isEmpty) continue;
 
-                  final slotField = data['slots'] ?? data['selected_times'] ?? data['jam_main'];
-                  final set = bookedSlots.putIfAbsent(lapId, () => {});
-                  if (slotField is List) {
-                    set.addAll(slotField.map((e) => e.toString()));
-                  } else if (slotField is String && slotField.isNotEmpty) {
-                    set.addAll(slotField.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty));
-                  }
+                final slotField =
+                    data['slots'] ?? data['selected_times'] ?? data['jam_main'];
+                final set = bookedSlots.putIfAbsent(lapId, () => {});
+                if (slotField is List) {
+                  set.addAll(slotField.map((e) => e.toString()));
+                } else if (slotField is String && slotField.isNotEmpty) {
+                  set.addAll(slotField
+                      .split(',')
+                      .map((e) => e.trim())
+                      .where((e) => e.isNotEmpty));
+                }
+              }
+            }
+
+            // Untuk setiap lapangan, cari slot pertama yang tersedia:
+            // belum lewat WIB (availableToday) DAN belum dibooking
+            final items = <Map<String, dynamic>>[];
+
+            for (final lapDoc in lapSnap.data!.docs) {
+              final lapId   = lapDoc.id;
+              final lapData = lapDoc.data() as Map<String, dynamic>;
+              final booked  = bookedSlots[lapId] ?? {};
+
+              // Cari slot paling awal yang tersedia untuk lapangan ini
+              String? firstAvailableSlot;
+              for (final slot in availableToday) {
+                if (!booked.contains(slot)) {
+                  firstAvailableSlot = slot;
+                  break;
                 }
               }
 
-              // Map lapangan untuk lookup
-              final lapanganMap = <String, Map<String, dynamic>>{};
-              for (final lapDoc in lapSnap.data!.docs) {
-                lapanganMap[lapDoc.id] = lapDoc.data() as Map<String, dynamic>;
-              }
+              // Tidak ada slot tersedia untuk lapangan ini → skip
+              if (firstAvailableSlot == null) continue;
 
-              // Filter slot yang belum dipesan dari collection jadwal
-              final allJadwal = jadwalSnap.data!.docs
-                  .map((doc) => doc.data() as Map<String, dynamic>)
-                  .where((d) {
-                    final lapId = d['lapangan_id']?.toString() ?? '';
-                    final slot  = d['waktu_operasional']?.toString() ?? '';
-                    if (lapId.isEmpty || slot.isEmpty) return false;
-                    if (lapanganMap[lapId] == null) return false;
-                    final booked = bookedSlots[lapId] ?? {};
-                    return !booked.contains(slot);
-                  })
-                  .toList();
-
-              // Sort by waktu_mulai
-              allJadwal.sort((a, b) {
-                try {
-                  final aTime  = (a['waktu_mulai'] ?? '00:00').toString();
-                  final bTime  = (b['waktu_mulai'] ?? '00:00').toString();
-                  final aParts = aTime.split(':');
-                  final bParts = bTime.split(':');
-                  final aMin   = int.parse(aParts[0]) * 60 + int.parse(aParts[1]);
-                  final bMin   = int.parse(bParts[0]) * 60 + int.parse(bParts[1]);
-                  return aMin.compareTo(bMin);
-                } catch (_) { return 0; }
+              final fotoList = lapData['foto'] as List<dynamic>?;
+              items.add({
+                'id'         : lapId,
+                'nama'       : lapData['nama_lapangan']  ?? 'Lapangan',
+                'jenis'      : lapData['jenis_lapangan'] ?? '',
+                'harga'      : (lapData['harga'] as num?)?.toInt() ?? 0,
+                'slot'       : firstAvailableSlot,
+                'jenis_floor': lapData['jenis_floor']    ?? '',
+                'foto'       : (fotoList != null && fotoList.isNotEmpty)
+                    ? fotoList[0].toString()
+                    : lapData['image_url']?.toString() ?? '',
               });
 
-              // Ambil slot paling awal per lapangan
-              final earliestByLapangan = <String, Map<String, dynamic>>{};
-              for (final jadwalData in allJadwal) {
-                final lapId = jadwalData['lapangan_id']?.toString() ?? '';
-                if (!earliestByLapangan.containsKey(lapId)) {
-                  earliestByLapangan[lapId] = jadwalData;
-                }
-              }
+              if (items.length >= 4) break;
+            }
 
-              // Bangun items max 4 lapangan
-              final items = <Map<String, dynamic>>[];
-              for (final entry in earliestByLapangan.entries) {
-                final lapId      = entry.key;
-                final jadwalData = entry.value;
-                final lapData    = lapanganMap[lapId]!;
-                final fotoList   = lapData['foto'] as List<dynamic>?;
+            if (items.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(color: Colors.white,
+                    borderRadius: BorderRadius.circular(14)),
+                child: Center(child: Text('Tidak ada jadwal tersedia hari ini',
+                    style: _p(color: Colors.grey))),
+              );
+            }
 
-                items.add({
-                  'id'         : lapId,
-                  'nama'       : lapData['nama_lapangan']        ?? 'Lapangan',
-                  'jenis'      : lapData['jenis_lapangan']       ?? '',
-                  'harga'      : (lapData['harga'] as num?)?.toInt() ?? 0,
-                  'slot'       : jadwalData['waktu_operasional'] ?? '-',
-                  'jenis_floor': lapData['jenis_floor']          ?? '',
-                  'foto'       : (fotoList != null && fotoList.isNotEmpty)
-                      ? fotoList[0].toString()
-                      : lapData['image_url']?.toString() ?? '',
-                });
-                if (items.length >= 4) break;
-              }
+            // Urutkan berdasarkan jam mulai slot (paling awal tampil di atas)
+            items.sort((a, b) =>
+                _slotStartHour(a['slot']).compareTo(_slotStartHour(b['slot'])));
 
-              if (items.isEmpty) {
-                return Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(color: Colors.white,
-                      borderRadius: BorderRadius.circular(14)),
-                  child: Center(child: Text('Tidak ada jadwal tersedia hari ini',
-                      style: _p(color: Colors.grey))),
-                );
-              }
-
-              return Column(
-                children: items.map((item) {
-                  return GestureDetector(
-                    onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => PilihJadwalPage(
-                        lapanganId   : item['id'],
-                        namaLapangan : item['nama'],
-                        jenisLapangan: item['jenis'],
-                        jenisFloor   : item['jenis_floor'],
-                        fotoUrl      : item['foto'],
-                        pricePerHour : item['harga'],
-                      )),
+            return Column(
+              children: items.map((item) {
+                return GestureDetector(
+                  onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => PilihJadwalPage(
+                      lapanganId   : item['id'],
+                      namaLapangan : item['nama'],
+                      jenisLapangan: item['jenis'],
+                      jenisFloor   : item['jenis_floor'],
+                      fotoUrl      : item['foto'],
+                      pricePerHour : item['harga'],
+                    )),
+                  ),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 6, offset: const Offset(0, 2))],
                     ),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
-                            blurRadius: 6, offset: const Offset(0, 2))],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 11, vertical: 9),
-                            decoration: BoxDecoration(
-                              color: _accent.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(item['slot'],
-                                style: _p(size: 12, weight: FontWeight.bold,
-                                    color: _primaryDark)),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 11, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: _accent.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(item['nama'],
-                                    style: _p(size: 13,
-                                        weight: FontWeight.w600,
-                                        color: _textDark)),
-                                const SizedBox(height: 2),
-                                Text(item['jenis'],
-                                    style: _p(size: 11,
-                                        color: Colors.grey.shade500)),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                          child: Text(item['slot'],
+                              style: _p(size: 12, weight: FontWeight.bold,
+                                  color: _primaryDark)),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                NumberFormat.currency(locale: 'id_ID',
-                                    symbol: 'Rp ', decimalDigits: 0)
-                                    .format(item['harga']),
-                                style: _p(size: 13, weight: FontWeight.bold,
-                                    color: _accent),
-                              ),
+                              Text(item['nama'],
+                                  style: _p(size: 13,
+                                      weight: FontWeight.w600,
+                                      color: _textDark)),
                               const SizedBox(height: 2),
-                              Text('/ jam',
+                              Text(item['jenis'],
                                   style: _p(size: 11,
-                                      color: Colors.grey.shade400)),
+                                      color: Colors.grey.shade500)),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              NumberFormat.currency(locale: 'id_ID',
+                                      symbol: 'Rp ', decimalDigits: 0)
+                                  .format(item['harga']),
+                              style: _p(size: 13, weight: FontWeight.bold,
+                                  color: _accent),
+                            ),
+                            const SizedBox(height: 2),
+                            Text('/ jam',
+                                style: _p(size: 11,
+                                    color: Colors.grey.shade400)),
+                          ],
+                        ),
+                      ],
                     ),
-                  );
-                }).toList(),
-              );
-            },
-          );
-        },
-      );
-    },
-  );
-}
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        );
+      },
+    );
+  }
 
-  // ── Last Booking — StreamBuilder real-time ────────────────────────────────
+  // ── Last Booking ───────────────────────────────────────────────────────────
   Widget _buildLastBooking() {
     final user = _auth.currentUser;
     if (user == null) return const SizedBox.shrink();
@@ -648,7 +695,6 @@ Widget _buildScheduleList() {
           .collection('bookings')
           .snapshots(),
       builder: (context, _) {
-        // Gunakan stream dari root bookings collection by email
         return StreamBuilder<QuerySnapshot>(
           stream: _firestore
               .collection('bookings')
@@ -757,7 +803,7 @@ Widget _buildScheduleList() {
     );
   }
 
-  // ── Bottom Nav ────────────────────────────────────────────────────────────
+  // ── Bottom Nav ─────────────────────────────────────────────────────────────
   Widget _buildBottomNav() {
     final items = [
       {'icon': Icons.home_rounded,    'label': 'Beranda'},
