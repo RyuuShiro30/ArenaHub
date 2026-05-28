@@ -10,6 +10,12 @@ import '../promo/kelola_promo.dart';
 import '../profile/profileAdmin.dart';
 import '../field/kelola_lapangan.dart';
 import '../admin_notifiers.dart';
+import 'package:excel/excel.dart' hide Border;
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
+import 'dart:io';
+import 'dart:math' show min;
+import 'dart:html' as html;
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -40,9 +46,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final List<Map<String, dynamic>> _navItems = [
     {'icon': Icons.dashboard_rounded,            'label': 'Dashboard'},
     {'icon': Icons.confirmation_number_outlined, 'label': 'Kelola Booking'},
-    {'icon': Icons.percent_rounded,        'label': 'Kelola Promo'},
+    {'icon': Icons.percent_rounded,              'label': 'Kelola Promo'},
     {'icon': Icons.event_note_outlined,          'label': 'Kelola Jadwal'},
-    {'icon': Icons.sports_soccer_rounded, 'label': 'Kelola Lapangan'},
+    {'icon': Icons.sports_soccer_rounded,        'label': 'Kelola Lapangan'},
     {'icon': Icons.person_outline_rounded,       'label': 'Profil'},
   ];
 
@@ -56,24 +62,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _fetchAdminSession();
   }
 
-Future<void> _fetchAdminSession() async {
-  try {
-    final snap = await _firestore.collection('admin_profile').limit(1).get();
-    if (snap.docs.isNotEmpty && mounted) {
-      final data  = snap.docs.first.data();
-      final nama  = data['fullName'] ?? 'Admin';
-      final role  = data['level']   ?? 'Administrator';
-      final photo = data['photoUrl'] as String?; // ← tambah ini
-      setState(() {
-        _adminName = nama;
-        _adminRole = role;
-      });
-      adminNameNotifier.value  = nama;
-      adminRoleNotifier.value  = role;
-      adminPhotoNotifier.value = photo; 
-    }
-  } catch (_) {}
-}
+  Future<void> _fetchAdminSession() async {
+    try {
+      final snap = await _firestore.collection('admin_profile').limit(1).get();
+      if (snap.docs.isNotEmpty && mounted) {
+        final data  = snap.docs.first.data();
+        final nama  = data['fullName'] ?? 'Admin';
+        final role  = data['level']   ?? 'Administrator';
+        final photo = data['photoUrl'] as String?;
+        setState(() {
+          _adminName = nama;
+          _adminRole = role;
+        });
+        adminNameNotifier.value  = nama;
+        adminRoleNotifier.value  = role;
+        adminPhotoNotifier.value = photo;
+      }
+    } catch (_) {}
+  }
 
   void _logout() async {
     final confirm = await showDialog<bool>(
@@ -189,23 +195,193 @@ Future<void> _fetchAdminSession() async {
       GoogleFonts.plusJakartaSans(fontSize: size, fontWeight: weight,
           color: color, letterSpacing: spacing);
 
-  Widget _buildBody() {
-    switch (_selectedNav) {
-      case 1:
-        // ← Kelola Booking: langsung embed widget-nya
-        return const KelolaBookingScreen();
-      case 2:
-        return const KelolaPromoScreen();
-      case 3:
-        // ← Kelola Jadwal: buat widget baru dan embed
-        return const KelolaJadwalScreen();
-      case 0:
-      default:
-        return _buildDashboardContent();
+  //Export Excel
+  Future<void> _exportExcel() async {
+  try {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final now   = DateTime.now();
+    final start = DateTime(now.year, now.month, 1);
+    final end   = DateTime(now.year, now.month + 1, 1);
+
+    final snap = await _firestore
+        .collection('bookings')
+        .where('tanggal_booking', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('tanggal_booking', isLessThan: Timestamp.fromDate(end))
+        .orderBy('tanggal_booking', descending: true)
+        .get();
+
+    final excelFile = Excel.createExcel();
+    final sheet = excelFile['Laporan Booking'];
+    excelFile.delete('Sheet1');
+
+    // ── Styling ──────────────────────────────────────
+    final headerStyle = CellStyle(
+      bold: true,
+      backgroundColorHex: ExcelColor.fromHexString('#2563EB'),
+      fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      textWrapping: TextWrapping.WrapText,
+    );
+    final titleStyle = CellStyle(
+      bold: true,
+      fontSize: 14,
+      fontColorHex: ExcelColor.fromHexString('#1A2B3C'),
+    );
+    final subStyle = CellStyle(
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#6B7280'),
+    );
+    final currencyStyle = CellStyle(
+      numberFormat: NumFormat.defaultNumeric,
+    );
+    final successStyle = CellStyle(
+      fontColorHex: ExcelColor.fromHexString('#22C55E'),
+      bold: true,
+    );
+    final pendingStyle = CellStyle(
+      fontColorHex: ExcelColor.fromHexString('#F59E0B'),
+      bold: true,
+    );
+    final gagalStyle = CellStyle(
+      fontColorHex: ExcelColor.fromHexString('#EF4444'),
+      bold: true,
+    );
+
+    const bulan = [
+      '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+
+    // ── Judul laporan ────────────────────────────────
+    sheet.merge(CellIndex.indexByString('A1'), CellIndex.indexByString('G1'));
+    sheet.cell(CellIndex.indexByString('A1')).value =
+        TextCellValue('LAPORAN BOOKING BULANAN - ${bulan[now.month].toUpperCase()} ${now.year}');
+    sheet.cell(CellIndex.indexByString('A1')).cellStyle = titleStyle;
+
+    sheet.merge(CellIndex.indexByString('A2'), CellIndex.indexByString('G2'));
+    sheet.cell(CellIndex.indexByString('A2')).value =
+        TextCellValue('Digenerate pada: ${DateFormat('d MMMM yyyy, HH:mm', 'id_ID').format(now)}');
+    sheet.cell(CellIndex.indexByString('A2')).cellStyle = subStyle;
+
+    // ── Header tabel ─────────────────────────────────
+    final headers = ['No', 'ID Booking', 'Nama Pelanggan', 'Lapangan',
+        'Tanggal Booking', 'Total Harga (Rp)', 'Status'];
+    for (int i = 0; i < headers.length; i++) {
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 3));
+      cell.value = TextCellValue(headers[i]);
+      cell.cellStyle = headerStyle;
+    }
+
+    // ── Isi data ──────────────────────────────────────
+    double grandTotal = 0;
+    int successCount = 0, pendingCount = 0, gagalCount = 0;
+
+    for (int i = 0; i < snap.docs.length; i++) {
+      final data   = snap.docs[i].data();
+      final docId  = snap.docs[i].id;
+      final status = (data['status_pembayaran'] ?? data['status'] ?? '').toString();
+      final total  = double.tryParse(data['total_harga']?.toString() ?? '0') ?? 0;
+      final ts     = data['tanggal_booking'] as Timestamp?;
+      final tglStr = ts != null
+          ? DateFormat('d MMM yyyy, HH:mm', 'id_ID').format(ts.toDate())
+          : '-';
+
+      if (_isSuccess(status))      { grandTotal += total; successCount++; }
+      else if (_isPending(status)) pendingCount++;
+      else if (_isGagal(status))   gagalCount++;
+
+      final row = i + 4;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value =
+          IntCellValue(i + 1);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row)).value =
+          TextCellValue('#${docId.substring(0, min(8, docId.length)).toUpperCase()}');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row)).value =
+          TextCellValue(data['customer_name']?.toString() ?? '-');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row)).value =
+          TextCellValue(data['nama_lapangan']?.toString() ?? '-');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row)).value =
+          TextCellValue(tglStr);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row))
+        ..value = DoubleCellValue(total)
+        ..cellStyle = currencyStyle;
+
+      final statusCell = sheet.cell(
+          CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row));
+      statusCell.value = TextCellValue(_sl(status));
+      statusCell.cellStyle = _isSuccess(status) ? successStyle
+          : _isPending(status) ? pendingStyle
+          : _isGagal(status)   ? gagalStyle
+          : CellStyle();
+    }
+
+    // ── Ringkasan ─────────────────────────────────────
+    final summaryRow = snap.docs.length + 5;
+    sheet.merge(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow),
+      CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: summaryRow),
+    );
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).value =
+        TextCellValue('TOTAL PENDAPATAN (SELESAI)');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).cellStyle =
+        CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'));
+
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).value =
+        DoubleCellValue(grandTotal);
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).cellStyle =
+        CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'),
+            numberFormat: NumFormat.defaultNumeric);
+
+    final s2 = summaryRow + 1;
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).value =
+        TextCellValue('Selesai: $successCount  |  Pending: $pendingCount  |  Gagal: $gagalCount');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).cellStyle =
+        CellStyle(italic: true, fontColorHex: ExcelColor.fromHexString('#6B7280'));
+
+    // ── Lebar kolom ───────────────────────────────────
+    sheet.setColumnWidth(0, 6);
+    sheet.setColumnWidth(1, 14);
+    sheet.setColumnWidth(2, 24);
+    sheet.setColumnWidth(3, 20);
+    sheet.setColumnWidth(4, 22);
+    sheet.setColumnWidth(5, 20);
+    sheet.setColumnWidth(6, 14);
+
+    // ── Download via browser (Web) ────────────────────
+    final bytes = excelFile.encode();
+    if (bytes == null) throw Exception('Gagal encode Excel');
+
+    final fileName = 'Laporan_Booking_${bulan[now.month]}_${now.year}.xlsx';
+    final blob = html.Blob(
+      [bytes],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    final url    = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.AnchorElement(href: url)
+      ..setAttribute('download', fileName)
+      ..click();
+    html.Url.revokeObjectUrl(url);
+
+    if (mounted) Navigator.pop(context);
+
+  } catch (e) {
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengekspor laporan: $e'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
     }
   }
+}
 
-//build
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -213,374 +389,367 @@ Future<void> _fetchAdminSession() async {
       body: Row(children: [
         ClipRect(child: _buildSidebar()),
         Expanded(
-        child: _selectedNav == 1
-            ? const KelolaBookingScreen()
-            : _selectedNav == 2
-            ? const KelolaPromoScreen()
-            : _selectedNav == 3
-            ? const KelolaJadwalScreen()
-            : _selectedNav == 4
-            ? const KelolaLapanganScreen()
-            : _selectedNav == 5
-            ? const ProfileAdminScreen()
-              : StreamBuilder<QuerySnapshot>(
-                  stream: _firestore.collection('bookings').snapshots(),
-                  builder: (context, bookingSnap) {
-                    return StreamBuilder<QuerySnapshot>(
-                      stream: _firestore.collection('lapangan').snapshots(),
-                      builder: (context, lapanganSnap) {
-                        return StreamBuilder<QuerySnapshot>(
-                          stream: _firestore.collection('users').snapshots(),
-                          builder: (context, userSnap) {
-                            final now        = DateTime.now();
-                            final start      = DateTime(now.year, now.month, 1);
-                            final startLast  = DateTime(now.year, now.month - 1, 1);
-                            final endLast    = DateTime(now.year, now.month, 1);
-                            final end        = DateTime(now.year, now.month + 1, 1);
-                            final todayStart = DateTime(now.year, now.month, now.day);
-                            final todayEnd   = todayStart.add(const Duration(days: 1));
-
-                            final allBookings = bookingSnap.hasData
-                                ? bookingSnap.data!.docs
-                                    .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
-                                    .toList()
-                                : <Map<String, dynamic>>[];
-
-                            final todayStr = '${now.year}-'
-                                '${now.month.toString().padLeft(2, '0')}-'
-                                '${now.day.toString().padLeft(2, '0')}';
-                            final bookingHariIni = allBookings.where((b) {
-                              final tanggalMain = b['tanggal_main']?.toString() ?? '';
-                              if (tanggalMain.isNotEmpty) return tanggalMain == todayStr;
-                              final ts = b['tanggal_booking'];
-                              if (ts == null) return false;
-                              final dt = (ts as Timestamp).toDate();
-                              return dt.isAfter(todayStart) && dt.isBefore(todayEnd);
-                            }).length;
-
-                            double pendapatanIni = 0, pendapatanLalu = 0;
-                            for (final b in allBookings) {
-                              final ts = b['tanggal_booking'];
-                              if (ts == null) continue;
-                              final dt     = (ts as Timestamp).toDate();
-                              final harga  = double.tryParse(b['total_harga']?.toString() ?? '0') ?? 0;
-                              final status = (b['status_pembayaran'] ?? '').toString();
-                              if (_isSuccess(status) && dt.isAfter(start) && dt.isBefore(end))
-                                pendapatanIni += harga;
-                              if (_isSuccess(status) && dt.isAfter(startLast) && dt.isBefore(endLast))
-                                pendapatanLalu += harga;
-                            }
-
-                            final sorted = List<Map<String, dynamic>>.from(allBookings)
-                              ..sort((a, b) {
-                                final ta = a['tanggal_booking'];
-                                final tb = b['tanggal_booking'];
-                                if (ta == null || tb == null) return 0;
-                                return (tb as Timestamp).compareTo(ta as Timestamp);
-                              });
-                            final bookingList = sorted.take(10).toList();
-
-                            final lapanganList = lapanganSnap.hasData
-                                ? (lapanganSnap.data!.docs
-                                    .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
-                                    .toList()
-                                  ..sort((a, b) {
-                                    final ta = a['createdAt'];
-                                    final tb = b['createdAt'];
-                                    if (ta == null && tb == null) return 0;
-                                    if (ta == null) return 1;
-                                    if (tb == null) return -1;
-                                    return (tb as Timestamp).compareTo(ta as Timestamp);
-                                  }))
-                                : <Map<String, dynamic>>[];
-                            final totalLapangan  = lapanganList.length;
-                            final lapanganAktif  = lapanganList
-                                .where((l) => l['status'] == 'aktif' || l['status'] == null)
-                                .length;
-
-                            final pelangganBaru = userSnap.hasData
-                                ? userSnap.data!.docs.where((d) {
-                                    final data = d.data() as Map<String, dynamic>;
-                                    final ts   = data['createdAt'];
-                                    if (ts == null) return false;
-                                    return (ts as Timestamp).toDate().isAfter(start);
-                                  }).length
-                                : 0;
-
-                            final growth = pendapatanLalu == 0
-                                ? 0.0
-                                : ((pendapatanIni - pendapatanLalu) / pendapatanLalu) * 100;
-                            final kapPct = totalLapangan == 0
-                                ? 0.0
-                                : (lapanganAktif / totalLapangan) * 100;
-                            final isLoading = !bookingSnap.hasData ||
-                                !lapanganSnap.hasData || !userSnap.hasData;
-
-                            return Column(children: [
-                              _buildTopBar(),
-                              Expanded(
-                                child: SingleChildScrollView(
-                                  padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                        Expanded(flex: 3, child: _buildPerformaCard(
-                                          pendapatanIni:  pendapatanIni,
-                                          pendapatanLalu: pendapatanLalu,
-                                          growth:         growth,
-                                          isLoading:      isLoading,
-                                          bookingTerbaru: bookingList,
-                                          allBookings:    allBookings,
-                                        )),
-                                        const SizedBox(width: 16),
-                                        Expanded(flex: 2, child: _buildBookingAktifCard(
-                                          total:     bookingHariIni,
-                                          isLoading: isLoading,
-                                        )),
-                                      ]),
-                                      const SizedBox(height: 16),
-                                      Row(crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                        Expanded(child: _buildKapasitasCard(pct: kapPct)),
-                                        const SizedBox(width: 16),
-                                        Expanded(child: _buildPelangganCard(total: pelangganBaru)),
-                                        const SizedBox(width: 16),
-                                        Expanded(child: _buildStatusCard(lapanganList: lapanganList)),
-                                      ]),
-                                      const SizedBox(height: 24),
-                                      _buildTableBooking(
-                                        bookingList: bookingList,
-                                        isLoading:   isLoading,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ]);
-                          },
-                        );
-                      },
-                    );
-                  },
-                ),
+          child: _selectedNav == 1
+              ? const KelolaBookingScreen()
+              : _selectedNav == 2
+              ? const KelolaPromoScreen()
+              : _selectedNav == 3
+              ? const KelolaJadwalScreen()
+              : _selectedNav == 4
+              ? const KelolaLapanganScreen()
+              : _selectedNav == 5
+              ? const ProfileAdminScreen()
+              : _buildDashboardStreams(),
         ),
       ]),
     );
   }
 
-  //sidebar
- Widget _buildSidebar() {
-  return ClipRect(
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeInOut,
-      width: _expanded ? _expandedW : _collapsedW,
-      color: _white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-              height: 64,
-              padding: EdgeInsets.symmetric(horizontal: _expanded ? 14 : 10),
-              decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: _border))),
-              child: Row(children: [
-                Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(
-                      color: _blue,
-                      borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.sports_soccer_rounded,
-                      color: Colors.white, size: 20),
-                ),
-                AnimatedOpacity(
-                  opacity: _expanded ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: SizedBox(
-                    width: _expandedW - 36 - 14 - 14,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 10),
+  // ── Dashboard dengan 3 StreamBuilder ─────────────────────────────────────
+  Widget _buildDashboardStreams() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('bookings').snapshots(),
+      builder: (context, bookingSnap) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: _firestore.collection('lapangan').snapshots(),
+          builder: (context, lapanganSnap) {
+            return StreamBuilder<QuerySnapshot>(
+              stream: _firestore.collection('users').snapshots(),
+              builder: (context, userSnap) {
+                final now        = DateTime.now();
+                final start      = DateTime(now.year, now.month, 1);
+                final startLast  = DateTime(now.year, now.month - 1, 1);
+                final endLast    = DateTime(now.year, now.month, 1);
+                final end        = DateTime(now.year, now.month + 1, 1);
+                final todayStart = DateTime(now.year, now.month, now.day);
+                final todayEnd   = todayStart.add(const Duration(days: 1));
+
+                // Toleran: render meski belum semua stream siap
+                final isLoading = (bookingSnap.connectionState == ConnectionState.waiting && !bookingSnap.hasData) ||
+                    (lapanganSnap.connectionState == ConnectionState.waiting && !lapanganSnap.hasData) ||
+                    (userSnap.connectionState == ConnectionState.waiting && !userSnap.hasData);
+
+                final allBookings = bookingSnap.hasData
+                    ? bookingSnap.data!.docs
+                        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+                        .toList()
+                    : <Map<String, dynamic>>[];
+
+                final todayStr = '${now.year}-'
+                    '${now.month.toString().padLeft(2, '0')}-'
+                    '${now.day.toString().padLeft(2, '0')}';
+                final bookingHariIni = allBookings.where((b) {
+                  final tanggalMain = b['tanggal_main']?.toString() ?? '';
+                  if (tanggalMain.isNotEmpty) return tanggalMain == todayStr;
+                  final ts = b['tanggal_booking'];
+                  if (ts == null) return false;
+                  final dt = (ts as Timestamp).toDate();
+                  return dt.isAfter(todayStart) && dt.isBefore(todayEnd);
+                }).length;
+
+                double pendapatanIni = 0, pendapatanLalu = 0;
+                for (final b in allBookings) {
+                  final ts = b['tanggal_booking'];
+                  if (ts == null) continue;
+                  final dt     = (ts as Timestamp).toDate();
+                  final harga  = double.tryParse(b['total_harga']?.toString() ?? '0') ?? 0;
+                  final status = (b['status_pembayaran'] ?? '').toString();
+                  if (_isSuccess(status) && dt.isAfter(start) && dt.isBefore(end))
+                    pendapatanIni += harga;
+                  if (_isSuccess(status) && dt.isAfter(startLast) && dt.isBefore(endLast))
+                    pendapatanLalu += harga;
+                }
+
+                final last24h = DateTime.now().subtract(const Duration(hours: 24));
+
+                final sorted = List<Map<String, dynamic>>.from(allBookings)
+                  ..sort((a, b) {
+                    final ta = a['tanggal_booking'];
+                    final tb = b['tanggal_booking'];
+                    if (ta == null || tb == null) return 0;
+                    return (tb as Timestamp).compareTo(ta as Timestamp);
+                  });
+
+                                final bookingList = sorted.where((b) {
+                                  final ts = b['tanggal_booking'];
+                                  if (ts == null) return false;
+                                  return (ts as Timestamp).toDate().isAfter(last24h);
+                                }).take(10).toList();
+
+                final lapanganList = lapanganSnap.hasData
+                    ? (lapanganSnap.data!.docs
+                        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+                        .toList()
+                      ..sort((a, b) {
+                        final ta = a['createdAt'];
+                        final tb = b['createdAt'];
+                        if (ta == null && tb == null) return 0;
+                        if (ta == null) return 1;
+                        if (tb == null) return -1;
+                        return (tb as Timestamp).compareTo(ta as Timestamp);
+                      }))
+                    : <Map<String, dynamic>>[];
+
+                final pelangganBaru = userSnap.hasData
+                    ? userSnap.data!.docs.where((d) {
+                        final data = d.data() as Map<String, dynamic>;
+                        final ts   = data['createdAt'];
+                        if (ts == null) return false;
+                        return (ts as Timestamp).toDate().isAfter(start);
+                      }).length
+                    : 0;
+
+                return Column(children: [
+                  _buildTopBar(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('ArenaHub',
-                              style: _t(size: 14, weight: FontWeight.w800, color: _blue),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                          Text('PANEL ADMINISTRASI',
-                              style: _t(size: 8, weight: FontWeight.w600,
-                                  color: _muted, spacing: 0.5),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          // ── 3 Cards sama lebar & sama tinggi ──────────────
+                          IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: _buildPerformaCard(
+                                  pendapatanIni:  pendapatanIni,
+                                  isLoading:      isLoading,
+                                )),
+                                const SizedBox(width: 16),
+                                Expanded(child: _buildPelangganCard(total: pelangganBaru)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _buildBookingAktifCard(
+                                  total:     bookingHariIni,
+                                  isLoading: isLoading,
+                                )),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          _buildTableBooking(
+                            bookingList: bookingList,
+                            isLoading:   isLoading,
+                          ),
                         ],
                       ),
                     ),
                   ),
+                ]);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ── Sidebar ───────────────────────────────────────────────────────────────
+  Widget _buildSidebar() {
+    return ClipRect(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        width: _expanded ? _expandedW : _collapsedW,
+        color: _white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+                height: 64,
+                padding: EdgeInsets.symmetric(horizontal: _expanded ? 14 : 10),
+                decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: _border))),
+                child: Row(children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                        color: _blue,
+                        borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.sports_soccer_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                  AnimatedOpacity(
+                    opacity: _expanded ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 150),
+                    child: SizedBox(
+                      width: _expandedW - 36 - 14 - 14,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('ArenaHub',
+                                style: _t(size: 14, weight: FontWeight.w800, color: _blue),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('PANEL ADMINISTRASI',
+                                style: _t(size: 8, weight: FontWeight.w600,
+                                    color: _muted, spacing: 0.5),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ])),
+            const SizedBox(height: 12),
+            ...List.generate(_navItems.length, (i) {
+              final active = _selectedNav == i;
+              final item   = _navItems[i];
+              return GestureDetector(
+                onTap: () => setState(() => _selectedNav = i),
+                child: Container(
+                  margin: EdgeInsets.symmetric(
+                      horizontal: _expanded ? 8 : 4, vertical: 2),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: _expanded ? 10 : 4, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: active ? _blueBg : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 3, height: 20,
+                      margin: EdgeInsets.only(right: _expanded ? 7 : 2),
+                      decoration: BoxDecoration(
+                        color: active ? _blue : Colors.transparent,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Icon(item['icon'] as IconData,
+                        color: active ? _blue : _muted, size: 20),
+                    AnimatedOpacity(
+                      opacity: _expanded ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 150),
+                      child: SizedBox(
+                        width: _expanded ? _expandedW - 80 : 0,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 10),
+                          child: Text(item['label'] as String,
+                              style: _t(size: 13,
+                                  weight: active ? FontWeight.w700 : FontWeight.w500,
+                                  color: active ? _blue : _muted),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                    ),
+                  ]),
                 ),
-              ])),
-          const SizedBox(height: 12),
-          ...List.generate(_navItems.length, (i) {
-            final active = _selectedNav == i;
-            final item   = _navItems[i];
-            return GestureDetector(
-              onTap: () => setState(() => _selectedNav = i),
+              );
+            }),
+            const Spacer(),
+            GestureDetector(
+              onTap: _logout,
               child: Container(
-                margin: EdgeInsets.symmetric(
-                    horizontal: _expanded ? 8 : 4, vertical: 2),
-                padding: EdgeInsets.symmetric(
-                    horizontal: _expanded ? 10 : 4, vertical: 10),
+                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                 decoration: BoxDecoration(
-                  color: active ? _blueBg : Colors.transparent,
+                  color: const Color(0xFFEF4444).withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: 3, height: 20,
-                    margin: EdgeInsets.only(right: _expanded ? 7 : 2),
-                    decoration: BoxDecoration(
-                      color: active ? _blue : Colors.transparent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Icon(item['icon'] as IconData,
-                      color: active ? _blue : _muted, size: 20),
+                  const SizedBox(width: 3, height: 20),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.logout_rounded,
+                      color: Color(0xFFEF4444), size: 20),
                   AnimatedOpacity(
                     opacity: _expanded ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 150),
                     child: SizedBox(
                       width: _expanded ? _expandedW - 80 : 0,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 10),
-                        child: Text(item['label'] as String,
-                            style: _t(size: 13,
-                                weight: active ? FontWeight.w700 : FontWeight.w500,
-                                color: active ? _blue : _muted),
+                      child: const Padding(
+                        padding: EdgeInsets.only(left: 10),
+                        child: Text('Keluar',
+                            style: TextStyle(fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFEF4444)),
                             maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
                     ),
                   ),
                 ]),
               ),
-            );
-          }),
-          const Spacer(),
-          GestureDetector(
-            onTap: _logout,
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEF4444).withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const SizedBox(width: 3, height: 20),
-                const SizedBox(width: 6),
-                const Icon(Icons.logout_rounded,
-                    color: Color(0xFFEF4444), size: 20),
-                AnimatedOpacity(
-                  opacity: _expanded ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: SizedBox(
-                    width: _expanded ? _expandedW - 80 : 0,
-                    child: const Padding(
-                      padding: EdgeInsets.only(left: 10),
-                      child: Text('Keluar',
-                          style: TextStyle(fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFFEF4444)),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ),
-                  ),
-                ),
-              ]),
             ),
-          ),
-
-          // ── Admin info — foto + nama + role ─────────────────────────────
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: _border))),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-
-              // ← AVATAR: tampilkan foto kalau ada, fallback ke inisial
-              ValueListenableBuilder<String?>(
-                valueListenable: adminPhotoNotifier,
-                builder: (_, photoUrl, __) {
-                  return ValueListenableBuilder<String>(
-                    valueListenable: adminNameNotifier,
-                    builder: (_, name, __) {
-                      return Container(
-                        width: 36, height: 36,
-                        decoration: const BoxDecoration(
-                            shape: BoxShape.circle, color: _blue),
-                        child: ClipOval(
-                          child: photoUrl != null
-                              ? Image.network(
-                                  photoUrl,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Center(
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: _border))),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                ValueListenableBuilder<String?>(
+                  valueListenable: adminPhotoNotifier,
+                  builder: (_, photoUrl, __) {
+                    return ValueListenableBuilder<String>(
+                      valueListenable: adminNameNotifier,
+                      builder: (_, name, __) {
+                        return Container(
+                          width: 36, height: 36,
+                          decoration: const BoxDecoration(
+                              shape: BoxShape.circle, color: _blue),
+                          child: ClipOval(
+                            child: photoUrl != null
+                                ? Image.network(
+                                    photoUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Center(
+                                      child: Text(_initials(name),
+                                          style: _t(size: 13,
+                                              weight: FontWeight.w700,
+                                              color: Colors.white)),
+                                    ),
+                                  )
+                                : Center(
                                     child: Text(_initials(name),
                                         style: _t(size: 13,
                                             weight: FontWeight.w700,
                                             color: Colors.white)),
                                   ),
-                                )
-                              : Center(
-                                  child: Text(_initials(name),
-                                      style: _t(size: 13,
-                                          weight: FontWeight.w700,
-                                          color: Colors.white)),
-                                ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-
-              AnimatedOpacity(
-                opacity: _expanded ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 150),
-                child: SizedBox(
-                  width: _expanded ? _expandedW - 36 - 12 - 12 - 10 : 0,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ValueListenableBuilder<String>(
-                          valueListenable: adminNameNotifier,
-                          builder: (_, name, __) => Text(name,
-                              style: _t(size: 12, weight: FontWeight.w700),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                        ValueListenableBuilder<String>(
-                          valueListenable: adminRoleNotifier,
-                          builder: (_, role, __) => Text(role,
-                              style: _t(size: 10, color: _muted),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+                AnimatedOpacity(
+                  opacity: _expanded ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: SizedBox(
+                    width: _expanded ? _expandedW - 36 - 12 - 12 - 10 : 0,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ValueListenableBuilder<String>(
+                            valueListenable: adminNameNotifier,
+                            builder: (_, name, __) => Text(name,
+                                style: _t(size: 12, weight: FontWeight.w700),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                          ValueListenableBuilder<String>(
+                            valueListenable: adminRoleNotifier,
+                            builder: (_, role, __) => Text(role,
+                                style: _t(size: 10, color: _muted),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ]),
-          ),
-        ],
+              ]),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-  //topbar
+  // ── Top Bar ───────────────────────────────────────────────────────────────
   Widget _buildTopBar() {
     final titles = ['Dashboard', 'Kelola Booking',
-        'Kelola Promo', 'Kelola Jadwal', 'Kelola Lapangan','Profil'];
+        'Kelola Promo', 'Kelola Jadwal', 'Kelola Lapangan', 'Profil'];
     return Container(
       height: 60, color: _white,
       padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -592,23 +761,21 @@ Future<void> _fetchAdminSession() async {
     );
   }
 
-  Widget _buildDashboardContent() => const SizedBox(); // placeholder
-
+  // ── Performa Card  ──────────
   Widget _buildPerformaCard({
-    required double pendapatanIni,
-    required double pendapatanLalu,
-    required double growth,
-    required bool isLoading,
-    required List<Map<String, dynamic>> bookingTerbaru,
-    required List<Map<String, dynamic>> allBookings,
-  }) {
-    final isUp = growth >= 0;
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: _white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  required double pendapatanIni,
+  required bool isLoading,
+}) {
+  return Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: _white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: _border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Text('PERFORMA BULAN INI',
             style: _t(size: 11, weight: FontWeight.w700, color: _blue, spacing: 0.6)),
         const SizedBox(height: 10),
@@ -616,47 +783,30 @@ Future<void> _fetchAdminSession() async {
             ? _shimmer(w: 160, h: 28)
             : Text(_rp(pendapatanIni),
                 style: _t(size: 26, weight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        if (!isLoading)
-          Row(children: [
-            Icon(isUp ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                color: isUp ? _green : const Color(0xFFEF4444), size: 16),
-            const SizedBox(width: 4),
-            Text('${isUp ? '+' : ''}${growth.toStringAsFixed(1)}% ',
-                style: _t(size: 13, weight: FontWeight.w600,
-                    color: isUp ? _green : const Color(0xFFEF4444))),
-            Text('dibanding bulan lalu', style: _t(size: 13, color: _muted)),
-          ]),
+        const Spacer(), // ← dorong tombol ke bawah
         const SizedBox(height: 20),
-        Wrap(spacing: 12, runSpacing: 10, children: [
-          ElevatedButton.icon(
-            onPressed: () {},
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: isLoading ? null : _exportExcel,
             icon: const Icon(Icons.download_rounded, size: 16, color: Colors.white),
             label: Text('Unduh Laporan',
                 style: _t(size: 13, weight: FontWeight.w600, color: Colors.white)),
             style: ElevatedButton.styleFrom(
               backgroundColor: _blue,
+              disabledBackgroundColor: _blue.withOpacity(0.5),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               elevation: 0,
             ),
           ),
-          OutlinedButton(
-            onPressed: () => _showDetailTransaksi(
-              allBookings: allBookings, bookingTerbaru: bookingTerbaru),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: _blue.withOpacity(0.4)),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Detail Transaksi',
-                style: _t(size: 13, weight: FontWeight.w600, color: _blue)),
-          ),
-        ]),
-      ]),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
+  // ── Booking Aktif Card ────────────────────────────────────────────────────
   Widget _buildBookingAktifCard({required int total, required bool isLoading}) {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -691,58 +841,21 @@ Future<void> _fetchAdminSession() async {
     );
   }
 
-  Widget _buildKapasitasCard({required double pct}) {
-    final lbl = pct >= 80 ? 'OPTIMAL' : pct >= 50 ? 'NORMAL' : 'RENDAH';
-    final lc  = pct >= 80 ? _green : pct >= 50 ? _orange : const Color(0xFFEF4444);
-    return Container(
-      height: 130,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: _white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('KAPASITAS LAPANGAN',
-            style: _t(size: 10, weight: FontWeight.w700, color: _muted, spacing: 0.5)),
-        const SizedBox(height: 14),
-        Row(children: [
-          Text('${pct.toStringAsFixed(0)}%',
-              style: _t(size: 24, weight: FontWeight.w800)),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-                color: lc.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20)),
-            child: Text(lbl, style: _t(size: 11, weight: FontWeight.w700, color: lc)),
-          ),
-        ]),
-        const SizedBox(height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: pct / 100,
-            backgroundColor: _border,
-            valueColor: const AlwaysStoppedAnimation<Color>(_blue),
-            minHeight: 6,
-          ),
-        ),
-      ]),
-    );
-  }
-
+  // ── Pelanggan Baru Card ───────────────────────────────────────────────────
   Widget _buildPelangganCard({required int total}) {
     return Container(
-      height: 130,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: _white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border)),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: _white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('PELANGGAN BARU',
-            style: _t(size: 10, weight: FontWeight.w700, color: _muted, spacing: 0.5)),
+            style: _t(size: 11, weight: FontWeight.w700, color: _muted, spacing: 0.5)),
         const SizedBox(height: 14),
         Row(children: [
-          Text('+$total', style: _t(size: 24, weight: FontWeight.w800)),
+          Text('+$total', style: _t(size: 28, weight: FontWeight.w800)),
           const SizedBox(width: 12),
           SizedBox(
             height: 30, width: 70,
@@ -773,39 +886,7 @@ Future<void> _fetchAdminSession() async {
     );
   }
 
-  Widget _buildStatusCard({required List<Map<String, dynamic>> lapanganList}) {
-    return Container(
-      height: 130,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: _white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('STATUS OPERASIONAL',
-            style: _t(size: 10, weight: FontWeight.w700, color: _muted, spacing: 0.5)),
-        const SizedBox(height: 14),
-        if (lapanganList.isEmpty)
-          Text('Tidak ada lapangan', style: _t(size: 12, color: _muted))
-        else
-          ...lapanganList.take(3).map((l) {
-            final s = l['status']?.toString().toLowerCase();
-            return _sRow(l['nama_lapangan'] ?? 'Lapangan',
-                s == 'aktif' || s == null ? _green : _orange);
-          }),
-      ]),
-    );
-  }
-
-  Widget _sRow(String name, Color dot) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Row(children: [
-      Expanded(child: Text(name, style: _t(size: 13),
-          maxLines: 1, overflow: TextOverflow.ellipsis)),
-      Container(width: 10, height: 10,
-          decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
-    ]),
-  );
-
+  // ── Tabel Booking Terbaru ─────────────────────────────────────────────────
   Widget _buildTableBooking({
     required List<Map<String, dynamic>> bookingList,
     required bool isLoading,
@@ -826,7 +907,6 @@ Future<void> _fetchAdminSession() async {
                   style: _t(size: 12, color: _muted)),
             ]),
             const Spacer(),
-            // ← Tombol "Lihat Semua" langsung navigate ke Kelola Booking
             TextButton(
               onPressed: () => setState(() => _selectedNav = 1),
               child: Text('Lihat Semua',
@@ -966,179 +1046,6 @@ Future<void> _fetchAdminSession() async {
       ),
     );
   }
-
-  void _showDetailTransaksi({
-    required List<Map<String, dynamic>> allBookings,
-    required List<Map<String, dynamic>> bookingTerbaru,
-  }) {
-    final now   = DateTime.now();
-    final start = DateTime(now.year, now.month, 1);
-    final end   = DateTime(now.year, now.month + 1, 1);
-
-    double totalPendapatan = 0;
-    int selesai = 0, pending = 0, batal = 0;
-
-    for (final b in allBookings) {
-      final ts = b['tanggal_booking'];
-      if (ts != null) {
-        final dt = (ts as Timestamp).toDate();
-        if (dt.isBefore(start) || !dt.isBefore(end)) continue;
-      }
-      final s     = (b['status_pembayaran'] ?? '').toString();
-      final harga = double.tryParse(b['total_harga']?.toString() ?? '0') ?? 0;
-      if (_isSuccess(s)) { selesai++; totalPendapatan += harga; }
-      else if (_isPending(s)) pending++;
-      else if (_isGagal(s)) batal++;
-    }
-
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 680,
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
-          ),
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Text('Detail Transaksi',
-                      style: _t(size: 18, weight: FontWeight.w700)),
-                  const Spacer(),
-                  IconButton(icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(context)),
-                ]),
-                Text('Rekap transaksi ${_bulanIni()}',
-                    style: _t(size: 13, color: _muted)),
-                const SizedBox(height: 20),
-                Row(children: [
-                  _dCard('Total Pendapatan', _rp(totalPendapatan),
-                      _blue, Icons.payments_outlined),
-                  const SizedBox(width: 10),
-                  _dCard('Selesai', '$selesai booking',
-                      _green, Icons.check_circle_outline_rounded),
-                  const SizedBox(width: 10),
-                  _dCard('Pending', '$pending booking',
-                      _orange, Icons.pending_outlined),
-                  const SizedBox(width: 10),
-                  _dCard('Dibatalkan', '$batal booking',
-                      const Color(0xFFEF4444), Icons.cancel_outlined),
-                ]),
-                const SizedBox(height: 20),
-                Container(
-                  decoration: BoxDecoration(
-                      border: Border.all(color: _border),
-                      borderRadius: BorderRadius.circular(12)),
-                  child: Column(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(color: _bg,
-                          borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(12))),
-                      child: Row(children: [
-                        _th2('Pelanggan', 3), _th2('Lapangan', 2),
-                        _th2('Total', 2),     _th2('Status', 2),
-                      ]),
-                    ),
-                    Divider(color: _border, height: 1),
-                    ...bookingTerbaru.take(5).map((b) {
-                      final total = double.tryParse(b['total_harga'].toString()) ?? 0;
-                      final rawStatus = (b['status_pembayaran'] ?? b['status'] ?? '').toString();
-                      final dc    = _sc(rawStatus);
-                      final label = _sl(rawStatus);
-                      return Column(children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          child: Row(children: [
-                            Expanded(flex: 3,
-                                child: Text(b['customer_name'] ?? '-',
-                                    style: _t(size: 13, weight: FontWeight.w600),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis)),
-                            Expanded(flex: 2,
-                                child: Text(b['nama_lapangan'] ?? '-',
-                                    style: _t(size: 13),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis)),
-                            Expanded(flex: 2,
-                                child: Text(_rp(total),
-                                    style: _t(size: 13, weight: FontWeight.w700))),
-                            Expanded(flex: 2,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                    color: dc.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(20)),
-                                child: Text(label,
-                                    style: _t(size: 11, weight: FontWeight.w700, color: dc),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                            ),
-                          ]),
-                        ),
-                        if (b != bookingTerbaru.take(5).last)
-                          Divider(color: _border, height: 1, indent: 16, endIndent: 16),
-                      ]);
-                    }),
-                  ]),
-                ),
-                const SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: _border),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: Text('Tutup',
-                        style: _t(size: 13, weight: FontWeight.w600, color: _muted)),
-                  ),
-                ),
-              ]),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _dCard(String label, String value, Color color, IconData icon) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 8),
-          Text(value,
-              style: _t(size: 15, weight: FontWeight.w800, color: color),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
-          Text(label, style: _t(size: 10, color: _muted),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-        ]),
-      ),
-    );
-  }
-
-  Widget _th2(String label, int flex) => Expanded(
-    flex: flex,
-    child: Text(label, style: _t(size: 11, weight: FontWeight.w700,
-        color: _muted, spacing: 0.4)),
-  );
 
   Widget _shimmer({required double w, required double h, bool dark = false}) =>
       Container(
