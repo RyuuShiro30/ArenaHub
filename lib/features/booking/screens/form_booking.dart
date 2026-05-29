@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'konfirmasi_booking.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../data/model/booking_model.dart';
 import 'promo.dart';
 
@@ -36,22 +37,28 @@ class _FormBookingPageState extends State<FormBookingPage> {
   int _hargaPerJam = 0;
   bool _isLoadingLapangan = true;
 
+  // ── data user login ──
+  String _namaUser = '';
+  String _teleponUser = '';
+  String _emailUser = '';
+  bool _isLoadingUser = true;
+  bool _addAsPemesan = true; // toggle default ON
+
   PromoData? _promoAktif;
   String? _promoError;
-
   bool _isLoading = false;
 
   static const Color _primaryColor = Color(0xFF135B9D);
   static const Color _accentColor = Color(0xFF2196F3);
   static const Color _successColor = Color(0xFF4CAF50);
-  static const Color _errorColor = Color(0xFFE53935);
 
   @override
   void initState() {
     super.initState();
     _fetchLapangan();
+    _fetchUserData();
   }
-  
+
   @override
   void dispose() {
     _namaController.dispose();
@@ -61,14 +68,14 @@ class _FormBookingPageState extends State<FormBookingPage> {
     super.dispose();
   }
 
-  // fetch data lapangan
+  // ── fetch lapangan ──
+
   Future<void> _fetchLapangan() async {
     try {
       final doc = await FirebaseFirestore.instance
           .collection('lapangan')
           .doc(widget.lapanganId)
           .get();
-
       if (doc.exists) {
         final map = doc.data()!;
         setState(() {
@@ -80,18 +87,77 @@ class _FormBookingPageState extends State<FormBookingPage> {
       } else {
         setState(() => _isLoadingLapangan = false);
       }
-    } catch (e) {
+    } catch (_) {
       setState(() => _isLoadingLapangan = false);
     }
   }
 
-  // kalkulasi harga
+  // ── fetch data user dari Firestore ──
+
+  Future<void> _fetchUserData() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        setState(() => _isLoadingUser = false);
+        return;
+      }
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      if (doc.exists) {
+        final map = doc.data()!;
+        setState(() {
+          _namaUser = map['nama'] ?? map['name'] ?? '';
+          _teleponUser = map['telepon'] ?? map['phone'] ?? '';
+          _emailUser = map['email'] ??
+              FirebaseAuth.instance.currentUser?.email ?? '';
+          _isLoadingUser = false;
+        });
+
+        // auto-isi form karena toggle default ON
+        _applyUserToForm();
+      } else {
+        setState(() {
+          _emailUser =
+              FirebaseAuth.instance.currentUser?.email ?? '';
+          _isLoadingUser = false;
+        });
+      }
+    } catch (_) {
+      setState(() => _isLoadingUser = false);
+    }
+  }
+
+  // ── terapkan / hapus data user ke form ──
+
+  void _applyUserToForm() {
+    _namaController.text = _namaUser;
+    _teleponController.text = _teleponUser;
+  }
+
+  void _clearForm() {
+    _namaController.clear();
+    _teleponController.clear();
+  }
+
+  void _onToggleAddAsPemesan(bool val) {
+    setState(() => _addAsPemesan = val);
+    if (val) {
+      _applyUserToForm();
+    } else {
+      _clearForm();
+    }
+  }
+
+  // ── kalkulasi harga ──
 
   int get _subtotal => _hargaPerJam * widget.selectedTimes.length;
   int get _diskon => _promoAktif?.diskon ?? 0;
   int get _total => _subtotal + widget.serviceFee - _diskon;
 
-  // format tgl waktu
   String get _tanggalDisplay {
     const bulan = [
       '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -102,14 +168,10 @@ class _FormBookingPageState extends State<FormBookingPage> {
 
   String get _waktuDisplay {
     if (widget.selectedTimes.isEmpty) return '-';
-    
-    final jamMulai = widget.selectedTimes.first.split(' - ').first;  // ambil "10:00" dari "10:00 - 11:00"
-    final jamSelesai = widget.selectedTimes.last.split(' - ').last;  // ambil "12:00" dari "11:00 - 12:00"
-    
+    final jamMulai = widget.selectedTimes.first.split(' - ').first;
+    final jamSelesai = widget.selectedTimes.last.split(' - ').last;
     return '$jamMulai s/d $jamSelesai (${widget.selectedTimes.length} Jam)';
   }
-
-  // format rp
 
   String _formatRupiah(int nominal) {
     return NumberFormat.currency(
@@ -119,11 +181,10 @@ class _FormBookingPageState extends State<FormBookingPage> {
     ).format(nominal);
   }
 
-  // logic promo
+  // ── promo logic (sama seperti sebelumnya) ──
 
   Future<void> _terapkanPromo() async {
     final kode = _promoController.text.trim().toUpperCase();
-
     if (kode.isEmpty) {
       setState(() {
         _promoError = 'Masukkan kode promo terlebih dahulu';
@@ -131,7 +192,6 @@ class _FormBookingPageState extends State<FormBookingPage> {
       });
       return;
     }
-
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('promos')
@@ -140,63 +200,32 @@ class _FormBookingPageState extends State<FormBookingPage> {
           .get();
 
       if (snapshot.docs.isEmpty) {
-        setState(() {
-          _promoAktif = null;
-          _promoError = 'Kode promo tidak valid';
-        });
+        setState(() { _promoAktif = null; _promoError = 'Kode promo tidak valid'; });
         return;
       }
-
       final promo = PromoData.fromFirestore(snapshot.docs.first.data());
-
-      // cek aktif
       if (!promo.isActive) {
-        setState(() {
-          _promoAktif = null;
-          _promoError = 'Promo sedang tidak aktif';
-        });
+        setState(() { _promoAktif = null; _promoError = 'Promo sedang tidak aktif'; });
         return;
       }
-
-      // cek expired
       if (promo.expiredAt.isBefore(DateTime.now())) {
-        setState(() {
-          _promoAktif = null;
-          _promoError = 'Promo sudah expired';
-        });
+        setState(() { _promoAktif = null; _promoError = 'Promo sudah expired'; });
         return;
       }
-
-      // cek minimum transaksi
       if (_subtotal < promo.minTransaksi) {
         setState(() {
           _promoAktif = null;
-          _promoError =
-              'Minimal transaksi ${_formatRupiah(promo.minTransaksi)}';
+          _promoError = 'Minimal transaksi ${_formatRupiah(promo.minTransaksi)}';
         });
         return;
       }
-
-      // cek kuota
       if (promo.kuota <= 0) {
-        setState(() {
-          _promoAktif = null;
-          _promoError = 'Kuota promo habis';
-        });
+        setState(() { _promoAktif = null; _promoError = 'Kuota promo habis'; });
         return;
       }
-
-      // promo valid
-      setState(() {
-        _promoAktif = promo;
-        _promoError = null;
-      });
-
-    } catch (e) {
-      setState(() {
-        _promoAktif = null;
-        _promoError = 'Terjadi kesalahan';
-      });
+      setState(() { _promoAktif = promo; _promoError = null; });
+    } catch (_) {
+      setState(() { _promoAktif = null; _promoError = 'Terjadi kesalahan'; });
     }
   }
 
@@ -208,17 +237,14 @@ class _FormBookingPageState extends State<FormBookingPage> {
     });
   }
 
-  // submit booking
+  // ── submit ──
 
   Future<void> _konfirmasiBooking() async {
     FocusScope.of(context).unfocus();
-
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
     await Future.delayed(const Duration(seconds: 1));
     setState(() => _isLoading = false);
-
     if (!mounted) return;
 
     Navigator.push(
@@ -236,14 +262,16 @@ class _FormBookingPageState extends State<FormBookingPage> {
             namaPemesan: _namaController.text.trim(),
             nomorTelepon: _teleponController.text.trim(),
             catatan: _catatanController.text.trim(),
-            promo: _promoAktif,            
+            promo: _promoAktif,
           ),
         ),
       ),
     );
   }
 
-  // build
+  // ══════════════════════════════════════
+  // BUILD
+  // ══════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -261,6 +289,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
           slivers: [
             _buildAppBar(),
             SliverToBoxAdapter(child: _buildKartuLapangan()),
+            SliverToBoxAdapter(child: _buildSeksiOrderDetail()),  // ← BARU
             SliverToBoxAdapter(child: _buildSeksiDataPemesan()),
             SliverToBoxAdapter(child: _buildSeksiPromo()),
             SliverToBoxAdapter(child: _buildSeksiRincianHarga()),
@@ -272,7 +301,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // app bar
+  // ── app bar ──
 
   Widget _buildAppBar() {
     return SliverAppBar(
@@ -287,16 +316,13 @@ class _FormBookingPageState extends State<FormBookingPage> {
       title: const Text(
         'Detail Booking',
         style: TextStyle(
-          color: _primaryColor,
-          fontWeight: FontWeight.w900,
-          fontSize: 18,
-        ),
+            color: _primaryColor, fontWeight: FontWeight.w900, fontSize: 18),
       ),
       centerTitle: false,
     );
   }
 
-  // kartu lapangan
+  // ── kartu lapangan (sama) ──
 
   Widget _buildKartuLapangan() {
     return Container(
@@ -306,7 +332,6 @@ class _FormBookingPageState extends State<FormBookingPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            // ignore: deprecated_member_use — ganti ke withValues kalau Flutter >= 3.27
             color: Colors.black.withOpacity(0.06),
             blurRadius: 10,
             offset: const Offset(0, 4),
@@ -337,20 +362,112 @@ class _FormBookingPageState extends State<FormBookingPage> {
                 Text(
                   _namaLapangan,
                   style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1A2E),
-                  ),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1A1A2E)),
                 ),
                 const SizedBox(height: 10),
-                _InfoRow(
-                  icon: Icons.calendar_today_rounded,
-                  text: _tanggalDisplay,
-                ),
+                _InfoRow(icon: Icons.calendar_today_rounded, text: _tanggalDisplay),
                 const SizedBox(height: 6),
-                _InfoRow(
-                  icon: Icons.access_time_rounded,
-                  text: _waktuDisplay,
+                _InfoRow(icon: Icons.access_time_rounded, text: _waktuDisplay),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── ORDER DETAIL (BARU) ──
+
+  Widget _buildSeksiOrderDetail() {
+    return _Kartu(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SeksiJudul('Order Detail'),
+          const SizedBox(height: 14),
+          if (_isLoadingUser)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else ...[
+            _OrderDetailRow(
+              icon: Icons.person_outline_rounded,
+              label: 'Nama',
+              value: _namaUser.isNotEmpty ? _namaUser : '-',
+            ),
+            const SizedBox(height: 8),
+            _OrderDetailRow(
+              icon: Icons.phone_outlined,
+              label: 'Telepon',
+              value: _teleponUser.isNotEmpty ? _teleponUser : '-',
+            ),
+            const SizedBox(height: 8),
+            _OrderDetailRow(
+              icon: Icons.email_outlined,
+              label: 'Email',
+              value: _emailUser.isNotEmpty ? _emailUser : '-',
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1, color: Color(0xFFEEEEEE)),
+            ),
+            // toggle
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'Tambahkan sebagai pemesan',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A1A2E),
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Data kamu akan otomatis diisi ke form',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF888888),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  value: _addAsPemesan,
+                  onChanged: _onToggleAddAsPemesan,
+                  activeColor: _primaryColor,
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F4FF),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.info_outline_rounded,
+                    size: 14, color: _primaryColor),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Konfirmasi booking akan dikirim ke email di atas.',
+                    style: TextStyle(fontSize: 12, color: _primaryColor),
+                  ),
                 ),
               ],
             ),
@@ -360,7 +477,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // section data pemesan
+  // ── data pemesan ──
 
   Widget _buildSeksiDataPemesan() {
     return _Kartu(
@@ -368,7 +485,28 @@ class _FormBookingPageState extends State<FormBookingPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SeksiJudul('Data Pemesan'),
+          Row(
+            children: [
+              const _SeksiJudul('Data Pemesan'),
+              const Spacer(),
+              if (!_addAsPemesan)
+                GestureDetector(
+                  onTap: () {
+                    setState(() => _addAsPemesan = true);
+                    _applyUserToForm();
+                  },
+                  child: const Text(
+                    'Pakai data saya',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: _primaryColor,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 16),
           _InputField(
             label: 'Nama Lengkap',
@@ -410,7 +548,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // section promo
+  // ── promo (sama seperti sebelumnya) ──
 
   Widget _buildSeksiPromo() {
     return _Kartu(
@@ -430,31 +568,21 @@ class _FormBookingPageState extends State<FormBookingPage> {
                     color: _primaryColor, size: 20),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'Kode Promo',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
+              const Text('Kode Promo',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: Color(0xFF1A1A2E))),
               const Spacer(),
               GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => PromoPage()),
-                  );
-                },
-                child: const Text(
-                  'Lihat Promo',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: _primaryColor,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
+                onTap: () => Navigator.push(
+                    context, MaterialPageRoute(builder: (_) => PromoPage())),
+                child: const Text('Lihat Promo',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: _primaryColor,
+                        decoration: TextDecoration.underline)),
               ),
             ],
           ),
@@ -466,7 +594,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
                 child: TextField(
                   controller: _promoController,
                   textCapitalization: TextCapitalization.characters,
-                  enabled: _promoAktif == null, // dikunci kalau promo aktif
+                  enabled: _promoAktif == null,
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Punya kode promo?',
@@ -479,14 +607,12 @@ class _FormBookingPageState extends State<FormBookingPage> {
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 12),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide:
-                          const BorderSide(color: _accentColor, width: 1.5),
-                    ),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: _accentColor, width: 1.5)),
                     errorText: _promoError,
                     errorStyle: const TextStyle(fontSize: 12),
                     suffixIcon: _promoAktif != null
@@ -498,9 +624,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
                         : null,
                   ),
                   onChanged: (_) {
-                    if (_promoError != null) {
-                      setState(() => _promoError = null);
-                    }
+                    if (_promoError != null) setState(() => _promoError = null);
                   },
                 ),
               ),
@@ -508,15 +632,16 @@ class _FormBookingPageState extends State<FormBookingPage> {
               SizedBox(
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: _promoAktif == null ? _terapkanPromo : _hapusPromo,
+                  onPressed:
+                      _promoAktif == null ? _terapkanPromo : _hapusPromo,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _promoAktif == null ? _primaryColor : Colors.grey.shade400,
+                    backgroundColor: _promoAktif == null
+                        ? _primaryColor
+                        : Colors.grey.shade400,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 18),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                        borderRadius: BorderRadius.circular(10)),
                     elevation: 0,
                   ),
                   child: Text(
@@ -536,8 +661,8 @@ class _FormBookingPageState extends State<FormBookingPage> {
               decoration: BoxDecoration(
                 color: _successColor.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(8),
-                border:
-                    Border.all(color: _successColor.withOpacity(0.3), width: 1),
+                border: Border.all(
+                    color: _successColor.withOpacity(0.3), width: 1),
               ),
               child: Row(
                 children: [
@@ -548,10 +673,9 @@ class _FormBookingPageState extends State<FormBookingPage> {
                     child: Text(
                       '${_promoAktif!.deskripsi} Hemat ${_formatRupiah(_promoAktif!.diskon)}',
                       style: const TextStyle(
-                        color: _successColor,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                      ),
+                          color: _successColor,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -563,7 +687,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // section rincian harga
+  // ── rincian harga (sama) ──
 
   Widget _buildSeksiRincianHarga() {
     return _Kartu(
@@ -573,20 +697,13 @@ class _FormBookingPageState extends State<FormBookingPage> {
         children: [
           const _SeksiJudul('Rincian Harga'),
           const SizedBox(height: 16),
-          _BarisPricing(
-            label: 'Harga per jam',
-            nilai: _formatRupiah(_hargaPerJam),
-          ),
+          _BarisPricing(label: 'Harga per jam', nilai: _formatRupiah(_hargaPerJam)),
           const SizedBox(height: 8),
           _BarisPricing(
-            label: 'Durasi',
-            nilai: '${widget.selectedTimes.length} Jam',
-          ),
-        const SizedBox(height: 8),
-        _BarisPricing(
-          label: 'Biaya Layanan',
-          nilai: _formatRupiah(widget.serviceFee),
-        ),          
+              label: 'Durasi', nilai: '${widget.selectedTimes.length} Jam'),
+          const SizedBox(height: 8),
+          _BarisPricing(
+              label: 'Biaya Layanan', nilai: _formatRupiah(widget.serviceFee)),
           if (_diskon > 0) ...[
             const SizedBox(height: 8),
             _BarisPricing(
@@ -602,22 +719,16 @@ class _FormBookingPageState extends State<FormBookingPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Total Pembayaran',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-              Text(
-                _formatRupiah(_total),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                  color: _primaryColor,
-                ),
-              ),
+              const Text('Total Pembayaran',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: Color(0xFF1A1A2E))),
+              Text(_formatRupiah(_total),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                      color: _primaryColor)),
             ],
           ),
         ],
@@ -625,7 +736,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // tombol konfirmasi
+  // ── tombol konfirmasi ──
 
   Widget _buildTombolKonfirmasi() {
     return Container(
@@ -635,10 +746,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 12,
-            offset: Offset(0, -4),
-          ),
+              color: Color(0x14000000), blurRadius: 12, offset: Offset(0, -4))
         ],
       ),
       child: SizedBox(
@@ -661,22 +769,68 @@ class _FormBookingPageState extends State<FormBookingPage> {
                   child: CircularProgressIndicator(
                       color: Colors.white, strokeWidth: 2.5),
                 )
-              : const Text(
-                  'Konfirmasi Booking',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
+              : const Text('Konfirmasi Booking',
+                  style:
+                      TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
         ),
       ),
     );
   }
 }
 
-// widget pembantu
+// ══════════════════════════════════════
+// WIDGET BARU: _OrderDetailRow
+// ══════════════════════════════════════
+
+class _OrderDetailRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _OrderDetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: const Color(0xFF1B4E82)),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 70,
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 13.5, color: Color(0xFF666666)),
+          ),
+        ),
+        const Text(' : ',
+            style: TextStyle(fontSize: 13.5, color: Color(0xFF666666))),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1A1A2E),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// WIDGET LAMA (tidak berubah)
+// ══════════════════════════════════════
 
 class _Kartu extends StatelessWidget {
   final Widget child;
   final EdgeInsets margin;
-
   const _Kartu({required this.child, required this.margin});
 
   @override
@@ -706,21 +860,17 @@ class _SeksiJudul extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF1A1A2E),
-      ),
-    );
+    return Text(text,
+        style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1A1A2E)));
   }
 }
 
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String text;
-
   const _InfoRow({required this.icon, required this.text});
 
   @override
@@ -729,10 +879,8 @@ class _InfoRow extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: const Color(0xFF1B4E82)),
         const SizedBox(width: 8),
-        Text(
-          text,
-          style: const TextStyle(fontSize: 14, color: Color(0xFF555555)),
-        ),
+        Text(text,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF555555))),
       ],
     );
   }
@@ -762,14 +910,11 @@ class _InputField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF333333),
-          ),
-        ),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF333333))),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
@@ -780,31 +925,26 @@ class _InputField extends StatelessWidget {
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle:
-                TextStyle(color: Colors.grey.shade400, fontSize: 14),
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
             filled: true,
             fillColor: const Color(0xFFF5F7FA),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide:
-                  const BorderSide(color: Color(0xFF2196F3), width: 1.5),
-            ),
+                borderRadius: BorderRadius.circular(10),
+                borderSide:
+                    const BorderSide(color: Color(0xFF2196F3), width: 1.5)),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide:
-                  const BorderSide(color: Color(0xFFE53935), width: 1.5),
-            ),
+                borderRadius: BorderRadius.circular(10),
+                borderSide:
+                    const BorderSide(color: Color(0xFFE53935), width: 1.5)),
             focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide:
-                  const BorderSide(color: Color(0xFFE53935), width: 1.5),
-            ),
+                borderRadius: BorderRadius.circular(10),
+                borderSide:
+                    const BorderSide(color: Color(0xFFE53935), width: 1.5)),
           ),
         ),
       ],
@@ -817,11 +957,7 @@ class _BarisPricing extends StatelessWidget {
   final String nilai;
   final Color? warnaNilai;
 
-  const _BarisPricing({
-    required this.label,
-    required this.nilai,
-    this.warnaNilai,
-  });
+  const _BarisPricing({required this.label, required this.nilai, this.warnaNilai});
 
   @override
   Widget build(BuildContext context) {
@@ -830,14 +966,11 @@ class _BarisPricing extends StatelessWidget {
       children: [
         Text(label,
             style: const TextStyle(fontSize: 14, color: Color(0xFF666666))),
-        Text(
-          nilai,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: warnaNilai ?? const Color(0xFF1A1A2E),
-          ),
-        ),
+        Text(nilai,
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: warnaNilai ?? const Color(0xFF1A1A2E))),
       ],
     );
   }
