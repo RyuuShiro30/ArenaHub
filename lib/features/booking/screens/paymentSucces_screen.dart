@@ -75,6 +75,20 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
         'jam_main': jamMain, 
       });
 
+      // Update child documents if any
+      final int childCount = bookingData['child_count'] ?? 0;
+      if (childCount > 0) {
+        for (int i = 0; i < childCount; i++) {
+          await FirebaseFirestore.instance
+              .collection('bookings')
+              .doc('${id}_$i')
+              .update({
+            'status_pembayaran': newStatus,
+            'status': newStatus == "pembayaran selesai" ? "confirmed" : "gagal",
+          });
+        }
+      }
+
       // Kembalikan data terbaru setelah update agar UI merefleksikan status yang benar
       return await docRef.get();
     }

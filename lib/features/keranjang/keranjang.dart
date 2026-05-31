@@ -285,6 +285,37 @@ class _KeranjangPageState extends State<KeranjangPage> {
             ],
           ),
           const SizedBox(height: 12),
+          // Tombol Checkout Sekarang
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                final cartItems = List<KeranjangItem>.from(items);
+                CartManager.instance.clear();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => FormBookingPage(
+                      bookingItems: cartItems,
+                      serviceFee: 5000,
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+              child: Text('Checkout Sekarang',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700, fontSize: 14)),
+            ),
+          ),
+          const SizedBox(height: 10),
           // Tombol tambah lapangan lain
           SizedBox(
             width: double.infinity,
@@ -365,9 +396,7 @@ class _KeranjangPageState extends State<KeranjangPage> {
       context,
       MaterialPageRoute(
         builder: (_) => FormBookingPage(
-          lapanganId:    item.lapanganId,
-          selectedDate:  item.selectedDate,
-          selectedTimes: item.selectedTimes,
+          bookingItems:  [item],
           serviceFee:    5000,
         ),
       ),

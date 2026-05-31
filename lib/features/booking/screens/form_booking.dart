@@ -5,19 +5,16 @@ import 'konfirmasi_booking.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../data/model/booking_model.dart';
+import '../../keranjang/cart_manager.dart';
 import 'promo.dart';
 
 class FormBookingPage extends StatefulWidget {
-  final String lapanganId;
-  final DateTime selectedDate;
-  final List<String> selectedTimes;
+  final List<KeranjangItem> bookingItems;
   final int serviceFee;
 
   const FormBookingPage({
     super.key,
-    required this.lapanganId,
-    required this.selectedDate,
-    required this.selectedTimes,
+    required this.bookingItems,
     required this.serviceFee,
   });
 
@@ -31,11 +28,6 @@ class _FormBookingPageState extends State<FormBookingPage> {
   final _teleponController = TextEditingController();
   final _catatanController = TextEditingController();
   final _promoController = TextEditingController();
-
-  String _namaLapangan = '';
-  String _imagePath = '';
-  int _hargaPerJam = 0;
-  bool _isLoadingLapangan = true;
 
   // ── data user login ──
   String _namaUser = '';
@@ -55,7 +47,6 @@ class _FormBookingPageState extends State<FormBookingPage> {
   @override
   void initState() {
     super.initState();
-    _fetchLapangan();
     _fetchUserData();
   }
 
@@ -66,30 +57,6 @@ class _FormBookingPageState extends State<FormBookingPage> {
     _catatanController.dispose();
     _promoController.dispose();
     super.dispose();
-  }
-
-  // ── fetch lapangan ──
-
-  Future<void> _fetchLapangan() async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('lapangan')
-          .doc(widget.lapanganId)
-          .get();
-      if (doc.exists) {
-        final map = doc.data()!;
-        setState(() {
-          _namaLapangan = map['nama_lapangan'] ?? '';
-          _imagePath = (map['foto'] as List?)?.first ?? '';
-          _hargaPerJam = map['harga'] ?? 0;
-          _isLoadingLapangan = false;
-        });
-      } else {
-        setState(() => _isLoadingLapangan = false);
-      }
-    } catch (_) {
-      setState(() => _isLoadingLapangan = false);
-    }
   }
 
   // ── fetch data user dari Firestore ──
@@ -110,8 +77,8 @@ class _FormBookingPageState extends State<FormBookingPage> {
       if (doc.exists) {
         final map = doc.data()!;
         setState(() {
-          _namaUser = map['nama'] ?? map['name'] ?? '';
-          _teleponUser = map['telepon'] ?? map['phone'] ?? '';
+          _namaUser = map['fullName'] ?? map['nama'] ?? map['name'] ?? '';
+          _teleponUser = map['phone'] ?? map['telepon'] ?? '';
           _emailUser = map['email'] ??
               FirebaseAuth.instance.currentUser?.email ?? '';
           _isLoadingUser = false;
@@ -154,23 +121,16 @@ class _FormBookingPageState extends State<FormBookingPage> {
 
   // ── kalkulasi harga ──
 
-  int get _subtotal => _hargaPerJam * widget.selectedTimes.length;
+  int get _subtotal => widget.bookingItems.fold(0, (total, item) => total + item.subtotal);
   int get _diskon => _promoAktif?.diskon ?? 0;
   int get _total => _subtotal + widget.serviceFee - _diskon;
 
-  String get _tanggalDisplay {
+  String _getNamaBulan(int month) {
     const bulan = [
       '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
     ];
-    return '${widget.selectedDate.day} ${bulan[widget.selectedDate.month]} ${widget.selectedDate.year}';
-  }
-
-  String get _waktuDisplay {
-    if (widget.selectedTimes.isEmpty) return '-';
-    final jamMulai = widget.selectedTimes.first.split(' - ').first;
-    final jamSelesai = widget.selectedTimes.last.split(' - ').last;
-    return '$jamMulai s/d $jamSelesai (${widget.selectedTimes.length} Jam)';
+    return bulan[month];
   }
 
   String _formatRupiah(int nominal) {
@@ -181,7 +141,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     ).format(nominal);
   }
 
-  // ── promo logic (sama seperti sebelumnya) ──
+  // ── promo logic ──
 
   Future<void> _terapkanPromo() async {
     final kode = _promoController.text.trim().toUpperCase();
@@ -242,6 +202,20 @@ class _FormBookingPageState extends State<FormBookingPage> {
   Future<void> _konfirmasiBooking() async {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
+
+    final String nama = _addAsPemesan ? _namaUser : _namaController.text.trim();
+    final String telepon = _addAsPemesan ? _teleponUser : _teleponController.text.trim();
+
+    if (nama.isEmpty || telepon.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data profil Anda belum lengkap. Silakan matikan toggle "Tambahkan sebagai pemesan" untuk mengisi data manual.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     await Future.delayed(const Duration(seconds: 1));
     setState(() => _isLoading = false);
@@ -252,15 +226,10 @@ class _FormBookingPageState extends State<FormBookingPage> {
       MaterialPageRoute(
         builder: (_) => KonfirmasiBookingPage(
           data: KonfirmasiData(
-            lapanganId: widget.lapanganId,
-            namaLapangan: _namaLapangan,
-            imagePath: _imagePath,
-            tanggal: widget.selectedDate,
-            selectedTimes: widget.selectedTimes,
-            hargaPerJam: _hargaPerJam,
+            bookingItems: widget.bookingItems,
             biayaLayanan: widget.serviceFee,
-            namaPemesan: _namaController.text.trim(),
-            nomorTelepon: _teleponController.text.trim(),
+            namaPemesan: nama,
+            nomorTelepon: telepon,
             catatan: _catatanController.text.trim(),
             promo: _promoAktif,
           ),
@@ -275,12 +244,6 @@ class _FormBookingPageState extends State<FormBookingPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingLapangan) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF5F7FA),
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: Form(
@@ -288,8 +251,8 @@ class _FormBookingPageState extends State<FormBookingPage> {
         child: CustomScrollView(
           slivers: [
             _buildAppBar(),
-            SliverToBoxAdapter(child: _buildKartuLapangan()),
-            SliverToBoxAdapter(child: _buildSeksiOrderDetail()),  // ← BARU
+            SliverToBoxAdapter(child: _buildDaftarLapangan()),
+            SliverToBoxAdapter(child: _buildSeksiOrderDetail()),
             SliverToBoxAdapter(child: _buildSeksiDataPemesan()),
             SliverToBoxAdapter(child: _buildSeksiPromo()),
             SliverToBoxAdapter(child: _buildSeksiRincianHarga()),
@@ -322,67 +285,92 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // ── kartu lapangan (sama) ──
+  // ── daftar lapangan ──
 
-  Widget _buildKartuLapangan() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+  Widget _buildDaftarLapangan() {
+    return Column(
+      children: widget.bookingItems.map((item) {
+        final tanggalDisplay = '${item.selectedDate.day} ${_getNamaBulan(item.selectedDate.month)} ${item.selectedDate.year}';
+        final jamMulai = item.selectedTimes.first.split(' - ').first;
+        final jamSelesai = item.selectedTimes.last.split(' - ').last;
+        final waktuDisplay = '$jamMulai s/d $jamSelesai (${item.selectedTimes.length} Jam)';
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(16)),
-            child: _imagePath.isNotEmpty
-                ? Image.network(
-                    _imagePath,
-                    height: 160,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const _PlaceholderGambar(),
-                  )
-                : const _PlaceholderGambar(),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _namaLapangan,
-                  style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A1A2E)),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: item.fotoUrl.isNotEmpty
+                      ? Image.network(
+                          item.fotoUrl,
+                          height: 80,
+                          width: 80,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const _PlaceholderGambarMini(),
+                        )
+                      : const _PlaceholderGambarMini(),
                 ),
-                const SizedBox(height: 10),
-                _InfoRow(icon: Icons.calendar_today_rounded, text: _tanggalDisplay),
-                const SizedBox(height: 6),
-                _InfoRow(icon: Icons.access_time_rounded, text: _waktuDisplay),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.namaLapangan,
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A1A2E)),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today_rounded, size: 13, color: _primaryColor),
+                          const SizedBox(width: 6),
+                          Text(tanggalDisplay, style: const TextStyle(fontSize: 12.5, color: Color(0xFF555555))),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time_rounded, size: 13, color: _primaryColor),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(waktuDisplay, style: const TextStyle(fontSize: 12.5, color: Color(0xFF555555))),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        ],
-      ),
+        );
+      }).toList(),
     );
   }
 
-  // ── ORDER DETAIL (BARU) ──
+  // ── ORDER DETAIL ──
 
   Widget _buildSeksiOrderDetail() {
     return _Kartu(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -508,35 +496,41 @@ class _FormBookingPageState extends State<FormBookingPage> {
             ],
           ),
           const SizedBox(height: 16),
-          _InputField(
-            label: 'Nama Lengkap',
-            hint: 'Masukkan nama',
-            controller: _namaController,
-            validator: (v) => (v == null || v.trim().isEmpty)
-                ? 'Nama tidak boleh kosong'
-                : null,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _InputField(
-            label: 'Nomor Telepon',
-            hint: 'Contoh: 08123456789',
-            controller: _teleponController,
-            keyboardType: TextInputType.phone,
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) {
-                return 'Nomor telepon tidak boleh kosong';
-              }
-              if (v.trim().length < 10) {
-                return 'Nomor telepon minimal 10 digit';
-              }
-              return null;
-            },
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
-          const SizedBox(height: 14),
+          if (!_addAsPemesan) ...[
+            _InputField(
+              label: 'Nama Lengkap',
+              hint: 'Masukkan nama',
+              controller: _namaController,
+              validator: (v) {
+                if (_addAsPemesan) return null;
+                return (v == null || v.trim().isEmpty)
+                    ? 'Nama tidak boleh kosong'
+                    : null;
+              },
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _InputField(
+              label: 'Nomor Telepon',
+              hint: 'Contoh: 08123456789',
+              controller: _teleponController,
+              keyboardType: TextInputType.phone,
+              validator: (v) {
+                if (_addAsPemesan) return null;
+                if (v == null || v.trim().isEmpty) {
+                  return 'Nomor telepon tidak boleh kosong';
+                }
+                if (v.trim().length < 10) {
+                  return 'Nomor telepon minimal 10 digit';
+                }
+                return null;
+              },
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 14),
+          ],
           _InputField(
             label: 'Catatan (Opsional)',
             hint: 'Contoh: Tolong siapkan rompi tambahan',
@@ -548,7 +542,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // ── promo (sama seperti sebelumnya) ──
+  // ── promo ──
 
   Widget _buildSeksiPromo() {
     return _Kartu(
@@ -597,7 +591,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
                   enabled: _promoAktif == null,
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
-                    hintText: 'Punya kode promo?',
+                     hintText: 'Punya kode promo?',
                     hintStyle:
                         TextStyle(color: Colors.grey.shade400, fontSize: 14),
                     filled: true,
@@ -687,7 +681,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
     );
   }
 
-  // ── rincian harga (sama) ──
+  // ── rincian harga ──
 
   Widget _buildSeksiRincianHarga() {
     return _Kartu(
@@ -697,10 +691,15 @@ class _FormBookingPageState extends State<FormBookingPage> {
         children: [
           const _SeksiJudul('Rincian Harga'),
           const SizedBox(height: 16),
-          _BarisPricing(label: 'Harga per jam', nilai: _formatRupiah(_hargaPerJam)),
-          const SizedBox(height: 8),
-          _BarisPricing(
-              label: 'Durasi', nilai: '${widget.selectedTimes.length} Jam'),
+          ...widget.bookingItems.map((item) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: _BarisPricing(
+                label: '${item.namaLapangan} (${item.selectedTimes.length} Jam)',
+                nilai: _formatRupiah(item.subtotal),
+              ),
+            );
+          }),
           const SizedBox(height: 8),
           _BarisPricing(
               label: 'Biaya Layanan', nilai: _formatRupiah(widget.serviceFee)),
@@ -779,7 +778,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
 }
 
 // ══════════════════════════════════════
-// WIDGET BARU: _OrderDetailRow
+// WIDGETS
 // ══════════════════════════════════════
 
 class _OrderDetailRow extends StatelessWidget {
@@ -824,10 +823,6 @@ class _OrderDetailRow extends StatelessWidget {
   }
 }
 
-// ══════════════════════════════════════
-// WIDGET LAMA (tidak berubah)
-// ══════════════════════════════════════
-
 class _Kartu extends StatelessWidget {
   final Widget child;
   final EdgeInsets margin;
@@ -865,24 +860,6 @@ class _SeksiJudul extends StatelessWidget {
             fontSize: 16,
             fontWeight: FontWeight.w700,
             color: Color(0xFF1A1A2E)));
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  const _InfoRow({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: const Color(0xFF1B4E82)),
-        const SizedBox(width: 8),
-        Text(text,
-            style: const TextStyle(fontSize: 14, color: Color(0xFF555555))),
-      ],
-    );
   }
 }
 
@@ -976,17 +953,18 @@ class _BarisPricing extends StatelessWidget {
   }
 }
 
-class _PlaceholderGambar extends StatelessWidget {
-  const _PlaceholderGambar();
+class _PlaceholderGambarMini extends StatelessWidget {
+  const _PlaceholderGambarMini();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 160,
+      height: 80,
+      width: 80,
       color: const Color(0xFFE3EAF5),
       child: const Center(
         child: Icon(Icons.sports_soccer_rounded,
-            size: 48, color: Color(0xFF1B4E82)),
+            size: 28, color: Color(0xFF1B4E82)),
       ),
     );
   }
