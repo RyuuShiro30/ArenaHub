@@ -10,7 +10,8 @@ import '../admin_notifiers.dart';
 import 'package:http_parser/http_parser.dart';
 
 class ProfileAdminScreen extends StatefulWidget {
-  const ProfileAdminScreen({super.key});
+  final void Function(bool)? onChangesUpdated; // ← jembatan ke dashboard
+  const ProfileAdminScreen({super.key, this.onChangesUpdated});
   @override
   State<ProfileAdminScreen> createState() => _ProfileAdminScreenState();
 }
@@ -19,11 +20,9 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   final _firestore = FirebaseFirestore.instance;
   final _auth      = FirebaseAuth.instance;
 
-  // ── Cloudinary config ────────────────────────────────────────────────────
   static const String _cloudName    = 'dewncgzjd';
   static const String _uploadPreset = 'admin_profile';
 
-  // ── Colors ───────────────────────────────────────────────────────────────
   static const Color _blue   = Color(0xFF2563EB);
   static const Color _blueBg = Color(0xFFEFF6FF);
   static const Color _blueLt = Color(0xFFDBEAFE);
@@ -35,7 +34,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   static const Color _red    = Color(0xFFEF4444);
   static const Color _green  = Color(0xFF22C55E);
 
-  // ── Sidebar ───────────────────────────────────────────────────────────────
   bool _expanded    = true;
   int  _selectedNav = 4;
 
@@ -51,19 +49,17 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   };
 
   final List<Map<String, dynamic>> _navItems = [
-    {'icon': Icons.dashboard_rounded,           'label': 'Dashboard'},
+    {'icon': Icons.dashboard_rounded,            'label': 'Dashboard'},
     {'icon': Icons.confirmation_number_outlined, 'label': 'Kelola Booking'},
-    {'icon': Icons.sports_soccer_rounded,       'label': 'Kelola Lapangan'},
-    {'icon': Icons.event_note_outlined,         'label': 'Kelola Jadwal'},
-    {'icon': Icons.person_outline_rounded,      'label': 'Profil'},
+    {'icon': Icons.sports_soccer_rounded,        'label': 'Kelola Lapangan'},
+    {'icon': Icons.event_note_outlined,          'label': 'Kelola Jadwal'},
+    {'icon': Icons.person_outline_rounded,       'label': 'Profil'},
   ];
 
-  // ── Controllers ───────────────────────────────────────────────────────────
   final _namaController  = TextEditingController();
   final _emailController = TextEditingController();
   final _sandiController = TextEditingController();
 
-  // ── State ─────────────────────────────────────────────────────────────────
   bool    _obscureSandi  = true;
   bool    _loading       = true;
   bool    _saving        = false;
@@ -76,12 +72,27 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   String  _status     = 'Aktif';
   String  _level      = 'Super';
   String? _adminDocId;
-  String? _fotoUrl;      // URL foto dari Cloudinary
+  String? _fotoUrl;
+
+  // ── Cek ada perubahan belum disimpan ─────────────────────────────────────
+  bool get _adaPerubahan =>
+      _namaController.text.trim() != _namaAwal ||
+      _emailController.text.trim() != _emailAwal ||
+      _sandiController.text.trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
     _fetchAdminProfile();
+    // Pantau perubahan di semua controller
+    _namaController.addListener(_notifyChanges);
+    _emailController.addListener(_notifyChanges);
+    _sandiController.addListener(_notifyChanges);
+  }
+
+  // Kirim status perubahan ke dashboard
+  void _notifyChanges() {
+    widget.onChangesUpdated?.call(_adaPerubahan);
   }
 
   @override
@@ -92,7 +103,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     super.dispose();
   }
 
-  // ── Fetch profile ─────────────────────────────────────────────────────────
   Future<void> _fetchAdminProfile() async {
     try {
       final snapshot = await _firestore
@@ -134,78 +144,73 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     }
   }
 
- Future<void> _pilihDanUploadFoto() async {
-  setState(() => _uploadingFoto = true);
+  Future<void> _pilihDanUploadFoto() async {
+    setState(() => _uploadingFoto = true);
 
-  try {
-    // Pakai html file picker untuk web
-    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
-    uploadInput.click();
+    try {
+      final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+      uploadInput.click();
 
-    await uploadInput.onChange.first;
-    if (uploadInput.files == null || uploadInput.files!.isEmpty) {
-      setState(() => _uploadingFoto = false);
-      return;
-    }
-
-    final file   = uploadInput.files!.first;
-    final reader = html.FileReader();
-    reader.readAsArrayBuffer(file);
-    await reader.onLoad.first;
-
-    final bytes   = reader.result as List<int>;
-    final base64  = base64Encode(bytes);
-    final ext     = file.name.split('.').last.toLowerCase();
-    final dataUri = 'data:image/$ext;base64,$base64';
-
-    final uri = Uri.parse('https://api.cloudinary.com/v1_1/$_cloudName/image/upload');
-final request = http.MultipartRequest('POST', uri)
-  ..fields['upload_preset'] = _uploadPreset
-  ..files.add(http.MultipartFile.fromBytes(
-    'file',
-    bytes,
-    filename: 'admin_photo.jpg',
-    contentType: MediaType('image', 'jpeg'),
-  ));
-
-final streamedResponse = await request.send();
-final response = await http.Response.fromStream(streamedResponse);
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final url  = data['secure_url'] as String;
-
-      if (_adminDocId != null) {
-        await _firestore
-            .collection('admin_profile')
-            .doc(_adminDocId)
-            .update({
-          'photoUrl' : url,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+      await uploadInput.onChange.first;
+      if (uploadInput.files == null || uploadInput.files!.isEmpty) {
+        setState(() => _uploadingFoto = false);
+        return;
       }
 
+      final file   = uploadInput.files!.first;
+      final reader = html.FileReader();
+      reader.readAsArrayBuffer(file);
+      await reader.onLoad.first;
+
+      final bytes  = reader.result as List<int>;
+      final uri    = Uri.parse(
+          'https://api.cloudinary.com/v1_1/$_cloudName/image/upload');
+      final request = http.MultipartRequest('POST', uri)
+        ..fields['upload_preset'] = _uploadPreset
+        ..files.add(http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: 'admin_photo.jpg',
+          contentType: MediaType('image', 'jpeg'),
+        ));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final url  = data['secure_url'] as String;
+
+        if (_adminDocId != null) {
+          await _firestore
+              .collection('admin_profile')
+              .doc(_adminDocId)
+              .update({
+            'photoUrl' : url,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        if (mounted) {
+          setState(() {
+            _fotoUrl       = url;
+            _uploadingFoto = false;
+          });
+          adminPhotoNotifier.value = url;
+          _showSnackBar('Foto profil berhasil diperbarui!');
+        }
+      } else {
+        print('CLOUDINARY ERROR: ${response.body}');
+        throw Exception('Upload gagal: ${response.statusCode}');
+      }
+    } catch (e) {
       if (mounted) {
-        setState(() {
-          _fotoUrl       = url;
-          _uploadingFoto = false;
-        });
-        adminPhotoNotifier.value = url; 
-        _showSnackBar('Foto profil berhasil diperbarui!');
+        setState(() => _uploadingFoto = false);
+        _showSnackBar('Gagal upload foto: $e', isError: true);
       }
-    } else {
-       print('CLOUDINARY ERROR: ${response.body}');
-      throw Exception('Upload gagal: ${response.statusCode}');
-    }
-  } catch (e) {
-    if (mounted) {
-      setState(() => _uploadingFoto = false);
-      _showSnackBar('Gagal upload foto: $e', isError: true);
     }
   }
-}
 
-  // ── Simpan perubahan ──────────────────────────────────────────────────────
   Future<void> _simpanPerubahan() async {
     if (_saving) return;
 
@@ -221,7 +226,6 @@ final response = await http.Response.fromStream(streamedResponse);
     setState(() => _saving = true);
 
     try {
-      // Update Firestore
       if (_adminDocId != null) {
         await _firestore
             .collection('admin_profile')
@@ -233,13 +237,11 @@ final response = await http.Response.fromStream(streamedResponse);
         });
       }
 
-      // Update email Firebase Auth jika berubah
       final user = _auth.currentUser;
       if (user != null && email != user.email) {
         await user.verifyBeforeUpdateEmail(email);
       }
 
-      // Update password jika diisi
       if (sandi.isNotEmpty) {
         if (sandi.length < 8) {
           _showSnackBar('Kata sandi minimal 8 karakter', isError: true);
@@ -259,7 +261,8 @@ final response = await http.Response.fromStream(streamedResponse);
         });
         _showSnackBar('Profil berhasil diperbarui!');
         adminNameNotifier.value = nama;
-  adminRoleNotifier.value = _level;
+        adminRoleNotifier.value = _level;
+        widget.onChangesUpdated?.call(false); // ← reset notifier setelah simpan
       }
     } catch (e) {
       if (mounted) {
@@ -275,11 +278,9 @@ final response = await http.Response.fromStream(streamedResponse);
       _emailController.text = _emailAwal;
       _sandiController.clear();
     });
+    widget.onChangesUpdated?.call(false); // ← reset notifier setelah batal
   }
 
-  
-
-  // ── Logout ────────────────────────────────────────────────────────────────
   void _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -322,7 +323,6 @@ final response = await http.Response.fromStream(streamedResponse);
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   void _showSnackBar(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -357,38 +357,36 @@ final response = await http.Response.fromStream(streamedResponse);
       GoogleFonts.plusJakartaSans(fontSize: size, fontWeight: weight,
           color: color, letterSpacing: spacing);
 
-  // ── BUILD ─────────────────────────────────────────────────────────────────
   @override
-Widget build(BuildContext context) {
-  return _loading
-      ? const Center(child: CircularProgressIndicator(color: _blue))
-      : SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Profil Saya',
-                  style: _t(size: 24, weight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              Text(
-                'Kelola informasi akun dan preferensi keamanan Anda di ArenaHub.',
-                style: _t(size: 14, color: _muted),
-              ),
-              const SizedBox(height: 28),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: 300, child: _buildProfileCard()),
-                  const SizedBox(width: 24),
-                  Expanded(child: _buildDetailForm()),
-                ],
-              ),
-            ],
-          ),
-        );
-}
+  Widget build(BuildContext context) {
+    return _loading
+        ? const Center(child: CircularProgressIndicator(color: _blue))
+        : SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Profil Saya',
+                    style: _t(size: 24, weight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(
+                  'Kelola informasi akun dan preferensi keamanan Anda di ArenaHub.',
+                  style: _t(size: 14, color: _muted),
+                ),
+                const SizedBox(height: 28),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 300, child: _buildProfileCard()),
+                    const SizedBox(width: 24),
+                    Expanded(child: _buildDetailForm()),
+                  ],
+                ),
+              ],
+            ),
+          );
+  }
 
-  // ── SIDEBAR ───────────────────────────────────────────────────────────────
   Widget _buildSidebar() {
     return ClipRect(
       child: AnimatedContainer(
@@ -399,7 +397,6 @@ Widget build(BuildContext context) {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Logo
             Container(
               height: 64,
               padding: EdgeInsets.symmetric(
@@ -443,10 +440,7 @@ Widget build(BuildContext context) {
                 ),
               ]),
             ),
-
             const SizedBox(height: 12),
-
-            // Nav items
             ...List.generate(_navItems.length, (i) {
               final active = _selectedNav == i;
               final item   = _navItems[i];
@@ -506,10 +500,7 @@ Widget build(BuildContext context) {
                 ),
               );
             }),
-
             const Spacer(),
-
-            // Logout button
             GestureDetector(
               onTap: _logout,
               child: Container(
@@ -525,8 +516,7 @@ Widget build(BuildContext context) {
                   children: [
                     const SizedBox(width: 3, height: 20),
                     const SizedBox(width: 6),
-                    const Icon(Icons.logout_rounded,
-                        color: _red, size: 20),
+                    const Icon(Icons.logout_rounded, color: _red, size: 20),
                     AnimatedOpacity(
                       opacity: _expanded ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 150),
@@ -547,8 +537,6 @@ Widget build(BuildContext context) {
                 ),
               ),
             ),
-
-            // Admin info
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -556,7 +544,6 @@ Widget build(BuildContext context) {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Avatar sidebar — tampilkan foto kalau ada
                   Container(
                     width: 36, height: 36,
                     decoration: const BoxDecoration(
@@ -587,8 +574,7 @@ Widget build(BuildContext context) {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(_adminName,
-                                style: _t(size: 12,
-                                    weight: FontWeight.w700),
+                                style: _t(size: 12, weight: FontWeight.w700),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
                             Text(_adminRole,
@@ -609,7 +595,6 @@ Widget build(BuildContext context) {
     );
   }
 
-  // ── TOP BAR ───────────────────────────────────────────────────────────────
   Widget _buildTopBar() {
     return Container(
       height: 60, color: _white,
@@ -621,7 +606,6 @@ Widget build(BuildContext context) {
     );
   }
 
-  // ── PROFILE CARD ──────────────────────────────────────────────────────────
   Widget _buildProfileCard() {
     return Container(
       padding: const EdgeInsets.all(28),
@@ -635,7 +619,6 @@ Widget build(BuildContext context) {
         ],
       ),
       child: Column(children: [
-        // ── Avatar + tombol ganti foto ──────────────────────────────
         Stack(
           alignment: Alignment.center,
           children: [
@@ -663,7 +646,6 @@ Widget build(BuildContext context) {
                             color: _blue.withOpacity(0.4)),
               ),
             ),
-            // Tombol edit foto
             Positioned(
               bottom: 4, right: 4,
               child: GestureDetector(
@@ -687,7 +669,6 @@ Widget build(BuildContext context) {
           ],
         ),
         const SizedBox(height: 18),
-
         Text(_namaAwal,
             style: _t(size: 18, weight: FontWeight.w700),
             textAlign: TextAlign.center),
@@ -696,15 +677,12 @@ Widget build(BuildContext context) {
             style: _t(size: 13, color: _muted),
             textAlign: TextAlign.center),
         const SizedBox(height: 20),
-
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           _buildBadge('Status', _status, _blue),
           const SizedBox(width: 24),
           _buildBadge('Level', _level, _blue),
         ]),
         const SizedBox(height: 24),
-
-        // Catatan keamanan
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -750,7 +728,6 @@ Widget build(BuildContext context) {
     ]);
   }
 
-  // ── DETAIL FORM ───────────────────────────────────────────────────────────
   Widget _buildDetailForm() {
     return Container(
       padding: const EdgeInsets.all(28),
@@ -816,7 +793,42 @@ Widget build(BuildContext context) {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               OutlinedButton(
-                onPressed: _batalkan,
+                onPressed: () async {
+                  if (!_adaPerubahan) return;
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      title: Text('Buang Perubahan?',
+                          style: _t(size: 16, weight: FontWeight.w700)),
+                      content: Text(
+                          'Semua perubahan yang belum disimpan akan hilang.',
+                          style: _t(size: 13, color: _muted)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: Text('Kembali',
+                              style: _t(size: 14, color: _muted)),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _red,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text('Buang',
+                              style: _t(size: 14,
+                                  weight: FontWeight.w600,
+                                  color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) _batalkan();
+                },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: _border),
                   padding: const EdgeInsets.symmetric(
