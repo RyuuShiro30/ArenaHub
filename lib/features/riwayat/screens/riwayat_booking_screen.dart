@@ -215,19 +215,33 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
 
         final docs = snapshot.data!.docs;
 
+        // Filter out child bookings to only display the main (parent) transactions
+        final parentDocs = docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return data['is_child'] != true;
+        }).toList();
+
         // ── Map docs ke model ─────────────────────────────────
         List<({RiwayatBookingModel model, String docId, bool sudahReview})>
-            mapped = docs.map((doc) {
+            mapped = parentDocs.map((doc) {
           final data = doc.data() as Map<String, dynamic>;
 
           // Tanggal booking untuk display
-          DateTime tanggalBooking = DateTime.now();
-          if (data['tanggal_booking'] != null) {
-            tanggalBooking =
-                (data['tanggal_booking'] as Timestamp).toDate();
+          String formattedTanggal = '-';
+          if (data['tanggal_main'] != null && data['tanggal_main'].toString().isNotEmpty) {
+            final dt = DateTime.tryParse(data['tanggal_main'].toString());
+            if (dt != null) {
+              formattedTanggal = DateFormat('d MMMM yyyy', 'id_ID').format(dt);
+            } else {
+              formattedTanggal = data['tanggal_main'].toString();
+            }
+          } else {
+            DateTime tanggalBooking = DateTime.now();
+            if (data['tanggal_booking'] != null) {
+              tanggalBooking = (data['tanggal_booking'] as Timestamp).toDate();
+            }
+            formattedTanggal = DateFormat('d MMMM yyyy', 'id_ID').format(tanggalBooking);
           }
-          final formattedTanggal =
-              DateFormat('d MMMM yyyy', 'id_ID').format(tanggalBooking);
 
           // Status berbasis waktu
           final status =
@@ -251,11 +265,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
               kategori:        data['kategori'] ?? 'SPORT',
               tanggal:         formattedTanggal,
               waktu:           waktuTampil,
-              totalPembayaran: (data['total_harga'] ?? 0) is int
-                  ? data['total_harga']
-                  : int.tryParse(
-                          data['total_harga']?.toString() ?? '0') ??
-                      0,
+              totalPembayaran: (data['total_harga'] as num?)?.toInt() ?? 0,
               imagePath: imagePath,
               status:    status,
             ),

@@ -229,7 +229,7 @@ class RiwayatBookingCard extends StatelessWidget {
               elevation: 0,
             ),
             child: const Text(
-              'Lihat Detail Tiket',
+              'Lihat Detail Booking',
               style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w700,
