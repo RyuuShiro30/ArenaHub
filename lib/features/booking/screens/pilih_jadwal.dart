@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -45,6 +44,13 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
   List<String> selectedTimes = [];
   List<String> bookedTimes   = [];
 
+  /// Slot yang tersedia dari koleksi jadwal admin
+  /// Setiap item: { 'id': docId, 'slot': '06.00 - 07.00', 'status': 'tersedia' }
+  List<Map<String, dynamic>> jadwalDocs = [];
+
+  /// Label slot yang ditampilkan di grid (diisi dari jadwalDocs)
+  List<String> times = [];
+
   // ── Animasi FAB ───────────────────────────────────────────────
   late AnimationController _fabAnimController;
   late Animation<double> _fabScaleAnim;
@@ -53,16 +59,6 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
   final Color primaryBlue  = const Color(0xFF0B4E89);
   final Color primaryGreen = const Color(0xFF1A8C6A);
   final Color fullGrey     = const Color(0xFFE2E8F0);
-
-  // ── Slot hardcode (dipakai sebagai fallback jika Firestore kosong) ──
-  // Bisa diganti dengan fetch dari collection jadwal jika diperlukan
-  final List<String> times = [
-    "06.00 - 07.00", "07.00 - 08.00", "08.00 - 09.00",
-    "09.00 - 10.00", "10.00 - 11.00", "11.00 - 12.00",
-    "12.00 - 13.00", "13.00 - 14.00", "14.00 - 15.00",
-    "15.00 - 16.00", "16.00 - 17.00", "17.00 - 18.00",
-    "18.00 - 19.00", "19.00 - 20.00", "20.00 - 21.00",
-  ];
 
   @override
   void initState() {
@@ -80,10 +76,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
       duration: const Duration(milliseconds: 200),
     );
     _fabScaleAnim = TweenSequence([
-      TweenSequenceItem(
-          tween: Tween(begin: 1.0, end: 1.25), weight: 50),
-      TweenSequenceItem(
-          tween: Tween(begin: 1.25, end: 1.0), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.25), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.25, end: 1.0), weight: 50),
     ]).animate(CurvedAnimation(
       parent: _fabAnimController,
       curve: Curves.easeInOut,
@@ -95,7 +89,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
     if (namaLapangan.isEmpty) {
       _fetchLapangan();
     } else {
-      _fetchFullSlots();
+      _fetchJadwalDanBooking();
     }
   }
 
@@ -126,16 +120,13 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
 
   bool _isSlotPassed(String slot) {
     final nowWib   = _nowWib();
-    final today    =
-        DateTime(nowWib.year, nowWib.month, nowWib.day);
-    final selected = DateTime(
-        selectedDate.year, selectedDate.month, selectedDate.day);
+    final today    = DateTime(nowWib.year, nowWib.month, nowWib.day);
+    final selected = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
 
     if (selected.isBefore(today)) return true;
     if (selected.isAfter(today)) return false;
 
-    final double currentHour =
-        nowWib.hour + nowWib.minute / 60.0;
+    final double currentHour = nowWib.hour + nowWib.minute / 60.0;
     return _slotEndHour(slot) <= currentHour;
   }
 
@@ -162,37 +153,94 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
       }
     } finally {
       if (mounted) setState(() => isLoadingSlot = false);
-      _fetchFullSlots();
+      _fetchJadwalDanBooking();
     }
   }
 
-  // ── Fetch slot yang sudah dipesan ─────────────────────────────
-  Future<void> _fetchFullSlots() async {
+  // ── Konversi format waktu: "08:00" → "08.00" ─────────────────
+  String _toSlotLabel(String waktuMulai, String waktuSelesai) {
+    final mulai   = waktuMulai.replaceAll(':', '.');
+    final selesai = waktuSelesai.replaceAll(':', '.');
+    return '$mulai - $selesai';
+  }
+
+  // ── Fetch jadwal dari admin + booking existing ────────────────
+  Future<void> _fetchJadwalDanBooking() async {
     if (!mounted) return;
     setState(() => isLoadingSlot = true);
 
     try {
+      final startOfDay = DateTime(
+          selectedDate.year, selectedDate.month, selectedDate.day, 0, 0, 0);
+      final endOfDay = DateTime(
+          selectedDate.year, selectedDate.month, selectedDate.day, 23, 59, 59);
       final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
 
-      final snapshot = await FirebaseFirestore.instance
+      // ① Ambil jadwal yang dibuat admin untuk lapangan & tanggal ini
+      final jadwalSnap = await FirebaseFirestore.instance
+          .collection('jadwal')
+          .where('lapangan_id', isEqualTo: widget.lapanganId)
+          .where('tanggal',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+          .where('tanggal',
+              isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+          .get();
+
+      final List<Map<String, dynamic>> docs = [];
+      final List<String> unavailableFromAdmin = [];
+
+      for (final doc in jadwalSnap.docs) {
+        final data    = doc.data();
+        final mulai   = data['waktu_mulai']   ?? '';
+        final selesai = data['waktu_selesai'] ?? '';
+        final status  = data['status']        ?? 'tersedia';
+        final label   = _toSlotLabel(mulai, selesai);
+
+        docs.add({
+          'id':     doc.id,
+          'slot':   label,
+          'status': status,
+        });
+
+        // Slot yang admin tandai tidak tersedia / sudah dipesan
+        if (status == 'tidak_tersedia' || status == 'dipesan') {
+          unavailableFromAdmin.add(label);
+        }
+      }
+
+      // Urutkan berdasarkan jam mulai
+      docs.sort((a, b) {
+        final aH = int.tryParse((a['slot'] as String).split('.')[0]) ?? 0;
+        final bH = int.tryParse((b['slot'] as String).split('.')[0]) ?? 0;
+        return aH.compareTo(bH);
+      });
+
+      // ② Ambil slot yang sudah dibooking user lain
+      final bookingSnap = await FirebaseFirestore.instance
           .collection('bookings')
           .where('lapangan_id', isEqualTo: widget.lapanganId)
           .where('tanggal', isEqualTo: dateStr)
           .where('status', whereIn: ['confirmed', 'pending'])
           .get();
 
-      final booked = <String>{};
-      for (final doc in snapshot.docs) {
+      final bookedByUser = <String>{};
+      for (final doc in bookingSnap.docs) {
         final slots =
             doc.data()['slots'] ?? doc.data()['selected_times'];
         if (slots is List) {
-          booked.addAll(slots.map((e) => e.toString()));
+          bookedByUser.addAll(slots.map((e) => e.toString()));
         }
       }
 
       if (mounted) {
         setState(() {
-          bookedTimes = booked.toList();
+          jadwalDocs = docs;
+          times      = docs.map((d) => d['slot'] as String).toList();
+          bookedTimes = {
+            ...unavailableFromAdmin,
+            ...bookedByUser,
+          }.toList();
+          // Hapus pilihan yang tiba-tiba jadi tidak tersedia
           selectedTimes.removeWhere((t) => _isSlotUnavailable(t));
           isLoadingSlot = false;
         });
@@ -228,12 +276,11 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
   void _bukaKeranjang() {
     if (selectedTimes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text(
-            'Pilih minimal 1 slot waktu terlebih dahulu'),
+        content: const Text('Pilih minimal 1 slot waktu terlebih dahulu'),
         backgroundColor: primaryBlue,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ));
       return;
     }
@@ -282,14 +329,14 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
               fontWeight: FontWeight.w700,
               fontSize: 18),
         ),
-        // Icon keranjang di app bar (akses keranjang tanpa pilih slot)
         actions: [
           ValueListenableBuilder<List<KeranjangItem>>(
             valueListenable: CartManager.instance.itemsNotifier,
             builder: (_, items, __) {
               final totalSlot = CartManager.instance.totalSlot;
               return GestureDetector(
-                onTap: () => Navigator.push(context,
+                onTap: () => Navigator.push(
+                    context,
                     MaterialPageRoute(
                         builder: (_) => const KeranjangPage())),
                 child: Padding(
@@ -385,7 +432,8 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
                         child: fotoUrl.isNotEmpty
                             ? Image.network(fotoUrl,
                                 width: 70, height: 70,
-                                fit: BoxFit.cover, cacheWidth: 140,
+                                fit: BoxFit.cover,
+                                cacheWidth: 140,
                                 errorBuilder: (_, __, ___) =>
                                     _placeholderFoto())
                             : _placeholderFoto(),
@@ -393,8 +441,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(namaLapangan,
                                 style: GoogleFonts.poppins(
@@ -417,8 +464,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
 
                 // ── Header bulan ───────────────────────────────
                 Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       DateFormat("MMMM yyyy").format(selectedDate),
@@ -442,8 +488,10 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
                           setState(() {
                             selectedDate = picked;
                             selectedTimes.clear();
+                            times = [];
+                            jadwalDocs = [];
                           });
-                          _fetchFullSlots();
+                          _fetchJadwalDanBooking();
                         }
                       },
                     ),
@@ -457,27 +505,27 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
                   child: Row(
                     children: getFiveDays().map((date) {
                       final isSelected =
-                          date.day == selectedDate.day &&
-                              date.month == selectedDate.month &&
-                              date.year == selectedDate.year;
+                          date.day   == selectedDate.day &&
+                          date.month == selectedDate.month &&
+                          date.year  == selectedDate.year;
                       return GestureDetector(
                         onTap: () {
                           if (!isSelected) {
                             setState(() {
                               selectedDate = date;
                               selectedTimes.clear();
+                              times = [];
+                              jadwalDocs = [];
                             });
-                            _fetchFullSlots();
+                            _fetchJadwalDanBooking();
                           }
                         },
                         child: Container(
                           width: 60, height: 80,
-                          margin:
-                              const EdgeInsets.only(right: 10),
+                          margin: const EdgeInsets.only(right: 10),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius:
-                                BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(24),
                             border: Border.all(
                               color: isSelected
                                   ? primaryBlue
@@ -489,15 +537,13 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
                             margin: isSelected
                                 ? const EdgeInsets.all(2.5)
                                 : EdgeInsets.zero,
-                            padding:
-                                const EdgeInsets.symmetric(
-                                    horizontal: 9),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 9),
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? primaryBlue
                                   : Colors.transparent,
-                              borderRadius:
-                                  BorderRadius.circular(22),
+                              borderRadius: BorderRadius.circular(22),
                             ),
                             child: Column(
                               mainAxisAlignment:
@@ -535,8 +581,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
 
                 // ── Header slot ────────────────────────────────
                 Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text("Slot Waktu Tersedia",
                         style: GoogleFonts.poppins(
@@ -552,96 +597,129 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
                 ),
                 const SizedBox(height: 10),
 
-                // ── Grid slot ──────────────────────────────────
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: times.length,
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    childAspectRatio: 102.34 / 46,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                  ),
-                  itemBuilder: (context, index) {
-                    final time = times[index];
-                    final isSelected =
-                        selectedTimes.contains(time);
-                    final isFull = _isSlotUnavailable(time);
-
-                    return GestureDetector(
-                      onTap: (isFull || isLoadingSlot)
-                          ? null
-                          : () => _toggleSlot(time),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Colors.white
-                              : Colors.transparent,
-                          borderRadius:
-                              BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isFull
-                                ? Colors.transparent
-                                : (isSelected
-                                    ? primaryBlue
-                                    : primaryGreen),
-                            width: 1,
-                          ),
+                // ── Empty state jika tidak ada jadwal ─────────
+                if (!isLoadingSlot && times.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 36, horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.event_busy_rounded,
+                            size: 48,
+                            color: Colors.grey.shade300),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Belum ada jadwal tersedia',
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: Colors.grey.shade500),
                         ),
-                        child: Container(
-                          margin: isSelected
-                              ? const EdgeInsets.all(2)
-                              : EdgeInsets.zero,
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 13, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: isFull
-                                ? fullGrey
-                                : (isSelected
-                                    ? primaryBlue
-                                    : primaryGreen
-                                        .withOpacity(0.1)),
-                            borderRadius:
-                                BorderRadius.circular(
-                                    isSelected ? 14 : 16),
-                          ),
-                          child: Text(
-                            time,
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w800,
+                        const SizedBox(height: 4),
+                        Text(
+                          'Admin belum menambahkan slot untuk tanggal ini',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
                               fontSize: 12,
-                              decoration: isFull
-                                  ? TextDecoration.lineThrough
-                                  : null,
+                              color: Colors.grey.shade400),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // ── Grid slot ──────────────────────────────────
+                if (times.isNotEmpty)
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: times.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: 102.34 / 46,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    itemBuilder: (context, index) {
+                      final time       = times[index];
+                      final isSelected = selectedTimes.contains(time);
+                      final isFull     = _isSlotUnavailable(time);
+
+                      return GestureDetector(
+                        onTap: (isFull || isLoadingSlot)
+                            ? null
+                            : () => _toggleSlot(time),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.white
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
                               color: isFull
-                                  ? Colors.grey.shade500
+                                  ? Colors.transparent
                                   : (isSelected
-                                      ? Colors.white
+                                      ? primaryBlue
                                       : primaryGreen),
+                              width: 1,
+                            ),
+                          ),
+                          child: Container(
+                            margin: isSelected
+                                ? const EdgeInsets.all(2)
+                                : EdgeInsets.zero,
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 13, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isFull
+                                  ? fullGrey
+                                  : (isSelected
+                                      ? primaryBlue
+                                      : primaryGreen.withOpacity(0.1)),
+                              borderRadius: BorderRadius.circular(
+                                  isSelected ? 14 : 16),
+                            ),
+                            child: Text(
+                              time,
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                decoration: isFull
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                color: isFull
+                                    ? Colors.grey.shade500
+                                    : (isSelected
+                                        ? Colors.white
+                                        : primaryGreen),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 20),
+                      );
+                    },
+                  ),
 
                 // ── Legend ─────────────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _legend(primaryGreen.withOpacity(0.2),
-                        "Tersedia"),
-                    const SizedBox(width: 10),
-                    _legend(primaryBlue, "Dipilih"),
-                    const SizedBox(width: 10),
-                    _legend(fullGrey, "Penuh"),
-                  ],
-                ),
+                if (times.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _legend(primaryGreen.withOpacity(0.2), "Tersedia"),
+                      const SizedBox(width: 10),
+                      _legend(primaryBlue, "Dipilih"),
+                      const SizedBox(width: 10),
+                      _legend(fullGrey, "Penuh"),
+                    ],
+                  ),
+                ],
 
                 // ── Info total (muncul jika ada slot dipilih) ──
                 if (selectedTimes.isNotEmpty) ...[
@@ -688,8 +766,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
                     child: ElevatedButton.icon(
                       onPressed: _bukaKeranjang,
                       icon: const Icon(
-                          Icons.shopping_cart_rounded,
-                          size: 18),
+                          Icons.shopping_cart_rounded, size: 18),
                       label: Text(
                         'Masukkan ke Keranjang',
                         style: GoogleFonts.poppins(
@@ -702,8 +779,7 @@ class _PilihJadwalPageState extends State<PilihJadwalPage>
                         padding: const EdgeInsets.symmetric(
                             vertical: 14),
                         shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(14)),
                         elevation: 0,
                       ),
                     ),

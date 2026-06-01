@@ -14,7 +14,7 @@ class RiwayatBookingCard extends StatelessWidget {
     required this.booking,
     this.onLihatDetail,
     this.onBeriUlasan,
-    this.onPesanLagi,
+    this.onPesanLagi, required bool sudahReview,
   });
 
   String _formatRupiah(int amount) {
