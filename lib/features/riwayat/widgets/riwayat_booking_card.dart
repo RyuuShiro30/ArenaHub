@@ -14,7 +14,7 @@ class RiwayatBookingCard extends StatelessWidget {
     required this.booking,
     this.onLihatDetail,
     this.onBeriUlasan,
-    this.onPesanLagi,
+    this.onPesanLagi, required bool sudahReview,
   });
 
   String _formatRupiah(int amount) {
@@ -229,7 +229,7 @@ class RiwayatBookingCard extends StatelessWidget {
               elevation: 0,
             ),
             child: const Text(
-              'Lihat Detail Tiket',
+              'Lihat Detail Booking',
               style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w700,

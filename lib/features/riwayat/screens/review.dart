@@ -3,6 +3,34 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+class CourtReviewState {
+  final String bookingId;
+  final String lapanganId;
+  final String namaLapangan;
+  final String fotoUrl;
+  final int hargaPerJam;
+
+  int ratingOverall = 0;
+  int ratingKebersihan = 0;
+  int ratingFasilitas = 0;
+  int ratingPelayanan = 0;
+  int ratingKondisi = 0;
+  final komentarController = TextEditingController();
+  bool showErrorOverall = false;
+
+  CourtReviewState({
+    required this.bookingId,
+    required this.lapanganId,
+    required this.namaLapangan,
+    required this.fotoUrl,
+    required this.hargaPerJam,
+  });
+
+  void dispose() {
+    komentarController.dispose();
+  }
+}
+
 class ReviewPage extends StatefulWidget {
   final String bookingId;
 
@@ -21,21 +49,10 @@ class _ReviewPageState extends State<ReviewPage> {
   static const Color _errorColor = Color(0xFFE53935);
 
   Map<String, dynamic>? _booking;
+  List<CourtReviewState> _courtReviews = [];
 
   bool _isPageLoading = true;
   bool _isLoading = false;
-  bool _showErrorOverall = false;
-
-  // Overall rating
-  int _ratingOverall = 0;
-
-  // Category ratings
-  int _ratingKebersihan = 0;
-  int _ratingFasilitas = 0;
-  int _ratingPelayanan = 0;
-  int _ratingKondisi = 0;
-
-  final _komentarController = TextEditingController();
 
   @override
   void initState() {
@@ -45,7 +62,9 @@ class _ReviewPageState extends State<ReviewPage> {
 
   @override
   void dispose() {
-    _komentarController.dispose();
+    for (var review in _courtReviews) {
+      review.dispose();
+    }
     super.dispose();
   }
 
@@ -57,25 +76,77 @@ class _ReviewPageState extends State<ReviewPage> {
           .get();
       if (doc.exists) {
         final bookingData = doc.data()!;
+        final int childCount = bookingData['child_count'] ?? 0;
 
-        // Fetch lapangan untuk ambil foto & harga
-        final lapanganId = bookingData['lapangan_id'] ?? '';
-        if (lapanganId.isNotEmpty) {
-          final lapanganDoc = await FirebaseFirestore.instance
-              .collection('lapangan')
-              .doc(lapanganId)
-              .get();
-          if (lapanganDoc.exists) {
-            final fotoList = lapanganDoc.data()?['foto'];
-            bookingData['foto'] = (fotoList is List && fotoList.isNotEmpty)
-                ? fotoList[0].toString()
-                : '';
-            bookingData['harga_per_jam'] = lapanganDoc.data()?['harga'] ?? 0;
+        List<CourtReviewState> tempReviews = [];
+
+        if (childCount > 0) {
+          for (int i = 0; i < childCount; i++) {
+            final childDocId = '${widget.bookingId}_$i';
+            final childDoc = await FirebaseFirestore.instance
+                .collection('bookings')
+                .doc(childDocId)
+                .get();
+            if (childDoc.exists) {
+              final childData = childDoc.data()!;
+              final cLapanganId = childData['lapangan_id'] ?? '';
+              String cFoto = childData['image_url'] ?? '';
+              int cHarga = 0;
+
+              if (cLapanganId.isNotEmpty) {
+                final lapDoc = await FirebaseFirestore.instance
+                    .collection('lapangan')
+                    .doc(cLapanganId)
+                    .get();
+                if (lapDoc.exists) {
+                  final fotoList = lapDoc.data()?['foto'];
+                  cFoto = (fotoList is List && fotoList.isNotEmpty)
+                      ? fotoList[0].toString()
+                      : cFoto;
+                  cHarga = (lapDoc.data()?['harga'] as num?)?.toInt() ?? 0;
+                }
+              }
+
+              tempReviews.add(CourtReviewState(
+                bookingId: childDocId,
+                lapanganId: cLapanganId,
+                namaLapangan: childData['nama_lapangan'] ?? 'Lapangan',
+                fotoUrl: cFoto,
+                hargaPerJam: cHarga,
+              ));
+            }
           }
+        } else {
+          final lapanganId = bookingData['lapangan_id'] ?? '';
+          String foto = bookingData['image_url'] ?? '';
+          int harga = 0;
+
+          if (lapanganId.isNotEmpty) {
+            final lapanganDoc = await FirebaseFirestore.instance
+                .collection('lapangan')
+                .doc(lapanganId)
+                .get();
+            if (lapanganDoc.exists) {
+              final fotoList = lapanganDoc.data()?['foto'];
+              foto = (fotoList is List && fotoList.isNotEmpty)
+                  ? fotoList[0].toString()
+                  : foto;
+              harga = (lapanganDoc.data()?['harga'] as num?)?.toInt() ?? 0;
+            }
+          }
+
+          tempReviews.add(CourtReviewState(
+            bookingId: widget.bookingId,
+            lapanganId: lapanganId,
+            namaLapangan: bookingData['nama_lapangan'] ?? 'Lapangan',
+            fotoUrl: foto,
+            hargaPerJam: harga,
+          ));
         }
 
         setState(() {
           _booking = bookingData;
+          _courtReviews = tempReviews;
           _isPageLoading = false;
         });
       } else {
@@ -85,33 +156,6 @@ class _ReviewPageState extends State<ReviewPage> {
       setState(() => _isPageLoading = false);
     }
   }
-  // label rating overall
-
-  String get _labelOverall {
-    switch (_ratingOverall) {
-      case 1:
-        return 'Sangat Buruk';
-      case 2:
-        return 'Buruk';
-      case 3:
-        return 'Cukup';
-      case 4:
-        return 'Sangat Bagus';
-      case 5:
-        return 'Luar Biasa!';
-      default:
-        return 'Ketuk bintang untuk memberi nilai';
-    }
-  }
-
-  Color get _warnaLabelOverall {
-    if (_ratingOverall == 0) return const Color(0xFF888888);
-    if (_ratingOverall <= 2) return _errorColor;
-    if (_ratingOverall == 3) return const Color(0xFFFF9800);
-    return _primaryColor;
-  }
-
-  // format rp
 
   String _formatRupiah(int nominal) {
     return NumberFormat.currency(
@@ -121,14 +165,16 @@ class _ReviewPageState extends State<ReviewPage> {
     ).format(nominal);
   }
 
-  // submit
-
   Future<void> _kirimUlasan() async {
-    // Validasi rating overall wajib diisi
-    if (_ratingOverall == 0) {
-      setState(() => _showErrorOverall = true);
-      return;
+    // Validasi rating overall wajib diisi untuk semua lapangan
+    bool hasError = false;
+    for (var review in _courtReviews) {
+      if (review.ratingOverall == 0) {
+        setState(() => review.showErrorOverall = true);
+        hasError = true;
+      }
     }
+    if (hasError) return;
 
     setState(() => _isLoading = true);
 
@@ -139,57 +185,71 @@ class _ReviewPageState extends State<ReviewPage> {
         return;
       }
       final firestore = FirebaseFirestore.instance;
-      final lapanganId = _booking?['lapangan_id'] ?? '';
 
-      // 1. Simpan ulasan ke collection 'ulasan'
-      await firestore.collection('ulasan').add({
-        'booking_id': widget.bookingId,
-        'lapangan_id': lapanganId,
-        'user_id': user.uid,
-        'rating_overall': _ratingOverall,
-        'rating_kebersihan': _ratingKebersihan,
-        'rating_fasilitas': _ratingFasilitas,
-        'rating_pelayanan': _ratingPelayanan,
-        'rating_kondisi': _ratingKondisi,
-        'komentar': _komentarController.text.trim(),
-        'fullName': user.displayName ?? '',
-        'created_at': FieldValue.serverTimestamp(),
-      });
-      // 2. Ambil semua ulasan lapangan ini untuk hitung ulang rating_rata
-      final ulasanSnapshot = await firestore
-          .collection('ulasan')
-          .where('lapangan_id', isEqualTo: lapanganId)
-          .get();
+      for (var review in _courtReviews) {
+        final lapanganId = review.lapanganId;
 
-      final docs = ulasanSnapshot.docs;
+        // 1. Simpan ulasan ke collection 'ulasan'
+        await firestore.collection('ulasan').add({
+          'booking_id': review.bookingId,
+          'parent_booking_id': widget.bookingId,
+          'lapangan_id': lapanganId,
+          'user_id': user.uid,
+          'rating_overall': review.ratingOverall,
+          'rating_kebersihan': review.ratingKebersihan,
+          'rating_fasilitas': review.ratingFasilitas,
+          'rating_pelayanan': review.ratingPelayanan,
+          'rating_kondisi': review.ratingKondisi,
+          'komentar': review.komentarController.text.trim(),
+          'fullName': user.displayName ?? '',
+          'created_at': FieldValue.serverTimestamp(),
+        });
 
-      double _rata(String field) {
-        final list = docs
-            .map((d) => (d.data()[field] as num?)?.toDouble() ?? 0)
-            .where((v) => v > 0)
-            .toList();
-        return list.isEmpty ? 0.0 : list.reduce((a, b) => a + b) / list.length;
+        // 2. Ambil semua ulasan lapangan ini untuk hitung ulang rating_rata
+        final ulasanSnapshot = await firestore
+            .collection('ulasan')
+            .where('lapangan_id', isEqualTo: lapanganId)
+            .get();
+
+        final docs = ulasanSnapshot.docs;
+
+        double _rata(String field) {
+          final list = docs
+              .map((d) => (d.data()[field] as num?)?.toDouble() ?? 0)
+              .where((v) => v > 0)
+              .toList();
+          return list.isEmpty ? 0.0 : list.reduce((a, b) => a + b) / list.length;
+        }
+
+        final ratingBaru = _rata('rating_overall');
+        final ratingKebersihan = _rata('rating_kebersihan');
+        final ratingFasilitas = _rata('rating_fasilitas');
+        final ratingPelayanan = _rata('rating_pelayanan');
+        final ratingKondisi = _rata('rating_kondisi');
+
+        // 3. Update rating_rata dan jumlah_ulasan di collection 'lapangan'
+        await firestore
+            .collection('lapangan')
+            .doc(lapanganId)
+            .update({
+          'rating_overall': double.parse(ratingBaru.toStringAsFixed(1)),
+          'jumlah_ulasan': docs.length,
+          'rating_kebersihan': double.parse(ratingKebersihan.toStringAsFixed(1)),
+          'rating_fasilitas': double.parse(ratingFasilitas.toStringAsFixed(1)),
+          'rating_pelayanan': double.parse(ratingPelayanan.toStringAsFixed(1)),
+          'rating_kondisi': double.parse(ratingKondisi.toStringAsFixed(1)),
+        });
+
+        // 4. Update status child booking jadi sudah direview jika ada
+        if (review.bookingId != widget.bookingId) {
+          await firestore
+              .collection('bookings')
+              .doc(review.bookingId)
+              .update({'sudah_review': true});
+        }
       }
 
-      final ratingBaru = _rata('rating_overall');
-      final ratingKebersihan = _rata('rating_kebersihan');
-      final ratingFasilitas = _rata('rating_fasilitas');
-      final ratingPelayanan = _rata('rating_pelayanan');
-      final ratingKondisi = _rata('rating_kondisi');
-
-      // 3. Update rating_rata dan jumlah_ulasan di collection 'lapangan'
-      await firestore
-          .collection('lapangan')
-          .doc(lapanganId)
-          .update({
-        'rating_overall': double.parse(ratingBaru.toStringAsFixed(1)),
-        'jumlah_ulasan': docs.length,
-        'rating_kebersihan': double.parse(ratingKebersihan.toStringAsFixed(1)),
-        'rating_fasilitas': double.parse(ratingFasilitas.toStringAsFixed(1)),
-        'rating_pelayanan': double.parse(ratingPelayanan.toStringAsFixed(1)),
-        'rating_kondisi': double.parse(ratingKondisi.toStringAsFixed(1)),
-      });
-      // 4. Update status booking jadi sudah direview
+      // 5. Update status parent booking jadi sudah direview
       await firestore
           .collection('bookings')
           .doc(widget.bookingId)
@@ -269,27 +329,57 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // build
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      body: CustomScrollView(
-        slivers: [
-          _buildAppBar(),
-          SliverToBoxAdapter(child: _buildKartuLapangan()),
-          SliverToBoxAdapter(child: _buildRatingOverall()),
-          SliverToBoxAdapter(child: _buildRatingKategori()),
-          SliverToBoxAdapter(child: _buildKomentar()),
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
-        ],
-      ),
-      bottomNavigationBar: _buildTombolKirim(),
+      body: _isPageLoading
+          ? const Center(child: CircularProgressIndicator())
+          : CustomScrollView(
+              slivers: [
+                _buildAppBar(),
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final reviewState = _courtReviews[index];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_courtReviews.length > 1)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+                              child: Text(
+                                'LAPANGAN #${index + 1}: ${reviewState.namaLapangan.toUpperCase()}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: _primaryColor,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ),
+                          _buildKartuLapangan(reviewState),
+                          _buildRatingOverall(reviewState),
+                          _buildRatingKategori(reviewState),
+                          _buildKomentar(reviewState),
+                          const SizedBox(height: 16),
+                          if (index < _courtReviews.length - 1)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              child: Divider(thickness: 2, color: Color(0xFFE0E0E0)),
+                            ),
+                        ],
+                      );
+                    },
+                    childCount: _courtReviews.length,
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
+            ),
+      bottomNavigationBar: _isPageLoading ? null : _buildTombolKirim(),
     );
   }
-
-  // app bar
 
   Widget _buildAppBar() {
     return SliverAppBar(
@@ -314,15 +404,12 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // kartu lapangan
-
-  Widget _buildKartuLapangan() {
-    final fotoField = _booking?['foto'];
-    final imagePath = (fotoField is List && fotoField.isNotEmpty) ? fotoField.first.toString() : (fotoField is String ? fotoField : '');
-    final namaLapangan = _booking?['nama_lapangan'] ?? '-';
-    final hargaPerJam = _booking?['harga_per_jam'] ?? 0;
+  Widget _buildKartuLapangan(CourtReviewState state) {
+    final imagePath = state.fotoUrl;
+    final namaLapangan = state.namaLapangan;
+    final hargaPerJam = state.hargaPerJam;
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -339,7 +426,7 @@ class _ReviewPageState extends State<ReviewPage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: imagePath.startsWith('http')
+            child: imagePath.isNotEmpty && imagePath.startsWith('http')
                 ? Image.network(
                     imagePath,
                     width: 72,
@@ -397,9 +484,31 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // rating overall
+  Widget _buildRatingOverall(CourtReviewState state) {
+    String labelOverall(int rating) {
+      switch (rating) {
+        case 1:
+          return 'Sangat Buruk';
+        case 2:
+          return 'Buruk';
+        case 3:
+          return 'Cukup';
+        case 4:
+          return 'Sangat Bagus';
+        case 5:
+          return 'Luar Biasa!';
+        default:
+          return 'Ketuk bintang untuk memberi nilai';
+      }
+    }
 
-  Widget _buildRatingOverall() {
+    Color warnaLabelOverall(int rating) {
+      if (rating == 0) return const Color(0xFF888888);
+      if (rating <= 2) return _errorColor;
+      if (rating == 3) return const Color(0xFFFF9800);
+      return _primaryColor;
+    }
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       padding: const EdgeInsets.all(20),
@@ -431,16 +540,16 @@ class _ReviewPageState extends State<ReviewPage> {
               final index = i + 1;
               return GestureDetector(
                 onTap: () => setState(() {
-                  _ratingOverall = index;
-                  _showErrorOverall = false;
+                  state.ratingOverall = index;
+                  state.showErrorOverall = false;
                 }),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Icon(
-                    index <= _ratingOverall
+                    index <= state.ratingOverall
                         ? Icons.star_rounded
                         : Icons.star_outline_rounded,
-                    color: index <= _ratingOverall
+                    color: index <= state.ratingOverall
                         ? _starColor
                         : const Color(0xFFDDDDDD),
                     size: 42,
@@ -451,14 +560,14 @@ class _ReviewPageState extends State<ReviewPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            _labelOverall,
+            labelOverall(state.ratingOverall),
             style: TextStyle(
               fontSize: 13.5,
               fontWeight: FontWeight.w500,
-              color: _warnaLabelOverall,
+              color: warnaLabelOverall(state.ratingOverall),
             ),
           ),
-          if (_showErrorOverall) ...[
+          if (state.showErrorOverall) ...[
             const SizedBox(height: 6),
             const Text(
               'Rating keseluruhan wajib diisi',
@@ -470,9 +579,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // rating kategori
-
-  Widget _buildRatingKategori() {
+  Widget _buildRatingKategori(CourtReviewState state) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       decoration: BoxDecoration(
@@ -503,26 +610,26 @@ class _ReviewPageState extends State<ReviewPage> {
           ),
           _BariKategori(
             label: 'Kebersihan',
-            nilai: _ratingKebersihan,
-            onChanged: (v) => setState(() => _ratingKebersihan = v),
+            nilai: state.ratingKebersihan,
+            onChanged: (v) => setState(() => state.ratingKebersihan = v),
           ),
           const _Divider(),
           _BariKategori(
             label: 'Fasilitas',
-            nilai: _ratingFasilitas,
-            onChanged: (v) => setState(() => _ratingFasilitas = v),
+            nilai: state.ratingFasilitas,
+            onChanged: (v) => setState(() => state.ratingFasilitas = v),
           ),
           const _Divider(),
           _BariKategori(
             label: 'Pelayanan',
-            nilai: _ratingPelayanan,
-            onChanged: (v) => setState(() => _ratingPelayanan = v),
+            nilai: state.ratingPelayanan,
+            onChanged: (v) => setState(() => state.ratingPelayanan = v),
           ),
           const _Divider(),
           _BariKategori(
             label: 'Kondisi Lapangan',
-            nilai: _ratingKondisi,
-            onChanged: (v) => setState(() => _ratingKondisi = v),
+            nilai: state.ratingKondisi,
+            onChanged: (v) => setState(() => state.ratingKondisi = v),
             isLast: true,
           ),
         ],
@@ -530,9 +637,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 
-  // komentar
-
-  Widget _buildKomentar() {
+  Widget _buildKomentar(CourtReviewState state) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       decoration: BoxDecoration(
@@ -564,7 +669,7 @@ class _ReviewPageState extends State<ReviewPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: TextField(
-              controller: _komentarController,
+              controller: state.komentarController,
               maxLines: 5,
               maxLength: 500,
               style: const TextStyle(fontSize: 14),
@@ -592,8 +697,6 @@ class _ReviewPageState extends State<ReviewPage> {
       ),
     );
   }
-
-  // tombol kirim
 
   Widget _buildTombolKirim() {
     return Container(
@@ -638,8 +741,6 @@ class _ReviewPageState extends State<ReviewPage> {
     );
   }
 }
-
-// widget pembantu
 
 class _BariKategori extends StatelessWidget {
   final String label;
