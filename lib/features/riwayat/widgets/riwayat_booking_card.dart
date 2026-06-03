@@ -8,13 +8,17 @@ class RiwayatBookingCard extends StatelessWidget {
   final VoidCallback? onLihatDetail;
   final VoidCallback? onBeriUlasan;
   final VoidCallback? onPesanLagi;
+  final VoidCallback? onCancel; // 1. Tambah callback untuk cancel
+  final bool sudahReview; // Perbaikan deklarasi field dari kode sebelumnya
 
   const RiwayatBookingCard({
     super.key,
     required this.booking,
     this.onLihatDetail,
     this.onBeriUlasan,
-    this.onPesanLagi, required bool sudahReview,
+    this.onPesanLagi,
+    this.onCancel, // 2. Masukkan ke constructor
+    required this.sudahReview,
   });
 
   String _formatRupiah(int amount) {
@@ -84,13 +88,11 @@ class RiwayatBookingCard extends StatelessWidget {
           if (_isAktif && booking.sisaWaktu != null) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-              child: CountdownTimerWidget(
-                  initialDuration: booking.sisaWaktu!),
+              child: CountdownTimerWidget(initialDuration: booking.sisaWaktu!),
             ),
             const SizedBox(height: 12),
           ],
-          if (_isAktif || _isSelesai || _isDibatalkan)
-            _buildActions(context),
+          if (_isAktif || _isSelesai || _isDibatalkan) _buildActions(context),
         ],
       ),
     );
@@ -151,8 +153,7 @@ class RiwayatBookingCard extends StatelessWidget {
                 // Kategori chip
                 Row(
                   children: [
-                    Icon(_kategoriIcon,
-                        size: 13, color: _kategoriBadgeColor),
+                    Icon(_kategoriIcon, size: 13, color: _kategoriBadgeColor),
                     const SizedBox(width: 4),
                     Text(
                       booking.kategori,
@@ -196,9 +197,8 @@ class RiwayatBookingCard extends StatelessWidget {
                         : _isDibatalkan
                             ? const Color(0xFF9E9E9E)
                             : const Color(0xFF1A1A2E),
-                    decoration: _isDibatalkan
-                        ? TextDecoration.lineThrough
-                        : null,
+                    decoration:
+                        _isDibatalkan ? TextDecoration.lineThrough : null,
                   ),
                 ),
               ],
@@ -212,34 +212,66 @@ class RiwayatBookingCard extends StatelessWidget {
   // ── Actions ───────────────────────────────────────────────────
 
   Widget _buildActions(BuildContext context) {
+    // Status AKTIF: Tombol Batalkan (Red Outlined) + Lihat Detail (Blue Filled)
     if (_isAktif) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: ElevatedButton(
-            onPressed: onLihatDetail,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1565C0),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+        child: Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 44,
+                child: OutlinedButton(
+                  onPressed: onCancel,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor:
+                        const Color(0xFFE53935), // Warna Merah Cancel
+                    side:
+                        const BorderSide(color: Color(0xFFE53935), width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text(
+                    'Batalkan',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ),
-              elevation: 0,
             ),
-            child: const Text(
-              'Lihat Detail Booking',
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
+            const SizedBox(width: 10),
+            Expanded(
+              child: SizedBox(
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: onLihatDetail,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1565C0),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Lihat Detail',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
         ),
       );
     }
 
+    // Status SELESAI: Beri Ulasan + Pesan Lagi
     if (_isSelesai) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -252,8 +284,8 @@ class RiwayatBookingCard extends StatelessWidget {
                   onPressed: onBeriUlasan,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF1565C0),
-                    side: const BorderSide(
-                        color: Color(0xFF1565C0), width: 1.5),
+                    side:
+                        const BorderSide(color: Color(0xFF1565C0), width: 1.5),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
