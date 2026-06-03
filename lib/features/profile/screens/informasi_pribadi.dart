@@ -576,172 +576,147 @@ class _InformasiPribadiScreenState
     }
   }
 
-  @override
-  Widget build(
-      BuildContext context) {
-    return Scaffold(
-      backgroundColor:
-          _bgColor,
-      appBar: AppBar(
-        backgroundColor:
-            Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        iconTheme:
-            const IconThemeData(
-          color: _primaryDark,
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: _bgColor,
+    appBar: AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      centerTitle: true,
+      iconTheme: const IconThemeData(color: _primaryDark),
+      title: Text('Informasi Pribadi',
+          style: _p(size: 16, weight: FontWeight.w600)),
+    ),
+    body: SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+
+          // Avatar
+          GestureDetector(
+            onTap: _pilihFoto,
+            child: Column(
+              children: [
+                Stack(
+                  children: [
+                    Container(
+                      width: 110, height: 110,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.grey.shade200,
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _buildFotoWidget(),
+                    ),
+                    Positioned(
+                      bottom: 0, right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: _accent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.edit, size: 16, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text('Ganti Foto Profil',
+                    style: _p(size: 13, color: _primaryDark, weight: FontWeight.w500)),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 28),
+
+          // Nama Lengkap
+          _buildField(
+            label: 'Nama Lengkap',
+            controller: _namaController,
+            icon: Icons.person_outline_rounded,
+            enabled: true,
+          ),
+          const SizedBox(height: 16),
+
+          // Email
+          _buildField(
+            label: 'Email',
+            controller: _emailController,
+            icon: Icons.email_outlined,
+            enabled: false,
+          ),
+          const SizedBox(height: 16),
+
+          // Nomor Telepon
+          _buildField(
+            label: 'Nomor Telepon',
+            controller: _teleponController,
+            icon: Icons.phone_outlined,
+            enabled: true,
+            keyboardType: TextInputType.phone,
+          ),
+
+          const SizedBox(height: 32),
+
+          // Tombol Simpan
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _isUploading ? null : _simpan,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: _isUploading
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : Text('Simpan',
+                      style: _p(size: 14, weight: FontWeight.w600, color: Colors.white)),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildField({
+  required String label,
+  required TextEditingController controller,
+  required IconData icon,
+  bool enabled = true,
+  TextInputType keyboardType = TextInputType.text,
+}) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: _p(size: 13, weight: FontWeight.w600, color: _primaryDark)),
+      const SizedBox(height: 8),
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
         ),
-        title: Text(
-          'Informasi Pribadi',
-          style: _p(
-            size: 16,
-            weight:
-                FontWeight.w600,
+        child: TextField(
+          controller: controller,
+          enabled: enabled,
+          keyboardType: keyboardType,
+          style: _p(size: 14),
+          decoration: InputDecoration(
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            suffixIcon: Icon(icon, color: Colors.grey.shade400, size: 20),
           ),
         ),
       ),
-      body:
-          SingleChildScrollView(
-        padding:
-            const EdgeInsets.all(
-                20),
-        child: Column(
-          children: [
-            GestureDetector(
-              onTap: _pilihFoto,
-              child: Stack(
-                children: [
-                  Container(
-                    width: 110,
-                    height: 110,
-                    decoration:
-                        BoxDecoration(
-                      shape: BoxShape
-                          .circle,
-                      color: Colors
-                          .grey
-                          .shade200,
-                    ),
-                    clipBehavior:
-                        Clip.antiAlias,
-                    child:
-                        _buildFotoWidget(),
-                  ),
-
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child:
-                        Container(
-                      padding:
-                          const EdgeInsets
-                              .all(8),
-                      decoration:
-                          const BoxDecoration(
-                        color:
-                            _accent,
-                        shape: BoxShape
-                            .circle,
-                      ),
-                      child:
-                          const Icon(
-                        Icons.edit,
-                        size: 16,
-                        color: Colors
-                            .white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(
-                height: 30),
-
-            TextField(
-              controller:
-                  _namaController,
-              decoration:
-                  const InputDecoration(
-                labelText:
-                    'Nama Lengkap',
-              ),
-            ),
-
-            const SizedBox(
-                height: 18),
-
-            TextField(
-              controller:
-                  _emailController,
-              enabled: false,
-              decoration:
-                  const InputDecoration(
-                labelText:
-                    'Email',
-              ),
-            ),
-
-            const SizedBox(
-                height: 18),
-
-            TextField(
-              controller:
-                  _teleponController,
-              decoration:
-                  const InputDecoration(
-                labelText:
-                    'Nomor Telepon',
-              ),
-            ),
-
-            const SizedBox(
-                height: 32),
-
-            SizedBox(
-              width:
-                  double.infinity,
-              height: 52,
-              child:
-                  ElevatedButton(
-                onPressed:
-                    _isUploading
-                        ? null
-                        : _simpan,
-                style:
-                    ElevatedButton
-                        .styleFrom(
-                  backgroundColor:
-                      _accent,
-                  shape:
-                      RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(
-                            14),
-                  ),
-                ),
-                child:
-                    _isUploading
-                        ? const CircularProgressIndicator(
-                            color: Colors
-                                .white,
-                          )
-                        : Text(
-                            'Simpan',
-                            style: _p(
-                              size: 14,
-                              weight:
-                                  FontWeight.w600,
-                              color: Colors
-                                  .white,
-                            ),
-                          ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    ],
+  );
+}
 }

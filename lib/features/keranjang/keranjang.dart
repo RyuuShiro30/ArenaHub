@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'cart_manager.dart';
 import '../booking/screens/form_booking.dart';
+import '../../../../routes/app_routes.dart';
 
 class KeranjangPage extends StatefulWidget {
   const KeranjangPage({super.key});
@@ -25,16 +26,34 @@ class _KeranjangPageState extends State<KeranjangPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bgColor,
-      appBar: AppBar(
+    return PopScope(
+  canPop: false,
+  onPopInvokedWithResult: (didPop, result) {
+    if (didPop) return;
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushNamedAndRemoveUntil(
+        context, AppRoutes.home, (route) => false);
+    }
+  },
+  child: Scaffold(
+    backgroundColor: _bgColor,
+    appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.5,
         surfaceTintColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded,
               color: _primaryBlue, size: 20),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
+          } else {
+            Navigator.pushNamedAndRemoveUntil(
+              context, AppRoutes.home, (route) => false);
+          }
+        },
         ),
         title: ValueListenableBuilder<List<KeranjangItem>>(
           valueListenable: CartManager.instance.itemsNotifier,
@@ -86,6 +105,7 @@ class _KeranjangPageState extends State<KeranjangPage> {
           );
         },
       ),
+  ),
     );
   }
 
