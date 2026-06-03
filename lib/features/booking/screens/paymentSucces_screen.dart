@@ -124,10 +124,6 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF004080)),
-          onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-        ),
         title: const Text(
           "Status Pembayaran",
           style: TextStyle(color: Color(0xFF1A237E), fontWeight: FontWeight.bold),

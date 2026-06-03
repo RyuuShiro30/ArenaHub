@@ -509,185 +509,213 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildScheduleList() {
-    final todayStr = _todayWibStr();
-    final availableToday = _availableSlotsToday();
-    if (availableToday.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(14)),
-        child: Center(
-            child: Text('Tidak ada slot tersedia hari ini',
-                style: _p(color: Colors.grey))),
-      );
-    }
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('lapangan').snapshots(),
-      builder: (context, lapSnap) {
-        if (lapSnap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-        }
-        if (!lapSnap.hasData || lapSnap.data!.docs.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.circular(14)),
-            child: Center(
-                child: Text('Tidak ada jadwal tersedia hari ini',
-                    style: _p(color: Colors.grey))),
-          );
-        }
-        return StreamBuilder<QuerySnapshot>(
-          stream: _firestore
-              .collection('bookings')
-              .where('tanggal', isEqualTo: todayStr)
-              .where('status', whereIn: ['confirmed', 'pending']).snapshots(),
-          builder: (context, bookSnap) {
-            final bookedSlots = <String, Set<String>>{};
-            if (bookSnap.hasData) {
-              for (final doc in bookSnap.data!.docs) {
-                final data = doc.data() as Map<String, dynamic>;
-                final lapId = data['lapangan_id']?.toString() ?? '';
-                if (lapId.isEmpty) continue;
-                final slotField =
-                    data['slots'] ?? data['selected_times'] ?? data['jam_main'];
-                final set = bookedSlots.putIfAbsent(lapId, () => {});
-                if (slotField is List) {
-                  set.addAll(slotField.map((e) => e.toString()));
-                } else if (slotField is String && slotField.isNotEmpty) {
-                  set.addAll(slotField
-                      .split(',')
-                      .map((e) => e.trim())
-                      .where((e) => e.isNotEmpty));
-                }
-              }
-            }
-            final items = <Map<String, dynamic>>[];
-            for (final lapDoc in lapSnap.data!.docs) {
-              final lapId = lapDoc.id;
-              final lapData = lapDoc.data() as Map<String, dynamic>;
-              final booked = bookedSlots[lapId] ?? {};
-              String? firstAvailableSlot;
-              for (final slot in availableToday) {
-                if (!booked.contains(slot)) {
-                  firstAvailableSlot = slot;
-                  break;
-                }
-              }
-              if (firstAvailableSlot == null) continue;
-              final fotoList = lapData['foto'] as List<dynamic>?;
-              items.add({
-                'id': lapId,
-                'nama': lapData['nama_lapangan'] ?? 'Lapangan',
-                'jenis': lapData['jenis_lapangan'] ?? '',
-                'harga': (lapData['harga'] as num?)?.toInt() ?? 0,
-                'slot': firstAvailableSlot,
-                'jenis_floor': lapData['jenis_floor'] ?? '',
-                'foto': (fotoList != null && fotoList.isNotEmpty)
-                    ? fotoList[0].toString()
-                    : lapData['image_url']?.toString() ?? '',
-              });
-              if (items.length >= 4) break;
-            }
-            if (items.isEmpty) {
-              return Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14)),
-                child: Center(
-                    child: Text('Tidak ada jadwal tersedia hari ini',
-                        style: _p(color: Colors.grey))),
-              );
-            }
-            items.sort((a, b) =>
-                _slotStartHour(a['slot']).compareTo(_slotStartHour(b['slot'])));
-            return Column(
-              children: items
-                  .map((item) => GestureDetector(
-                        onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => PilihJadwalPage(
-                                      lapanganId: item['id'],
-                                      namaLapangan: item['nama'],
-                                      jenisLapangan: item['jenis'],
-                                      jenisFloor: item['jenis_floor'],
-                                      fotoUrl: item['foto'],
-                                      pricePerHour: item['harga'],
-                                    ))),
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                          decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                    color: Colors.black.withOpacity(0.04),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2))
-                              ]),
-                          child: Row(children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 11, vertical: 9),
-                              decoration: BoxDecoration(
-                                  color: _accent.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(10)),
-                              child: Text(item['slot'],
-                                  style: _p(
-                                      size: 12,
-                                      weight: FontWeight.bold,
-                                      color: _primaryDark)),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                  Text(item['nama'],
-                                      style: _p(
-                                          size: 13,
-                                          weight: FontWeight.w600,
-                                          color: _textDark)),
-                                  const SizedBox(height: 2),
-                                  Text(item['jenis'],
-                                      style: _p(
-                                          size: 11,
-                                          color: Colors.grey.shade500)),
-                                ])),
-                            Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                      NumberFormat.currency(
-                                              locale: 'id_ID',
-                                              symbol: 'Rp ',
-                                              decimalDigits: 0)
-                                          .format(item['harga']),
-                                      style: _p(
-                                          size: 13,
-                                          weight: FontWeight.bold,
-                                          color: _accent)),
-                                  const SizedBox(height: 2),
-                                  Text('/ jam',
-                                      style: _p(
-                                          size: 11,
-                                          color: Colors.grey.shade400)),
-                                ]),
-                          ]),
-                        ),
-                      ))
-                  .toList(),
-            );
-          },
+  final now        = _nowWib();
+  final todayStr   = _todayWibStr();
+  final startOfDay = DateTime(now.year, now.month, now.day, 0, 0, 0);
+  final endOfDay   = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+  return StreamBuilder<QuerySnapshot>(
+    stream: _firestore.collection('lapangan').snapshots(),
+    builder: (context, lapSnap) {
+      if (lapSnap.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      }
+      if (!lapSnap.hasData || lapSnap.data!.docs.isEmpty) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(color: Colors.white,
+              borderRadius: BorderRadius.circular(14)),
+          child: Center(child: Text('Tidak ada jadwal tersedia hari ini',
+              style: _p(color: Colors.grey))),
         );
-      },
-    );
-  }
+      }
+
+      // Buat map lapangan untuk lookup
+      final lapanganMap = <String, Map<String, dynamic>>{};
+      for (final lapDoc in lapSnap.data!.docs) {
+        lapanganMap[lapDoc.id] = {
+          ...lapDoc.data() as Map<String, dynamic>,
+          'id': lapDoc.id,
+        };
+      }
+
+      return StreamBuilder<QuerySnapshot>(
+        stream: _firestore
+            .collection('jadwal')
+            .where('tanggal', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+            .where('tanggal', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+            .snapshots(),
+        builder: (context, jadwalSnap) {
+          if (!jadwalSnap.hasData) {
+            return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+          }
+
+          return StreamBuilder<QuerySnapshot>(
+            stream: _firestore
+                .collection('bookings')
+                .where('tanggal', isEqualTo: todayStr)
+                .where('status', whereIn: ['confirmed', 'pending'])
+                .snapshots(),
+            builder: (context, bookSnap) {
+              // Kumpulkan slot yang sudah dipesan per lapangan
+              final bookedSlots = <String, Set<String>>{};
+              if (bookSnap.hasData) {
+                for (final doc in bookSnap.data!.docs) {
+                  final data  = doc.data() as Map<String, dynamic>;
+                  final lapId = data['lapangan_id']?.toString() ?? '';
+                  if (lapId.isEmpty) continue;
+                  final slots = data['slots'] ?? data['selected_times'];
+                  final set   = bookedSlots.putIfAbsent(lapId, () => {});
+                  if (slots is List) {
+                    set.addAll(slots.map((e) => e.toString()));
+                  }
+                }
+              }
+
+              // Filter jadwal tersedia & belum dipesan & belum lewat
+              final currentHour = now.hour + now.minute / 60.0;
+              final allJadwal = jadwalSnap.data!.docs
+                  .map((doc) => doc.data() as Map<String, dynamic>)
+                  .where((d) {
+                    final lapId  = d['lapangan_id']?.toString() ?? '';
+                    final mulai  = d['waktu_mulai']?.toString()  ?? '';
+                    final selesai = d['waktu_selesai']?.toString() ?? '';
+                    final status = d['status']?.toString() ?? '';
+                    if (lapId.isEmpty || mulai.isEmpty) return false;
+                    if (lapanganMap[lapId] == null) return false;
+                    if (status != 'tersedia') return false;
+
+                    // Cek slot sudah lewat
+                    final parts   = selesai.split(':');
+                    final endHour = (int.tryParse(parts[0]) ?? 0) +
+                        (int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0) / 60.0;
+                    if (endHour <= currentHour) return false;
+
+                    // Cek slot sudah dipesan
+                    final slot   = '${mulai.replaceAll(':', '.')} - ${selesai.replaceAll(':', '.')}';
+                    final booked = bookedSlots[lapId] ?? {};
+                    return !booked.contains(slot);
+                  })
+                  .toList();
+
+              // Sort by waktu_mulai
+              allJadwal.sort((a, b) {
+                final aTime  = (a['waktu_mulai'] ?? '00:00').toString();
+                final bTime  = (b['waktu_mulai'] ?? '00:00').toString();
+                final aParts = aTime.split(':');
+                final bParts = bTime.split(':');
+                final aMin   = int.parse(aParts[0]) * 60 + int.parse(aParts.length > 1 ? aParts[1] : '0');
+                final bMin   = int.parse(bParts[0]) * 60 + int.parse(bParts.length > 1 ? bParts[1] : '0');
+                return aMin.compareTo(bMin);
+              });
+
+              // Group by lapangan, ambil slot paling awal per lapangan
+              final earliestByLapangan = <String, Map<String, dynamic>>{};
+              for (final d in allJadwal) {
+                final lapId = d['lapangan_id']?.toString() ?? '';
+                if (!earliestByLapangan.containsKey(lapId)) {
+                  earliestByLapangan[lapId] = d;
+                }
+              }
+
+              final items = <Map<String, dynamic>>[];
+              for (final entry in earliestByLapangan.entries) {
+                final lapId   = entry.key;
+                final jadwal  = entry.value;
+                final lapData = lapanganMap[lapId]!;
+                final fotoList = lapData['foto'] as List<dynamic>?;
+                final mulai   = jadwal['waktu_mulai']?.toString() ?? '';
+                final selesai = jadwal['waktu_selesai']?.toString() ?? '';
+                final slot    = '${mulai.replaceAll(':', '.')} - ${selesai.replaceAll(':', '.')}';
+
+                items.add({
+                  'id'         : lapId,
+                  'nama'       : lapData['nama_lapangan']  ?? 'Lapangan',
+                  'jenis'      : lapData['jenis_lapangan'] ?? '',
+                  'harga'      : (lapData['harga'] as num?)?.toInt() ?? 0,
+                  'slot'       : slot,
+                  'jenis_floor': lapData['jenis_floor']    ?? '',
+                  'foto'       : (fotoList != null && fotoList.isNotEmpty)
+                      ? fotoList[0].toString()
+                      : lapData['image_url']?.toString() ?? '',
+                });
+                if (items.length >= 4) break;
+              }
+
+              if (items.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(color: Colors.white,
+                      borderRadius: BorderRadius.circular(14)),
+                  child: Center(child: Text('Tidak ada jadwal tersedia hari ini',
+                      style: _p(color: Colors.grey))),
+                );
+              }
+
+              return Column(
+                children: items.map((item) => GestureDetector(
+                  onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => PilihJadwalPage(
+                      lapanganId   : item['id'],
+                      namaLapangan : item['nama'],
+                      jenisLapangan: item['jenis'],
+                      jenisFloor   : item['jenis_floor'],
+                      fotoUrl      : item['foto'],
+                      pricePerHour : item['harga'],
+                    ))),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 6, offset: const Offset(0, 2))],
+                    ),
+                    child: Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: _accent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(item['slot'],
+                            style: _p(size: 12, weight: FontWeight.bold,
+                                color: _primaryDark)),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item['nama'], style: _p(size: 13,
+                              weight: FontWeight.w600, color: _textDark)),
+                          const SizedBox(height: 2),
+                          Text(item['jenis'], style: _p(size: 11,
+                              color: Colors.grey.shade500)),
+                        ],
+                      )),
+                      Column(crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(NumberFormat.currency(locale: 'id_ID',
+                              symbol: 'Rp ', decimalDigits: 0).format(item['harga']),
+                              style: _p(size: 13, weight: FontWeight.bold,
+                                  color: _accent)),
+                          const SizedBox(height: 2),
+                          Text('/ jam', style: _p(size: 11,
+                              color: Colors.grey.shade400)),
+                        ]),
+                    ]),
+                  ),
+                )).toList(),
+              );
+            },
+          );
+        },
+      );
+    },
+  );
+}
 
   Widget _buildLastBooking() {
     final user = _auth.currentUser;
