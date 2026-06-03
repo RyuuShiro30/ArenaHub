@@ -6,14 +6,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../data/model/riwayat_booking_model.dart';
 import '../widgets/riwayat_booking_card.dart';
 import '../screens/detail_riwayat.dart';
-import '../screens/review.dart'; // ← import ReviewPage
+import '../screens/review.dart';
+import '../../booking/screens/cancel_refund_page.dart';
 
 class RiwayatBookingScreen extends StatefulWidget {
   const RiwayatBookingScreen({super.key});
 
   @override
-  State<RiwayatBookingScreen> createState() =>
-      _RiwayatBookingScreenState();
+  State<RiwayatBookingScreen> createState() => _RiwayatBookingScreenState();
 }
 
 class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
@@ -44,21 +44,19 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
   // ── Parse waktu selesai dari selected_times + tanggal_main ───
   DateTime? _parseWaktuSelesai(Map<String, dynamic> data) {
     try {
-      final tanggalStr = (data['tanggal_main'] ?? data['tanggal'] ?? '')
-          .toString()
-          .trim();
+      final tanggalStr =
+          (data['tanggal_main'] ?? data['tanggal'] ?? '').toString().trim();
       if (tanggalStr.isEmpty) return null;
 
       final tanggal = DateTime.tryParse(tanggalStr);
       if (tanggal == null) return null;
 
-      final rawJam = (data['selected_times'] ?? data['jam_main'] ?? '')
-          .toString()
-          .trim();
+      final rawJam =
+          (data['selected_times'] ?? data['jam_main'] ?? '').toString().trim();
       if (rawJam.isEmpty) return null;
 
       // Ambil slot terakhir — pisah berdasarkan ","
-      final slots    = rawJam.split(',');
+      final slots = rawJam.split(',');
       final lastSlot = slots.last.trim(); // e.g. "07.00 - 08.00"
 
       // Ambil bagian setelah " - "
@@ -69,14 +67,13 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
 
       // Normalize titik → titik dua
       final normalized = waktuSelesaiStr.replaceAll('.', ':');
-      final jamMenit   = normalized.split(':');
+      final jamMenit = normalized.split(':');
       if (jamMenit.length < 2) return null;
 
-      final jam   = int.tryParse(jamMenit[0]) ?? 0;
+      final jam = int.tryParse(jamMenit[0]) ?? 0;
       final menit = int.tryParse(jamMenit[1]) ?? 0;
 
-      return DateTime(
-          tanggal.year, tanggal.month, tanggal.day, jam, menit);
+      return DateTime(tanggal.year, tanggal.month, tanggal.day, jam, menit);
     } catch (_) {
       return null;
     }
@@ -139,8 +136,8 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: List.generate(
-                  _tabs.length, (index) => _buildList(index)),
+              children:
+                  List.generate(_tabs.length, (index) => _buildList(index)),
             ),
           ),
         ],
@@ -153,8 +150,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
       backgroundColor: Colors.white,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back,
-            color: Color(0xFF1A1A2E), size: 22),
+        icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A2E), size: 22),
         onPressed: () => Navigator.of(context).maybePop(),
       ),
       title: const Text(
@@ -181,13 +177,12 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
         tabAlignment: TabAlignment.center,
         labelColor: const Color(0xFF1565C0),
         unselectedLabelColor: const Color(0xFF9E9E9E),
-        labelStyle: const TextStyle(
-            fontSize: 13.5, fontWeight: FontWeight.w700),
-        unselectedLabelStyle: const TextStyle(
-            fontSize: 13.5, fontWeight: FontWeight.w500),
+        labelStyle:
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+        unselectedLabelStyle:
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
         indicator: const UnderlineTabIndicator(
-          borderSide:
-              BorderSide(color: Color(0xFF1565C0), width: 2.5),
+          borderSide: BorderSide(color: Color(0xFF1565C0), width: 2.5),
         ),
         indicatorSize: TabBarIndicatorSize.label,
         tabs: _tabs.map((t) => Tab(text: t)).toList(),
@@ -206,8 +201,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(
-              child: Text('Terjadi kesalahan: ${snapshot.error}'));
+          return Center(child: Text('Terjadi kesalahan: ${snapshot.error}'));
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -228,7 +222,8 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
 
           // Tanggal booking untuk display
           String formattedTanggal = '-';
-          if (data['tanggal_main'] != null && data['tanggal_main'].toString().isNotEmpty) {
+          if (data['tanggal_main'] != null &&
+              data['tanggal_main'].toString().isNotEmpty) {
             final dt = DateTime.tryParse(data['tanggal_main'].toString());
             if (dt != null) {
               formattedTanggal = DateFormat('d MMMM yyyy', 'id_ID').format(dt);
@@ -240,12 +235,12 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
             if (data['tanggal_booking'] != null) {
               tanggalBooking = (data['tanggal_booking'] as Timestamp).toDate();
             }
-            formattedTanggal = DateFormat('d MMMM yyyy', 'id_ID').format(tanggalBooking);
+            formattedTanggal =
+                DateFormat('d MMMM yyyy', 'id_ID').format(tanggalBooking);
           }
 
           // Status berbasis waktu
-          final status =
-              _parseStatusWithTime(data['status_pembayaran'], data);
+          final status = _parseStatusWithTime(data['status_pembayaran'], data);
 
           // Sudah review atau belum — baca field 'sudah_review' dari Firestore
           final sudahReview = data['sudah_review'] == true;
@@ -255,21 +250,20 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
 
           // Waktu tampil
           final waktuTampil =
-              (data['selected_times'] ?? data['jam_main'] ?? '-')
-                  .toString();
+              (data['selected_times'] ?? data['jam_main'] ?? '-').toString();
 
           return (
             model: RiwayatBookingModel(
-              bookingId:       data['order_id'] ?? '',
-              namaLapangan:    data['nama_lapangan'] ?? 'Lapangan',
-              kategori:        data['kategori'] ?? 'SPORT',
-              tanggal:         formattedTanggal,
-              waktu:           waktuTampil,
+              bookingId: data['order_id'] ?? '',
+              namaLapangan: data['nama_lapangan'] ?? 'Lapangan',
+              kategori: data['kategori'] ?? 'SPORT',
+              tanggal: formattedTanggal,
+              waktu: waktuTampil,
               totalPembayaran: (data['total_harga'] as num?)?.toInt() ?? 0,
               imagePath: imagePath,
-              status:    status,
+              status: status,
             ),
-            docId:       doc.id,
+            docId: doc.id,
             sudahReview: sudahReview,
           );
         }).toList();
@@ -290,8 +284,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
             break;
           case 3: // Dibatalkan
             filtered = mapped
-                .where(
-                    (e) => e.model.status == BookingStatus.dibatalkan)
+                .where((e) => e.model.status == BookingStatus.dibatalkan)
                 .toList();
             break;
           default: // Semua
@@ -308,39 +301,41 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
           separatorBuilder: (_, __) => const SizedBox(height: 14),
           itemBuilder: (context, index) {
             final item = filtered[index];
-            final isSelesai =
-                item.model.status == BookingStatus.selesai;
+            final isSelesai = item.model.status == BookingStatus.selesai;
 
             return RiwayatBookingCard(
               booking: item.model,
+              sudahReview: item.sudahReview,
               onLihatDetail: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        DetailRiwayatPage(bookingId: item.docId),
+                    builder: (_) => DetailRiwayatPage(bookingId: item.docId),
                   ),
                 );
               },
-              // Tombol Beri Ulasan:
-              // - null  → card sembunyikan/disable tombol
-              // - fungsi → card tampilkan tombol aktif
+              // 2. Pasang callback onCancel untuk tombol Batalkan
+              onCancel: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CancelRefundPage(bookingId: item.docId),
+                  ),
+                );
+              },
               onBeriUlasan: (isSelesai && !item.sudahReview)
                   ? () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) =>
-                              ReviewPage(bookingId: item.docId),
+                          builder: (_) => ReviewPage(bookingId: item.docId),
                         ),
                       );
                     }
                   : null,
-
-              // Kirim ke card agar bisa tampilkan badge "Sudah Direview"
-              sudahReview: item.sudahReview,
-
-              onPesanLagi: () {},
+              onPesanLagi: () {
+                // Implementasi logika pesan lagi jika diperlukan
+              },
             );
           },
         );
@@ -350,10 +345,14 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
 
   String _emptyMessage(int tabIndex) {
     switch (tabIndex) {
-      case 1:  return 'Tidak ada booking aktif';
-      case 2:  return 'Belum ada booking selesai';
-      case 3:  return 'Tidak ada booking dibatalkan';
-      default: return 'Belum ada riwayat booking';
+      case 1:
+        return 'Tidak ada booking aktif';
+      case 2:
+        return 'Belum ada booking selesai';
+      case 3:
+        return 'Tidak ada booking dibatalkan';
+      default:
+        return 'Belum ada riwayat booking';
     }
   }
 
@@ -362,8 +361,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inbox_rounded,
-              size: 56, color: Colors.grey.shade300),
+          Icon(Icons.inbox_rounded, size: 56, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           Text(message,
               style: TextStyle(
