@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:math';
 import '../dashboard/dashboardAdmin.dart';
 import 'kelola_lapangan.dart';
+import '../booking/kelola_booking.dart'; 
+import '../kelola_jadwal/kelolaJadwal.dart';
+import '../promo/kelola_promo.dart';
+import '../profile/profileAdmin.dart';
+import '../auth/login.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -26,6 +32,8 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
   String? _selectedType;
+
+  static const Color _blue = Color(0xFF2563EB); // Warna biru utama sesuai Kelola Lapangan
 
   bool _isStatusOn = true;
   int _selectedJamMulaiHour = 6;
@@ -553,148 +561,305 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
   }
 
   void _redirectToKelolaLapangan() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const KelolaLapanganScreen()),
-    );
+    Navigator.pop(context);
   }
 
   Future<void> _saveField() async {
-  if (_formKey.currentState!.validate()) {
-    setState(() => _isSaving = true);
+    if (_formKey.currentState!.validate()) {
+      setState(() => _isSaving = true);
 
-    try {
-      final data = {
-        // IDENTITAS LAPANGAN
-        'nama_lapangan': _nameController.text,
-        'jenis_lapangan': _selectedType ?? 'Lainnya',
+      try {
+        final data = {
+          // IDENTITAS LAPANGAN
+          'nama_lapangan': _nameController.text,
+          'jenis_lapangan': _selectedType ?? 'Lainnya',
 
-        // HARGA
-        'harga': int.tryParse(
-              _priceController.text.replaceAll(
-                RegExp(r'[^0-9]'),
-                '',
-              ),
-            ) ??
-            0,
+          // HARGA
+          'harga': int.tryParse(
+                _priceController.text.replaceAll(
+                  RegExp(r'[^0-9]'),
+                  '',
+                ),
+              ) ??
+              0,
 
-        // DESKRIPSI
-        'deskripsi_lapangan': _descController.text,
+          // DESKRIPSI
+          'deskripsi_lapangan': _descController.text,
 
-        // STATUS
-        'status': _isStatusOn ? 'Aktif' : 'Non-Aktif',
+          // STATUS
+          'status': _isStatusOn ? 'Aktif' : 'Non-Aktif',
 
-        // JAM OPERASIONAL
-        'jam_buka': _selectedJamMulaiHour,
-        'jam_tutup': _selectedJamSelesaiHour,
+          // JAM OPERASIONAL
+          'jam_buka': _selectedJamMulaiHour,
+          'jam_tutup': _selectedJamSelesaiHour,
 
-        // DETAIL LAPANGAN
-        'jenis_floor': _selectedJenisFloor,
-        'kapasitas':
-            int.tryParse(_kapasitasController.text) ?? 0,
-        'lokasi': _lokasiController.text,
+          // DETAIL LAPANGAN
+          'jenis_floor': _selectedJenisFloor,
+          'kapasitas':
+              int.tryParse(_kapasitasController.text) ?? 0,
+          'lokasi': _lokasiController.text,
 
-        // FOTO LAPANGAN
-        'foto': _uploadedImages,
+          // FOTO LAPANGAN
+          'foto': _uploadedImages,
 
-        // FOTO UTAMA
-        'image_url': _uploadedImages.isNotEmpty
-            ? _uploadedImages.first
-            : '',
+          // FOTO UTAMA
+          'image_url': _uploadedImages.isNotEmpty
+              ? _uploadedImages.first
+              : '',
 
-        // FASILITAS + ICON
-       'fasilitas': _facilities.map((f) {
-        return {
-          'nama': f['label'] ?? '',
-          'label': f['label'] ?? '',
-          'icon_url': '',
+          // FASILITAS + ICON
+         'fasilitas': _facilities.map((f) {
+          return {
+            'nama': f['label'] ?? '',
+            'label': f['label'] ?? '',
+            'icon_url': '',
+          };
+        }).toList(),
+
+          // DEFAULT RATING
+          'rating_rata': 0.0,
+          'jumlah_ulasan': 0,
         };
-      }).toList(),
 
-        // DEFAULT RATING
-        'rating_rata': 0.0,
-        'jumlah_ulasan': 0,
-      };
+        if (_isEditMode) {
+          // MODE EDIT
+          await _firestore
+              .collection('lapangan')
+              .doc(widget.fieldToEdit!.id)
+              .update({
+            ...data,
+            'updated_at': FieldValue.serverTimestamp(),
+          });
 
-      if (_isEditMode) {
-        // MODE EDIT
-        await _firestore
-            .collection('lapangan')
-            .doc(widget.fieldToEdit!.id)
-            .update({
-          ...data,
-          'updated_at': FieldValue.serverTimestamp(),
-        });
+          // AKTIVITAS EDIT
+          await _firestore
+              .collection('aktivitas_lapangan')
+              .add({
+            'activity_type': 'update',
+            'title':
+                'Lapangan diperbarui: ${_nameController.text}',
+            'subtitle':
+                'Admin memperbarui informasi lapangan',
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        } else {
+          // MODE TAMBAH BARU
+          await _firestore.collection('lapangan').add({
+            ...data,
+            'created_at': FieldValue.serverTimestamp(),
+          });
 
-        // AKTIVITAS EDIT
-        await _firestore
-            .collection('aktivitas_lapangan')
-            .add({
-          'activity_type': 'update',
-          'title':
-              'Lapangan diperbarui: ${_nameController.text}',
-          'subtitle':
-              'Admin memperbarui informasi lapangan',
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-      } else {
-        // MODE TAMBAH BARU
-        await _firestore.collection('lapangan').add({
-          ...data,
-          'created_at': FieldValue.serverTimestamp(),
-        });
+          // AKTIVITAS TAMBAH
+          await _firestore
+              .collection('aktivitas_lapangan')
+              .add({
+            'activity_type': 'add',
+            'title':
+                'Lapangan baru ditambahkan: ${_nameController.text}',
+            'subtitle':
+                'Admin menambahkan lapangan ke inventaris',
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        }
 
-        // AKTIVITAS TAMBAH
-        await _firestore
-            .collection('aktivitas_lapangan')
-            .add({
-          'activity_type': 'add',
-          'title':
-              'Lapangan baru ditambahkan: ${_nameController.text}',
-          'subtitle':
-              'Admin menambahkan lapangan ke inventaris',
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-      }
+        _redirectToKelolaLapangan();
+      } catch (e) {
+        debugPrint("Error saving field: $e");
 
-      _redirectToKelolaLapangan();
-    } catch (e) {
-      debugPrint("Error saving field: $e");
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Gagal menyimpan lapangan: $e",
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Gagal menyimpan lapangan: $e",
+            ),
           ),
-        ),
-      );
-    } finally {
-      setState(() => _isSaving = false);
+        );
+      } finally {
+        setState(() => _isSaving = false);
+      }
     }
   }
-}
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // SIDEBAR LOKAL (Sama persis seperti di kelola_lapangan.dart)
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _sidebar() {
+    return Container(
+      width: 240,
+      // 💡 Perbaikan: color dan border dipindahkan ke dalam BoxDecoration
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(right: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            alignment: Alignment.centerLeft,
+            child: Row(
+              children: [
+                const Icon(Icons.sports_soccer, color: _blue, size: 28),
+                const SizedBox(width: 12),
+                Text(
+                  'Sportify',
+                  style: GoogleFonts.inter(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          _sidebarItem(
+            icon: Icons.dashboard_outlined,
+            title: 'Dashboard',
+            active: false,
+            onTap: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const AdminDashboardScreen()),
+              );
+            },
+          ),
+          _sidebarItem(
+            icon: Icons.sports_soccer,
+            title: 'Kelola Lapangan',
+            active: true,
+            onTap: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const KelolaLapanganScreen()),
+              );
+            },
+          ),
+          _sidebarItem(
+            icon: Icons.calendar_month_outlined,
+            title: 'Kelola Booking',
+            active: false,
+            onTap: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const KelolaBookingScreen()),
+              );
+            },
+          ),
+          _sidebarItem(
+            icon: Icons.schedule,
+            title: 'Kelola Jadwal',
+            active: false,
+            onTap: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const KelolaJadwalScreen()),
+              );
+            },
+          ),
+          _sidebarItem(
+            icon: Icons.discount_outlined,
+            title: 'Kelola Promo',
+            active: false,
+            onTap: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const KelolaPromoScreen()),
+              );
+            },
+          ),
+          _sidebarItem(
+            icon: Icons.person_outline,
+            title: 'Profile Admin',
+            active: false,
+            onTap: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileAdminScreen()),
+              );
+            },
+          ),
+          const Spacer(),
+          _sidebarItem(
+            icon: Icons.logout,
+            title: 'Keluar',
+            active: false,
+            onTap: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const AdminLoginPage()),
+                (route) => false,
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _sidebarItem({
+    required IconData icon,
+    required String title,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          height: 48,
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFFEFF6FF) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 16),
+              Icon(
+                icon,
+                color: active ? _blue : Colors.grey.shade600,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                  color: active ? _blue : Colors.grey.shade700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF4F7FE), 
       body: Row(
         children: [
-          _buildSidebar(),
+          // 🔑 PANGGIL SIDEBAR LOKAL DI SINI
+          _sidebar(),
           Expanded(
             child: Column(
               children: [
                 _buildTopNavbar(),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(32),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                     child: Form(
                       key: _formKey,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildHeaderActionRow(),
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 24),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -703,19 +868,19 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                                 child: Column(
                                   children: [
                                     _buildMainInfoCard(),
-                                    const SizedBox(height: 24),
+                                    const SizedBox(height: 16),
                                     _buildAvailabilityCard(),
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 24),
+                              const SizedBox(width: 16),
                               Expanded(
                                 flex: 1,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
                                     _buildMediaCard(),
-                                    const SizedBox(height: 24),
+                                    const SizedBox(height: 16),
                                     _buildFacilitiesCard(),
                                   ],
                                 ),
@@ -735,105 +900,13 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
     );
   }
 
-  Widget _buildSidebar() {
-    return Container(
-      width: 260,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(right: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("ArenaHub",
-                    style: TextStyle(
-                        color: Colors.blue[700], fontSize: 22, fontWeight: FontWeight.bold)),
-                const Text("PANEL ADMINISTRASI",
-                    style: TextStyle(
-                        color: Colors.grey, fontSize: 10,
-                        letterSpacing: 1.2, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _sidebarItem(Icons.dashboard_outlined, "Dashboard", false, () {
-            Navigator.pushReplacement(context,
-                MaterialPageRoute(builder: (context) => const AdminDashboardScreen()));
-          }),
-          _sidebarItem(Icons.confirmation_number_outlined, "Kelola Booking", false, () {}),
-          _sidebarItem(Icons.layers_outlined, "Kelola Lapangan", true, () {
-            _redirectToKelolaLapangan();
-          }),
-          _sidebarItem(Icons.calendar_month_outlined, "Kelola Jadwal", false, () {}),
-          _sidebarItem(Icons.person_outline, "Profil", false, () {}),
-          const Spacer(),
-          Divider(color: Colors.grey[200]),
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Row(
-              children: [
-                CircleAvatar(
-                    backgroundColor: Colors.blue[100],
-                    child: const Icon(Icons.person, color: Colors.blue)),
-                const SizedBox(width: 12),
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Admin Utama",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    Text("Administrator", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
-                )
-              ],
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _sidebarItem(IconData icon, String title, bool isActive, VoidCallback onTap) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.blue[50]?.withOpacity(0.5) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: isActive ? Colors.blue[700] : Colors.grey[600]),
-        title: Text(title,
-            style: TextStyle(
-                color: isActive ? Colors.blue[700] : Colors.black87,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        onTap: onTap,
-      ),
-    );
-  }
-
   Widget _buildTopNavbar() {
     return Container(
-      height: 70,
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          IconButton(
-              icon: const Icon(Icons.notifications_none, color: Colors.black54),
-              onPressed: () {}),
-          IconButton(
-              icon: const Icon(Icons.settings_outlined, color: Colors.black54),
-              onPressed: () {}),
-        ],
       ),
     );
   }
@@ -847,14 +920,14 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
           children: [
             Text(
               _isEditMode ? "Edit Lapangan" : "Tambah Lapangan Baru",
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
               _isEditMode
                   ? "Perbarui detail informasi lapangan yang sudah ada."
                   : "Input detail informasi lapangan untuk memperbarui katalog pada tahun 2026.",
-              style: const TextStyle(color: Colors.grey),
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
             ),
           ],
         ),
@@ -863,26 +936,28 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
             OutlinedButton(
               onPressed: _redirectToKelolaLapangan,
               style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16)),
-              child: const Text("Batal"),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+              child: const Text("Batal", style: TextStyle(fontSize: 13)),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             ElevatedButton.icon(
               onPressed: _isSaving ? null : _saveField,
               icon: _isSaving
                   ? const SizedBox(
-                      width: 16, height: 16,
+                      width: 14, height: 14,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.save),
+                  : const Icon(Icons.save, size: 18),
               label: Text(_isSaving
                   ? "Menyimpan..."
                   : _isEditMode
                       ? "Simpan Perubahan"
-                      : "Simpan Lapangan"),
+                      : "Simpan Lapangan", style: const TextStyle(fontSize: 13)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue[700],
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
               ),
             )
           ],
@@ -893,25 +968,25 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
 
   Widget _buildMainInfoCard() {
     return Card(
-      elevation: 0,
+      elevation: 0.5,
       color: Colors.white,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: Colors.grey.shade200)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Row(
               children: [
-                Icon(Icons.info_outline, color: Colors.blue),
+                Icon(Icons.info_outline, color: Colors.blue, size: 20),
                 SizedBox(width: 8),
                 Text("Informasi Utama",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -919,16 +994,18 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("NAMA LAPANGAN",
+                      Text("NAMA LAPANGAN",
                           style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                              fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _nameController,
+                        style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
                           hintText: "Contoh: Lapangan Utama A",
+                          hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
                           contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         validator: (val) => val!.isEmpty ? "Wajib diisi" : null,
@@ -941,19 +1018,20 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("TIPE LAPANGAN",
+                      Text("TIPE LAPANGAN",
                           style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                              fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
                         value: _selectedType,
+                        style: const TextStyle(fontSize: 13, color: Colors.black87),
                         items: _tipeLapangan
                             .map((type) => DropdownMenuItem(value: type, child: Text(type)))
                             .toList(),
                         onChanged: (val) => setState(() => _selectedType = val),
                         decoration: InputDecoration(
                           contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
@@ -963,25 +1041,31 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            const Text("HARGA SEWA (PER JAM)",
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+            Text("HARGA SEWA (PER JAM)",
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
             const SizedBox(height: 8),
             TextFormField(
               controller: _priceController,
+              style: const TextStyle(fontSize: 13),
               decoration: InputDecoration(
                 hintText: "Masukkan harga sewa...",
+                hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
             const SizedBox(height: 16),
-            const Text("DESKRIPSI LAPANGAN",
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+            Text("DESKRIPSI LAPANGAN",
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
             const SizedBox(height: 8),
             TextFormField(
               controller: _descController,
               maxLines: 3,
+              style: const TextStyle(fontSize: 13),
               decoration: InputDecoration(
                 hintText: "Masukkan deskripsi fasilitas dan kondisi lapangan...",
+                hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
@@ -993,25 +1077,25 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
 
   Widget _buildMediaCard() {
     return Card(
-      elevation: 0,
+      elevation: 0.5,
       color: Colors.white,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: Colors.grey.shade200)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Row(
               children: [
-                Icon(Icons.image_outlined, color: Colors.blue),
+                Icon(Icons.image_outlined, color: Colors.blue, size: 20),
                 SizedBox(width: 8),
                 Text("Media Lapangan",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1021,7 +1105,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     painter: DashedBorderPainter(color: Colors.blue.shade200, radius: 12),
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      padding: const EdgeInsets.symmetric(vertical: 24),
                       child: Center(
                         child: _isUploading
                             ? const CircularProgressIndicator()
@@ -1029,29 +1113,29 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.all(12),
+                                    padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
                                         color: Colors.blue.shade50, shape: BoxShape.circle),
                                     child: Icon(Icons.cloud_upload_outlined,
-                                        color: Colors.blue[700], size: 32),
+                                        color: Colors.blue[700], size: 24),
                                   ),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 12),
                                   const Text("Unggah Foto",
                                       style: TextStyle(
-                                          fontWeight: FontWeight.bold, fontSize: 14)),
-                                  const SizedBox(height: 8),
+                                          fontWeight: FontWeight.bold, fontSize: 13)),
+                                  const SizedBox(height: 4),
                                   const Text(
                                       "Drag and drop file atau klik\nuntuk memilih. Maks. 5MB\n(JPG/PNG)",
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
-                                          color: Colors.grey, fontSize: 11, height: 1.5)),
+                                          color: Colors.grey, fontSize: 10, height: 1.4)),
                                 ],
                               ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: List.generate(3, (index) {
@@ -1062,8 +1146,8 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                           GestureDetector(
                             onTap: () => _showImagePreviewDialog(imagePath),
                             child: Container(
-                              width: 80,
-                              height: 80,
+                              width: 60,
+                              height: 60,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: Colors.grey.shade300),
@@ -1085,7 +1169,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                                 decoration: const BoxDecoration(
                                     color: Colors.black54, shape: BoxShape.circle),
                                 padding: const EdgeInsets.all(4),
-                                child: const Icon(Icons.close, size: 12, color: Colors.white),
+                                child: const Icon(Icons.close, size: 10, color: Colors.white),
                               ),
                             ),
                           ),
@@ -1095,8 +1179,8 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                       return GestureDetector(
                         onTap: _isUploading ? null : _pickAndUploadImage,
                         child: Container(
-                          width: 80,
-                          height: 80,
+                          width: 60,
+                          height: 60,
                           decoration: BoxDecoration(
                             color: Colors.blue.shade50,
                             borderRadius: BorderRadius.circular(8),
@@ -1107,8 +1191,8 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                       );
                     } else {
                       return Container(
-                        width: 80,
-                        height: 80,
+                        width: 60,
+                        height: 60,
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(8),
@@ -1129,13 +1213,13 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
 
   Widget _buildAvailabilityCard() {
     return Card(
-      elevation: 0,
+      elevation: 0.5,
       color: Colors.white,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: Colors.grey.shade200)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1143,14 +1227,14 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text("Ketersediaan",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 GestureDetector(
                   onTap: () => setState(() => _isStatusOn = !_isStatusOn),
                   child: Row(
                     children: [
                       Container(
-                        width: 10,
-                        height: 10,
+                        width: 8,
+                        height: 8,
                         decoration: BoxDecoration(
                             color: _isStatusOn ? Colors.green : Colors.grey,
                             shape: BoxShape.circle),
@@ -1158,6 +1242,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                       const SizedBox(width: 6),
                       Text(_isStatusOn ? "Aktif" : "Non-Aktif",
                           style: TextStyle(
+                              fontSize: 12,
                               color: _isStatusOn ? Colors.green : Colors.grey,
                               fontWeight: FontWeight.bold)),
                     ],
@@ -1165,7 +1250,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Row(
               children: [
                 Expanded(
@@ -1173,7 +1258,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     onTap: _showInteractiveTimePickerDialog,
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade200),
                         borderRadius: BorderRadius.circular(8),
@@ -1181,14 +1266,14 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("JAM OPERASIONAL",
+                          Text("JAM OPERASIONAL",
                               style: TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-                          const SizedBox(height: 8),
+                                  fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+                          const SizedBox(height: 6),
                           Text(
                               "${_selectedJamMulaiHour.toString().padLeft(2, '0')}:00 - ${_selectedJamSelesaiHour.toString().padLeft(2, '0')}:00 WIB",
                               style: const TextStyle(
-                                  fontSize: 14, fontWeight: FontWeight.bold)),
+                                  fontSize: 13, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -1197,7 +1282,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade200),
                       borderRadius: BorderRadius.circular(8),
@@ -1205,13 +1290,13 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.only(top: 6.0),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6.0),
                           child: Text("JENIS FLOOR",
                               style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey)),
+                                  color: Colors.grey.shade600)),
                         ),
                         DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
@@ -1219,17 +1304,18 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                             isExpanded: true,
                             value: _selectedJenisFloor,
                             icon: const Icon(Icons.keyboard_arrow_down,
-                                size: 18, color: Colors.grey),
+                                size: 16, color: Colors.grey),
                             items: _daftarJenisLantai
                                 .map((floor) => DropdownMenuItem(
                                     value: floor,
                                     child: Text(floor,
                                         style: const TextStyle(
-                                            fontSize: 14, fontWeight: FontWeight.bold))))
+                                            fontSize: 13, fontWeight: FontWeight.bold))))
                                 .toList(),
                             onChanged: (val) => setState(() => _selectedJenisFloor = val!),
                           ),
                         ),
+                        const SizedBox(height: 4),
                       ],
                     ),
                   ),
@@ -1241,7 +1327,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
               children: [
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade200),
                       borderRadius: BorderRadius.circular(8),
@@ -1249,25 +1335,25 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.only(top: 6.0),
-                          child: Text("KAPASITAS (Orang)",
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6.0),
+                          child: Text("KAPASITAS (ORANG)",
                               style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey)),
+                                  color: Colors.grey.shade600)),
                         ),
                         TextFormField(
                           controller: _kapasitasController,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
                             isDense: true,
-                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(vertical: 4),
                             border: InputBorder.none,
                             hintText: "Contoh: 10",
-                            hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
+                            hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
                           ),
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -1276,7 +1362,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade200),
                       borderRadius: BorderRadius.circular(8),
@@ -1284,24 +1370,24 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.only(top: 6.0),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6.0),
                           child: Text("LOKASI",
                               style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey)),
+                                  color: Colors.grey.shade600)),
                         ),
                         TextFormField(
                           controller: _lokasiController,
                           decoration: const InputDecoration(
                             isDense: true,
-                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(vertical: 4),
                             border: InputBorder.none,
                             hintText: "Contoh: Indoor / Lt. 2",
-                            hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
+                            hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
                           ),
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -1317,13 +1403,13 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
 
   Widget _buildFacilitiesCard() {
     return Card(
-      elevation: 0,
+      elevation: 0.5,
       color: Colors.white,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: Colors.grey.shade200)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1331,14 +1417,14 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text("Fasilitas Standar",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 TextButton.icon(
                   onPressed: _showAddFacilityDialog,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text("Tambah"),
+                  icon: const Icon(Icons.add, size: 14),
+                  label: const Text("Tambah", style: TextStyle(fontSize: 12)),
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.blue[700],
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                     minimumSize: const Size(0, 0),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -1354,14 +1440,14 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                 return Chip(
                   backgroundColor: Colors.blue.shade50,
                   side: BorderSide.none,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  avatar: Icon(facility['icon'] as IconData, size: 16, color: Colors.blue[700]),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  avatar: Icon(facility['icon'] as IconData, size: 14, color: Colors.blue[700]),
                   label: Text(facility['label'] ?? facility['nama'] ?? '',
                       style: TextStyle(
                           color: Colors.blue[700],
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold)),
-                  deleteIcon: Icon(Icons.close, size: 16, color: Colors.blue[700]),
+                  deleteIcon: Icon(Icons.close, size: 14, color: Colors.blue[700]),
                     onDeleted: () => _showDeleteFacilityDialog(index, facility['label'] ?? facility['nama'] ?? '', ),
                 );
               }),
