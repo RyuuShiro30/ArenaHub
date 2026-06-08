@@ -8,6 +8,7 @@ import '../widgets/riwayat_booking_card.dart';
 import '../screens/detail_riwayat.dart';
 import '../screens/review.dart';
 import '../../booking/screens/cancel_refund_page.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class RiwayatBookingScreen extends StatefulWidget {
   const RiwayatBookingScreen({super.key});
@@ -146,27 +147,24 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
   }
 
   PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A2E), size: 22),
-        onPressed: () => Navigator.of(context).maybePop(),
-      ),
-      title: const Text(
-        'Riwayat Booking',
-        style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF1A1A2E)),
-      ),
-      centerTitle: true,
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(color: const Color(0xFFEEEEEE), height: 1),
-      ),
-    );
-  }
+  return AppBar(
+    backgroundColor: Colors.white,
+    elevation: 0.5,
+    surfaceTintColor: Colors.white,
+    leading: IconButton(
+      icon: const Icon(Icons.arrow_back,
+          color: Color(0xFF0B4E89), size: 24),
+      onPressed: () => Navigator.of(context).maybePop(),
+    ),
+    title: Text(
+      'Riwayat Booking',
+      style: GoogleFonts.poppins(
+          color: const Color(0xFF0B4E89),
+          fontWeight: FontWeight.w700,
+          fontSize: 18),
+    ),
+  );
+}
 
   Widget _buildTabBar() {
     return Container(

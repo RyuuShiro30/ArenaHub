@@ -6,7 +6,9 @@ import '../booking/screens/form_booking.dart';
 import '../../../../routes/app_routes.dart';
 
 class KeranjangPage extends StatefulWidget {
-  const KeranjangPage({super.key});
+  final VoidCallback? onTambahLapangan;
+
+  const KeranjangPage({super.key, this.onTambahLapangan});
 
   @override
   State<KeranjangPage> createState() => _KeranjangPageState();
@@ -44,8 +46,8 @@ class _KeranjangPageState extends State<KeranjangPage> {
         elevation: 0.5,
         surfaceTintColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: _primaryBlue, size: 20),
+          icon: const Icon(Icons.arrow_back,
+              color: _primaryBlue, size: 24),
           onPressed: () {
           if (Navigator.canPop(context)) {
             Navigator.pop(context);
@@ -59,10 +61,10 @@ class _KeranjangPageState extends State<KeranjangPage> {
           valueListenable: CartManager.instance.itemsNotifier,
           builder: (_, items, __) => Text(
             'Keranjang (${CartManager.instance.totalSlot} slot)',
-            style: const TextStyle(
-                color: _primaryBlue,
-                fontWeight: FontWeight.w700,
-                fontSize: 18),
+            style: GoogleFonts.poppins(
+            color: _primaryBlue,
+            fontWeight: FontWeight.w700,
+            fontSize: 18),
           ),
         ),
         actions: [
@@ -387,7 +389,11 @@ class _KeranjangPageState extends State<KeranjangPage> {
                   fontSize: 13, color: Colors.grey.shade400)),
           const SizedBox(height: 28),
           ElevatedButton.icon(
-            onPressed: () => Navigator.pop(context),
+           onPressed: () {
+          if (widget.onTambahLapangan != null) {
+            widget.onTambahLapangan!();
+          }
+          },
             icon: const Icon(Icons.search_rounded, size: 18),
             label: Text('Cari Lapangan',
                 style: GoogleFonts.poppins(
