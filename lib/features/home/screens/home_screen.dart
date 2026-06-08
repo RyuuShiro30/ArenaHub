@@ -236,7 +236,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 canPop: false,
                 onPopInvokedWithResult: (_, __) =>
                     setState(() => _selectedNavIndex = 0),
-                child: const KeranjangPage(),
+                child: KeranjangPage(
+                onTambahLapangan: () => setState(() => _selectedNavIndex = 1),
+              ),
               ),
               // ── Tab 3: Riwayat ──────────────────────────────
               PopScope(

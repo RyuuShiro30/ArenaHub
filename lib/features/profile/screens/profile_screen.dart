@@ -310,38 +310,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _selectedNavIndex = index);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bgColor,
-      body: Column(
-        children: [
-          // ── Top Bar ───────────────────────────────────────────────────
-          SafeArea(
-            bottom: false,
-            child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back_rounded,
-                          color: _primaryDark),
-                      onPressed: _handleBack,
-                    ),
-                  ),
-                  Text('Profil',
-                      style: GoogleFonts.poppins(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: _textDark)),
-                ],
-              ),
-            ),
-          ),
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: _bgColor,
+    appBar: AppBar(                         
+      backgroundColor: Colors.white,
+      elevation: 0.5,
+      surfaceTintColor: Colors.white,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back,
+            color: _primaryDark, size: 24),
+        onPressed: _handleBack,
+      ),
+      title: Text(
+        'Profil',
+        style: GoogleFonts.poppins(
+            color: _primaryDark,
+            fontWeight: FontWeight.w700,
+            fontSize: 18),
+      ),
+    ),
+    body: Column(
+      children: [
 
           // ── Content ───────────────────────────────────────────────────
           Expanded(
