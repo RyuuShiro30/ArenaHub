@@ -11,7 +11,7 @@ class PaymentSuccessPage extends StatefulWidget {
 }
 
 class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
-  late Future<DocumentSnapshot> _bookingFuture;
+  late Future<Map<String, dynamic>> _bookingFuture;
   String orderId = '';
   String selectedJamMain = ''; // Variabel untuk menampung jam yang dipilih
   bool _isInit = false;
@@ -38,48 +38,85 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
   }
 
   // Fungsi diperbarui untuk menerima jamMain, mengecek duplikasi, dan menyimpannya ke Firebase
-  Future<DocumentSnapshot> _processPaymentAndFetchData(String id, String jamMainInput) async {
+  Future<Map<String, dynamic>> _processPaymentAndFetchData(String id, String jamMainInput) async {
     final docRef = FirebaseFirestore.instance.collection('bookings').doc(id);
     
     final snapshot = await docRef.get();
+    List<DocumentSnapshot> children = [];
+    
     if (snapshot.exists) {
       final bookingData = snapshot.data() as Map<String, dynamic>;
       
       // Mencegah proses ulang jika status sudah final (sukses/gagal)
       String currentStatus = bookingData['status_pembayaran'] ?? '';
-      if (currentStatus == 'pembayaran selesai' || currentStatus == 'gagal') {
-        return snapshot;
-      }
-
+      bool isFinal = currentStatus == 'pembayaran selesai' || currentStatus == 'gagal';
+      
       String namaLapangan = bookingData['nama_lapangan'] ?? '';
       String tanggalMain = bookingData['tanggal_main'] ?? '';
       // Jika jamMainInput kosong, coba ambil dari data yang sudah ada (fallback)
       String jamMain = jamMainInput.isNotEmpty ? jamMainInput : (bookingData['jam_main'] ?? '');
 
-      // LOGIKA CEK DUPLIKASI
-      final duplicateQuery = await FirebaseFirestore.instance
-          .collection('bookings')
-          .where('nama_lapangan', isEqualTo: namaLapangan)
-          .where('tanggal_main', isEqualTo: tanggalMain)
-          .where('jam_main', isEqualTo: jamMain)
-          .where('status_pembayaran', isEqualTo: 'pembayaran selesai')
-          .get();
+      bool isDuplicate = false;
+      if (!isFinal) {
+        // LOGIKA CEK DUPLIKASI
+        final duplicateQuery = await FirebaseFirestore.instance
+            .collection('bookings')
+            .where('nama_lapangan', isEqualTo: namaLapangan)
+            .where('tanggal_main', isEqualTo: tanggalMain)
+            .where('jam_main', isEqualTo: jamMain)
+            .where('status_pembayaran', isEqualTo: 'pembayaran selesai')
+            .get();
 
-      // Mengecek apakah ada dokumen lain dengan jadwal sama yang sudah lunas
-      bool isDuplicate = duplicateQuery.docs.any((doc) => doc.id != id);
-      String newStatus = isDuplicate ? "gagal" : "pembayaran selesai";
+        // Mengecek apakah ada dokumen lain dengan jadwal sama yang sudah lunas
+        isDuplicate = duplicateQuery.docs.any((doc) => doc.id != id);
+      }
       
-      // Update Firebase: Menyertakan field jam_main dan status terbaru
-      await docRef.update({
-        'status_pembayaran': newStatus,
-        'jam_main': jamMain, 
-      });
+      String newStatus = isFinal ? currentStatus : (isDuplicate ? "gagal" : "pembayaran selesai");
+      
+      if (!isFinal) {
+        // Update Firebase: Menyertakan field jam_main dan status terbaru
+        await docRef.update({
+          'status_pembayaran': newStatus,
+          'jam_main': jamMain, 
+        });
+      }
+
+      // Update child documents if any
+      final int childCount = bookingData['child_count'] ?? 0;
+      if (childCount > 0) {
+        for (int i = 0; i < childCount; i++) {
+          final childDocId = '${id}_$i';
+          if (!isFinal) {
+            await FirebaseFirestore.instance
+                .collection('bookings')
+                .doc(childDocId)
+                .update({
+              'status_pembayaran': newStatus,
+              'status': newStatus == "pembayaran selesai" ? "confirmed" : "gagal",
+            });
+          }
+          final childDoc = await FirebaseFirestore.instance
+              .collection('bookings')
+              .doc(childDocId)
+              .get();
+          if (childDoc.exists) {
+            children.add(childDoc);
+          }
+        }
+      }
 
       // Kembalikan data terbaru setelah update agar UI merefleksikan status yang benar
-      return await docRef.get();
+      final updatedSnapshot = await docRef.get();
+      return {
+        'parent': updatedSnapshot,
+        'children': children,
+      };
     }
     
-    return snapshot;
+    return {
+      'parent': snapshot,
+      'children': children,
+    };
   }
 
   @override
@@ -87,10 +124,6 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF004080)),
-          onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-        ),
         title: const Text(
           "Status Pembayaran",
           style: TextStyle(color: Color(0xFF1A237E), fontWeight: FontWeight.bold),
@@ -101,22 +134,25 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
       ),
       body: orderId.isEmpty
           ? _buildErrorState(context, "ID Pesanan tidak valid")
-          : FutureBuilder<DocumentSnapshot>(
+          : FutureBuilder<Map<String, dynamic>>(
               future: _bookingFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                if (!snapshot.hasData || !snapshot.data!.exists) {
+                if (!snapshot.hasData || !snapshot.data!['parent'].exists) {
                   return _buildErrorState(context, "Data pembayaran tidak ditemukan");
                 }
 
-                final data = snapshot.data!.data() as Map<String, dynamic>;
+                final parentDoc = snapshot.data!['parent'] as DocumentSnapshot;
+                final childrenDocs = snapshot.data!['children'] as List<DocumentSnapshot>;
+
+                final data = parentDoc.data() as Map<String, dynamic>;
 
                 final String bookingId = data['order_id'] ?? orderId;
                 final String namaLapangan = data['nama_lapangan'] ?? 'Lapangan';
-                final int totalHarga = data['total_harga'] ?? 0;
+                final int totalHarga = (data['total_harga'] as num?)?.toInt() ?? 0;
                 final String statusPembayaranDb = data['status_pembayaran'] ?? 'pending';
                 final String jamMainDisplay = data['jam_main'] ?? '-';
 
@@ -135,6 +171,7 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
                   jamMain: jamMainDisplay,
                   totalHarga: totalHarga,
                   statusPembayaran: statusPembayaranDb,
+                  children: childrenDocs,
                 );
               },
             ),
@@ -149,6 +186,7 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
     required String jamMain,
     required int totalHarga,
     required String statusPembayaran,
+    required List<DocumentSnapshot> children,
   }) {
     bool isSuccess = statusPembayaran == "pembayaran selesai";
     
@@ -226,9 +264,87 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage> {
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const Divider(height: 30),
-                      _rowInfo("Nama Lapangan", namaLapangan),
-                      _rowInfo("Jadwal", formattedDate, isMulti: true),
-                      _rowInfo("Jam Main", jamMain), 
+                      if (children.isEmpty) ...[
+                        _rowInfo("Nama Lapangan", namaLapangan),
+                        _rowInfo("Jadwal", formattedDate, isMulti: true),
+                        _rowInfo("Jam Main", jamMain),
+                      ] else ...[
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            "Detail Lapangan & Jadwal",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        ...children.map((childDoc) {
+                          final childData = childDoc.data() as Map<String, dynamic>;
+                          final String cNama = childData['nama_lapangan'] ?? 'Lapangan';
+                          final String cTanggalRaw = childData['tanggal_main'] ?? childData['tanggal'] ?? '';
+                          String cTanggalDisplay = cTanggalRaw;
+                          if (cTanggalRaw.isNotEmpty) {
+                            final dt = DateTime.tryParse(cTanggalRaw);
+                            if (dt != null) {
+                              cTanggalDisplay = DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(dt);
+                            }
+                          }
+                          final String cJam = childData['jam_main'] ?? '-';
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8F9FA),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFE9ECEF)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  cNama,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0D47A1),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text("Jadwal", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                    Flexible(
+                                      child: Text(
+                                        cTanggalDisplay,
+                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                        textAlign: TextAlign.right,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text("Jam Main", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                    Flexible(
+                                      child: Text(
+                                        cJam,
+                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                        textAlign: TextAlign.right,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ],
                       _rowInfo("Metode Pembayaran", "QRIS"),
                       const Divider(height: 30),
                       Row(

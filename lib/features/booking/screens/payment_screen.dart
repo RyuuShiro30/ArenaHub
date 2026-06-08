@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:appbookinglapangan/data/service/midtrans_service.dart';
 import 'package:appbookinglapangan/routes/app_routes.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../keranjang/cart_manager.dart';
 
 class PaymentScreen extends StatefulWidget {
   final int totalHarga;
@@ -18,6 +20,7 @@ class PaymentScreen extends StatefulWidget {
   final String imagePath;
   final String jamMain;
   final String lapanganId;
+  final List<KeranjangItem>? bookingItems;
 
   const PaymentScreen(
       {super.key,
@@ -34,6 +37,7 @@ class PaymentScreen extends StatefulWidget {
       required this.imagePath,
       required this.jamMain,
       required this.lapanganId,
+      this.bookingItems,
       });
 
   @override
@@ -217,36 +221,103 @@ class _PaymentScreenState extends State<PaymentScreen> {
         // Jika statusnya 'settlement' (berhasil) atau 'pending' (menunggu pembayaran)
         if (status == 'settlement' || status == 'pending') {
           // 2. SIMPAN DATA KE FIRESTORE
-          // Bagian ini akan membuat koleksi 'bookings' secara otomatis di Firebase
-          await FirebaseFirestore.instance
-              .collection('bookings')
-              .doc(currentOrderId)
-              .set({
-            'order_id': currentOrderId,
-            'nama_lapangan': widget.namaLapangan,
-            'lapangan_id': widget.lapanganId,
-            'customer_name': widget.customerName,
-            'email': widget.email,
-            'phone': widget.phone,
-            'total_harga': widget.totalHarga,
-            'status_pembayaran': statusPembayaran,
-            // Field kompatibilitas — dibaca oleh pilih_jadwal.dart & home_screen
-            'status': status == 'settlement' ? 'confirmed' : status,
-            'tanggal_booking': FieldValue.serverTimestamp(),
-            'tanggal_main': widget.selectedDate,
-            'tanggal': widget.selectedDate, // alias untuk tanggal_main
-            'jam_main': widget.jamMain,
-            'selected_times': widget.jamMain,
-            // Slots sebagai List<String> agar mudah diproses
-            'slots': widget.jamMain
-                .split(',')
-                .map((s) => s.trim())
-                .where((s) => s.isNotEmpty)
-                .toList(),
-            'kode_promo': widget.kodePromo ?? '',
-            'diskon': widget.diskon,
-            'biaya_layanan': widget.totalHarga - widget.subtotal + widget.diskon,
-          }, SetOptions(merge: true));
+          if (widget.bookingItems != null && widget.bookingItems!.isNotEmpty) {
+            // A. Simpan Master Document
+            await FirebaseFirestore.instance
+                .collection('bookings')
+                .doc(currentOrderId)
+                .set({
+              'order_id': currentOrderId,
+              'nama_lapangan': widget.namaLapangan,
+              'lapangan_id': widget.lapanganId,
+              'customer_name': widget.customerName,
+              'email': widget.email,
+              'phone': widget.phone,
+              'total_harga': widget.totalHarga,
+              'status_pembayaran': statusPembayaran,
+              // Field kompatibilitas — dibaca oleh pilih_jadwal.dart & home_screen
+              'status': status == 'settlement' ? 'confirmed' : status,
+              'tanggal_booking': FieldValue.serverTimestamp(),
+              'tanggal_main': widget.selectedDate,
+              'tanggal': widget.selectedDate, // alias untuk tanggal_main
+              'jam_main': widget.jamMain,
+              'selected_times': widget.jamMain,
+              // Slots sebagai List<String> agar mudah diproses
+              'slots': widget.jamMain
+                  .split(',')
+                  .map((s) => s.trim())
+                  .where((s) => s.isNotEmpty)
+                  .toList(),
+              'kode_promo': widget.kodePromo ?? '',
+              'diskon': widget.diskon,
+              'biaya_layanan': widget.totalHarga - widget.subtotal + widget.diskon,
+              'image_url': widget.imagePath,
+              'is_child': false,
+              'child_count': widget.bookingItems!.length,
+            }, SetOptions(merge: true));
+
+            // B. Simpan Child Documents
+            for (int i = 0; i < widget.bookingItems!.length; i++) {
+              final item = widget.bookingItems![i];
+              final dateStr = DateFormat('yyyy-MM-dd').format(item.selectedDate);
+              
+              await FirebaseFirestore.instance
+                  .collection('bookings')
+                  .doc('${currentOrderId}_$i')
+                  .set({
+                'order_id': currentOrderId,
+                'nama_lapangan': item.namaLapangan,
+                'lapangan_id': item.lapanganId,
+                'customer_name': widget.customerName,
+                'email': widget.email,
+                'phone': widget.phone,
+                'total_harga': item.subtotal,
+                'status_pembayaran': statusPembayaran,
+                'status': status == 'settlement' ? 'confirmed' : status,
+                'tanggal_booking': FieldValue.serverTimestamp(),
+                'tanggal_main': dateStr,
+                'tanggal': dateStr,
+                'jam_main': item.selectedTimes.join(', '),
+                'selected_times': item.selectedTimes.join(', '),
+                'slots': item.selectedTimes,
+                'kode_promo': widget.kodePromo ?? '',
+                'diskon': 0,
+                'biaya_layanan': 0,
+                'image_url': item.fotoUrl,
+                'is_child': true,
+              }, SetOptions(merge: true));
+            }
+          } else {
+            await FirebaseFirestore.instance
+                .collection('bookings')
+                .doc(currentOrderId)
+                .set({
+              'order_id': currentOrderId,
+              'nama_lapangan': widget.namaLapangan,
+              'lapangan_id': widget.lapanganId,
+              'customer_name': widget.customerName,
+              'email': widget.email,
+              'phone': widget.phone,
+              'total_harga': widget.totalHarga,
+              'status_pembayaran': statusPembayaran,
+              'status': status == 'settlement' ? 'confirmed' : status,
+              'tanggal_booking': FieldValue.serverTimestamp(),
+              'tanggal_main': widget.selectedDate,
+              'tanggal': widget.selectedDate,
+              'jam_main': widget.jamMain,
+              'selected_times': widget.jamMain,
+              'slots': widget.jamMain
+                  .split(',')
+                  .map((s) => s.trim())
+                  .where((s) => s.isNotEmpty)
+                  .toList(),
+              'kode_promo': widget.kodePromo ?? '',
+              'diskon': widget.diskon,
+              'biaya_layanan': widget.totalHarga - widget.subtotal + widget.diskon,
+              'image_url': widget.imagePath,
+              'is_child': false,
+            }, SetOptions(merge: true));
+          }
           // update pemakaian promo kalau ada
           if (widget.kodePromo != null && widget.kodePromo!.isNotEmpty) {
             await FirebaseFirestore.instance

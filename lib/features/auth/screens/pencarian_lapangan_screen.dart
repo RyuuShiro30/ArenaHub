@@ -4,6 +4,8 @@ import '../../../data/model/lapangan_model.dart';
 import '../widgets/lapangan_card.dart';
 import '../../lapangan/widgets/lapangan_filter_sheet.dart';
 import 'package:appbookinglapangan/features/booking/screens/field_detail.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../../routes/app_routes.dart';
 
 class PencarianLapanganScreen extends StatefulWidget {
   const PencarianLapanganScreen({super.key});
@@ -103,12 +105,12 @@ class _PencarianLapanganScreenState extends State<PencarianLapanganScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: _buildTopBar(),
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildTopBar(),
             _buildSearchAndFilterRow(),
             _buildCategoryChips(),
             if (_hasActiveFilter) _buildActiveFilterBanner(),
@@ -185,29 +187,32 @@ class _PencarianLapanganScreenState extends State<PencarianLapanganScreen> {
 
   // ── Top bar ───────────────────────────────────────────────────
 
-  Widget _buildTopBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                size: 20),
-            color: const Color(0xFF1565C0),
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-          const Text(
-            'Cari Lapangan',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+ PreferredSizeWidget _buildTopBar() {
+  return AppBar(
+    backgroundColor: Colors.white,
+    elevation: 0.5,
+    surfaceTintColor: Colors.white,
+    leading: IconButton(
+      icon: const Icon(Icons.arrow_back,
+          color: Color(0xFF0B4E89), size: 24),
+      onPressed: () {
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        } else {
+          Navigator.pushNamedAndRemoveUntil(
+              context, AppRoutes.home, (route) => false);
+        }
+      },
+    ),
+    title: Text(
+      'Cari Lapangan',
+      style: GoogleFonts.poppins(
+          color: const Color(0xFF0B4E89),
+          fontWeight: FontWeight.w700,
+          fontSize: 18),
+    ),
+  );
+}
 
   // ── Search bar + filter icon ──────────────────────────────────
 

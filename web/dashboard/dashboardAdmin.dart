@@ -37,8 +37,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   static const Color _green  = Color(0xFF22C55E);
   static const Color _orange = Color(0xFFF59E0B);
 
-  final bool _expanded    = true;
-  int  _selectedNav = 0;
+  final bool _expanded = true;
+  int _selectedNav = 0;
+
+  // ── Notifier untuk deteksi perubahan di halaman Profil ───────────────────
+  final ValueNotifier<bool> _profileHasChanges = ValueNotifier(false);
 
   static const double _collapsedW = 56;
   static const double _expandedW  = 220;
@@ -62,6 +65,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _fetchAdminSession();
   }
 
+  @override
+  void dispose() {
+    _profileHasChanges.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchAdminSession() async {
     try {
       final snap = await _firestore.collection('admin_profile').limit(1).get();
@@ -79,6 +88,47 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         adminPhotoNotifier.value = photo;
       }
     } catch (_) {}
+  }
+
+  // ── Dialog konfirmasi jika ada perubahan belum disimpan di Profil ─────────
+  Future<bool> _konfirmasiPindahDariProfil() async {
+    if (!_profileHasChanges.value) return true;
+
+    final result = await showDialog<bool?>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Simpan Perubahan?',
+            style: _t(size: 16, weight: FontWeight.w700)),
+        content: Text(
+            'Kamu memiliki perubahan yang belum disimpan. Buang perubahan dan pindah halaman?',
+            style: _t(size: 13, color: _muted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null), // batal
+            child: Text('Batal', style: _t(size: 14, color: _muted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true), // buang & pindah
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Buang & Pindah',
+                style: _t(size: 14, weight: FontWeight.w600,
+                    color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      _profileHasChanges.value = false;
+      return true;
+    }
+    return false;
   }
 
   void _logout() async {
@@ -195,192 +245,184 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       GoogleFonts.plusJakartaSans(fontSize: size, fontWeight: weight,
           color: color, letterSpacing: spacing);
 
-  //Export Excel
   Future<void> _exportExcel() async {
-  try {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    final now   = DateTime.now();
-    final start = DateTime(now.year, now.month, 1);
-    final end   = DateTime(now.year, now.month + 1, 1);
-
-    final snap = await _firestore
-        .collection('bookings')
-        .where('tanggal_booking', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-        .where('tanggal_booking', isLessThan: Timestamp.fromDate(end))
-        .orderBy('tanggal_booking', descending: true)
-        .get();
-
-    final excelFile = Excel.createExcel();
-    final sheet = excelFile['Laporan Booking'];
-    excelFile.delete('Sheet1');
-
-    // ── Styling ──────────────────────────────────────
-    final headerStyle = CellStyle(
-      bold: true,
-      backgroundColorHex: ExcelColor.fromHexString('#2563EB'),
-      fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-    );
-    final titleStyle = CellStyle(
-      bold: true,
-      fontSize: 14,
-      fontColorHex: ExcelColor.fromHexString('#1A2B3C'),
-    );
-    final subStyle = CellStyle(
-      fontSize: 10,
-      fontColorHex: ExcelColor.fromHexString('#6B7280'),
-    );
-    final currencyStyle = CellStyle(
-      numberFormat: NumFormat.defaultNumeric,
-    );
-    final successStyle = CellStyle(
-      fontColorHex: ExcelColor.fromHexString('#22C55E'),
-      bold: true,
-    );
-    final pendingStyle = CellStyle(
-      fontColorHex: ExcelColor.fromHexString('#F59E0B'),
-      bold: true,
-    );
-    final gagalStyle = CellStyle(
-      fontColorHex: ExcelColor.fromHexString('#EF4444'),
-      bold: true,
-    );
-
-    const bulan = [
-      '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-    ];
-
-    // ── Judul laporan ────────────────────────────────
-    sheet.merge(CellIndex.indexByString('A1'), CellIndex.indexByString('G1'));
-    sheet.cell(CellIndex.indexByString('A1')).value =
-        TextCellValue('LAPORAN BOOKING BULANAN - ${bulan[now.month].toUpperCase()} ${now.year}');
-    sheet.cell(CellIndex.indexByString('A1')).cellStyle = titleStyle;
-
-    sheet.merge(CellIndex.indexByString('A2'), CellIndex.indexByString('G2'));
-    sheet.cell(CellIndex.indexByString('A2')).value =
-        TextCellValue('Digenerate pada: ${DateFormat('d MMMM yyyy, HH:mm', 'id_ID').format(now)}');
-    sheet.cell(CellIndex.indexByString('A2')).cellStyle = subStyle;
-
-    // ── Header tabel ─────────────────────────────────
-    final headers = ['No', 'ID Booking', 'Nama Pelanggan', 'Lapangan',
-        'Tanggal Booking', 'Total Harga (Rp)', 'Status'];
-    for (int i = 0; i < headers.length; i++) {
-      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 3));
-      cell.value = TextCellValue(headers[i]);
-      cell.cellStyle = headerStyle;
-    }
-
-    // ── Isi data ──────────────────────────────────────
-    double grandTotal = 0;
-    int successCount = 0, pendingCount = 0, gagalCount = 0;
-
-    for (int i = 0; i < snap.docs.length; i++) {
-      final data   = snap.docs[i].data();
-      final docId  = snap.docs[i].id;
-      final status = (data['status_pembayaran'] ?? data['status'] ?? '').toString();
-      final total  = double.tryParse(data['total_harga']?.toString() ?? '0') ?? 0;
-      final ts     = data['tanggal_booking'] as Timestamp?;
-      final tglStr = ts != null
-          ? DateFormat('d MMM yyyy, HH:mm', 'id_ID').format(ts.toDate())
-          : '-';
-
-      if (_isSuccess(status))      { grandTotal += total; successCount++; }
-      else if (_isPending(status)) pendingCount++;
-      else if (_isGagal(status))   gagalCount++;
-
-      final row = i + 4;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value =
-          IntCellValue(i + 1);
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row)).value =
-          TextCellValue('#${docId.substring(0, min(8, docId.length)).toUpperCase()}');
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row)).value =
-          TextCellValue(data['customer_name']?.toString() ?? '-');
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row)).value =
-          TextCellValue(data['nama_lapangan']?.toString() ?? '-');
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row)).value =
-          TextCellValue(tglStr);
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row))
-        ..value = DoubleCellValue(total)
-        ..cellStyle = currencyStyle;
-
-      final statusCell = sheet.cell(
-          CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row));
-      statusCell.value = TextCellValue(_sl(status));
-      statusCell.cellStyle = _isSuccess(status) ? successStyle
-          : _isPending(status) ? pendingStyle
-          : _isGagal(status)   ? gagalStyle
-          : CellStyle();
-    }
-
-    // ── Ringkasan ─────────────────────────────────────
-    final summaryRow = snap.docs.length + 5;
-    sheet.merge(
-      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow),
-      CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: summaryRow),
-    );
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).value =
-        TextCellValue('TOTAL PENDAPATAN (SELESAI)');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).cellStyle =
-        CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'));
-
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).value =
-        DoubleCellValue(grandTotal);
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).cellStyle =
-        CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'),
-            numberFormat: NumFormat.defaultNumeric);
-
-    final s2 = summaryRow + 1;
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).value =
-        TextCellValue('Selesai: $successCount  |  Pending: $pendingCount  |  Gagal: $gagalCount');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).cellStyle =
-        CellStyle(italic: true, fontColorHex: ExcelColor.fromHexString('#6B7280'));
-
-    // ── Lebar kolom ───────────────────────────────────
-    sheet.setColumnWidth(0, 6);
-    sheet.setColumnWidth(1, 14);
-    sheet.setColumnWidth(2, 24);
-    sheet.setColumnWidth(3, 20);
-    sheet.setColumnWidth(4, 22);
-    sheet.setColumnWidth(5, 20);
-    sheet.setColumnWidth(6, 14);
-
-    // ── Download via browser (Web) ────────────────────
-    final bytes = excelFile.encode();
-    if (bytes == null) throw Exception('Gagal encode Excel');
-
-    final fileName = 'Laporan_Booking_${bulan[now.month]}_${now.year}.xlsx';
-    final blob = html.Blob(
-      [bytes],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    );
-    final url    = html.Url.createObjectUrlFromBlob(blob);
-    final anchor = html.AnchorElement(href: url)
-      ..setAttribute('download', fileName)
-      ..click();
-    html.Url.revokeObjectUrl(url);
-
-    if (mounted) Navigator.pop(context);
-
-  } catch (e) {
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal mengekspor laporan: $e'),
-          backgroundColor: const Color(0xFFEF4444),
-        ),
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
       );
+
+      final now   = DateTime.now();
+      final start = DateTime(now.year, now.month, 1);
+      final end   = DateTime(now.year, now.month + 1, 1);
+
+      final snap = await _firestore
+          .collection('bookings')
+          .where('tanggal_booking', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+          .where('tanggal_booking', isLessThan: Timestamp.fromDate(end))
+          .orderBy('tanggal_booking', descending: true)
+          .get();
+
+      final excelFile = Excel.createExcel();
+      final sheet = excelFile['Laporan Booking'];
+      excelFile.delete('Sheet1');
+
+      final headerStyle = CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.fromHexString('#2563EB'),
+        fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Center,
+        textWrapping: TextWrapping.WrapText,
+      );
+      final titleStyle = CellStyle(
+        bold: true,
+        fontSize: 14,
+        fontColorHex: ExcelColor.fromHexString('#1A2B3C'),
+      );
+      final subStyle = CellStyle(
+        fontSize: 10,
+        fontColorHex: ExcelColor.fromHexString('#6B7280'),
+      );
+      final currencyStyle = CellStyle(
+        numberFormat: NumFormat.defaultNumeric,
+      );
+      final successStyle = CellStyle(
+        fontColorHex: ExcelColor.fromHexString('#22C55E'),
+        bold: true,
+      );
+      final pendingStyle = CellStyle(
+        fontColorHex: ExcelColor.fromHexString('#F59E0B'),
+        bold: true,
+      );
+      final gagalStyle = CellStyle(
+        fontColorHex: ExcelColor.fromHexString('#EF4444'),
+        bold: true,
+      );
+
+      const bulan = [
+        '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+
+      sheet.merge(CellIndex.indexByString('A1'), CellIndex.indexByString('G1'));
+      sheet.cell(CellIndex.indexByString('A1')).value =
+          TextCellValue('LAPORAN BOOKING BULANAN - ${bulan[now.month].toUpperCase()} ${now.year}');
+      sheet.cell(CellIndex.indexByString('A1')).cellStyle = titleStyle;
+
+      sheet.merge(CellIndex.indexByString('A2'), CellIndex.indexByString('G2'));
+      sheet.cell(CellIndex.indexByString('A2')).value =
+          TextCellValue('Digenerate pada: ${DateFormat('d MMMM yyyy, HH:mm', 'id_ID').format(now)}');
+      sheet.cell(CellIndex.indexByString('A2')).cellStyle = subStyle;
+
+      final headers = ['No', 'ID Booking', 'Nama Pelanggan', 'Lapangan',
+          'Tanggal Booking', 'Total Harga (Rp)', 'Status'];
+      for (int i = 0; i < headers.length; i++) {
+        final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 3));
+        cell.value = TextCellValue(headers[i]);
+        cell.cellStyle = headerStyle;
+      }
+
+      double grandTotal = 0;
+      int successCount = 0, pendingCount = 0, gagalCount = 0;
+
+      for (int i = 0; i < snap.docs.length; i++) {
+        final data   = snap.docs[i].data();
+        final docId  = snap.docs[i].id;
+        final status = (data['status_pembayaran'] ?? data['status'] ?? '').toString();
+        final total  = double.tryParse(data['total_harga']?.toString() ?? '0') ?? 0;
+        final ts     = data['tanggal_booking'] as Timestamp?;
+        final tglStr = ts != null
+            ? DateFormat('d MMM yyyy, HH:mm', 'id_ID').format(ts.toDate())
+            : '-';
+
+        if (_isSuccess(status))      { grandTotal += total; successCount++; }
+        else if (_isPending(status)) pendingCount++;
+        else if (_isGagal(status))   gagalCount++;
+
+        final row = i + 4;
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value =
+            IntCellValue(i + 1);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row)).value =
+            TextCellValue('#${docId.substring(0, min(8, docId.length)).toUpperCase()}');
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row)).value =
+            TextCellValue(data['customer_name']?.toString() ?? '-');
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row)).value =
+            TextCellValue(data['nama_lapangan']?.toString() ?? '-');
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row)).value =
+            TextCellValue(tglStr);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row))
+          ..value = DoubleCellValue(total)
+          ..cellStyle = currencyStyle;
+
+        final statusCell = sheet.cell(
+            CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row));
+        statusCell.value = TextCellValue(_sl(status));
+        statusCell.cellStyle = _isSuccess(status) ? successStyle
+            : _isPending(status) ? pendingStyle
+            : _isGagal(status)   ? gagalStyle
+            : CellStyle();
+      }
+
+      final summaryRow = snap.docs.length + 5;
+      sheet.merge(
+        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow),
+        CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: summaryRow),
+      );
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).value =
+          TextCellValue('TOTAL PENDAPATAN (SELESAI)');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).cellStyle =
+          CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'));
+
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).value =
+          DoubleCellValue(grandTotal);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).cellStyle =
+          CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'),
+              numberFormat: NumFormat.defaultNumeric);
+
+      final s2 = summaryRow + 1;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).value =
+          TextCellValue('Selesai: $successCount  |  Pending: $pendingCount  |  Gagal: $gagalCount');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).cellStyle =
+          CellStyle(italic: true, fontColorHex: ExcelColor.fromHexString('#6B7280'));
+
+      sheet.setColumnWidth(0, 6);
+      sheet.setColumnWidth(1, 14);
+      sheet.setColumnWidth(2, 24);
+      sheet.setColumnWidth(3, 20);
+      sheet.setColumnWidth(4, 22);
+      sheet.setColumnWidth(5, 20);
+      sheet.setColumnWidth(6, 14);
+
+      final bytes = excelFile.encode();
+      if (bytes == null) throw Exception('Gagal encode Excel');
+
+      final fileName = 'Laporan_Booking_${bulan[now.month]}_${now.year}.xlsx';
+      final blob = html.Blob(
+        [bytes],
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      final url    = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', fileName)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+
+      if (mounted) Navigator.pop(context);
+
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal mengekspor laporan: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -398,14 +440,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               : _selectedNav == 4
               ? const KelolaLapanganScreen()
               : _selectedNav == 5
-              ? const ProfileAdminScreen()
+              ? ProfileAdminScreen(
+                  // Kirim callback agar profil bisa update notifier ini
+                  onChangesUpdated: (hasChanges) {
+                    _profileHasChanges.value = hasChanges;
+                  },
+                )
               : _buildDashboardStreams(),
         ),
       ]),
     );
   }
 
-  // ── Dashboard dengan 3 StreamBuilder ─────────────────────────────────────
   Widget _buildDashboardStreams() {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore.collection('bookings').snapshots(),
@@ -424,8 +470,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 final todayStart = DateTime(now.year, now.month, now.day);
                 final todayEnd   = todayStart.add(const Duration(days: 1));
 
-                // Toleran: render meski belum semua stream siap
-                final isLoading = (bookingSnap.connectionState == ConnectionState.waiting && !bookingSnap.hasData) ||
+                final isLoading =
+                    (bookingSnap.connectionState == ConnectionState.waiting && !bookingSnap.hasData) ||
                     (lapanganSnap.connectionState == ConnectionState.waiting && !lapanganSnap.hasData) ||
                     (userSnap.connectionState == ConnectionState.waiting && !userSnap.hasData);
 
@@ -461,7 +507,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 }
 
                 final last24h = DateTime.now().subtract(const Duration(hours: 24));
-
                 final sorted = List<Map<String, dynamic>>.from(allBookings)
                   ..sort((a, b) {
                     final ta = a['tanggal_booking'];
@@ -470,11 +515,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     return (tb as Timestamp).compareTo(ta as Timestamp);
                   });
 
-                                final bookingList = sorted.where((b) {
-                                  final ts = b['tanggal_booking'];
-                                  if (ts == null) return false;
-                                  return (ts as Timestamp).toDate().isAfter(last24h);
-                                }).take(10).toList();
+                final bookingList = sorted.where((b) {
+                  final ts = b['tanggal_booking'];
+                  if (ts == null) return false;
+                  return (ts as Timestamp).toDate().isAfter(last24h);
+                }).take(10).toList();
 
                 final lapanganList = lapanganSnap.hasData
                     ? (lapanganSnap.data!.docs
@@ -507,20 +552,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ── 3 Cards sama lebar & sama tinggi ──────────────
                           IntrinsicHeight(
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 Expanded(child: _buildPerformaCard(
-                                  pendapatanIni:  pendapatanIni,
-                                  isLoading:      isLoading,
+                                  pendapatanIni: pendapatanIni,
+                                  isLoading: isLoading,
                                 )),
                                 const SizedBox(width: 16),
                                 Expanded(child: _buildPelangganCard(total: pelangganBaru)),
                                 const SizedBox(width: 16),
                                 Expanded(child: _buildBookingAktifCard(
-                                  total:     bookingHariIni,
+                                  total: bookingHariIni,
                                   isLoading: isLoading,
                                 )),
                               ],
@@ -529,7 +573,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           const SizedBox(height: 24),
                           _buildTableBooking(
                             bookingList: bookingList,
-                            isLoading:   isLoading,
+                            isLoading: isLoading,
                           ),
                         ],
                       ),
@@ -598,7 +642,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               final active = _selectedNav == i;
               final item   = _navItems[i];
               return GestureDetector(
-                onTap: () => setState(() => _selectedNav = i),
+                // ── onTap dengan pengecekan perubahan profil ──────────────
+                onTap: () async {
+                  if (_selectedNav == 5 && i != 5) {
+                    // Sedang di halaman Profil dan mau pindah ke halaman lain
+                    final bolehPindah = await _konfirmasiPindahDariProfil();
+                    if (!bolehPindah || !mounted) return;
+                  }
+                  setState(() => _selectedNav = i);
+                },
                 child: Container(
                   margin: EdgeInsets.symmetric(
                       horizontal: _expanded ? 8 : 4, vertical: 2),
@@ -746,7 +798,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ── Top Bar ───────────────────────────────────────────────────────────────
   Widget _buildTopBar() {
     final titles = ['Dashboard', 'Kelola Booking',
         'Kelola Promo', 'Kelola Jadwal', 'Kelola Lapangan', 'Profil'];
@@ -761,52 +812,50 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ── Performa Card  ──────────
   Widget _buildPerformaCard({
-  required double pendapatanIni,
-  required bool isLoading,
-}) {
-  return Container(
-    padding: const EdgeInsets.all(24),
-    decoration: BoxDecoration(
-      color: _white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('PERFORMA BULAN INI',
-            style: _t(size: 11, weight: FontWeight.w700, color: _blue, spacing: 0.6)),
-        const SizedBox(height: 10),
-        isLoading
-            ? _shimmer(w: 160, h: 28)
-            : Text(_rp(pendapatanIni),
-                style: _t(size: 26, weight: FontWeight.w800)),
-        const Spacer(), // ← dorong tombol ke bawah
-        const SizedBox(height: 20),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: isLoading ? null : _exportExcel,
-            icon: const Icon(Icons.download_rounded, size: 16, color: Colors.white),
-            label: Text('Unduh Laporan',
-                style: _t(size: 13, weight: FontWeight.w600, color: Colors.white)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _blue,
-              disabledBackgroundColor: _blue.withOpacity(0.5),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
+    required double pendapatanIni,
+    required bool isLoading,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: _white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('PERFORMA BULAN INI',
+              style: _t(size: 11, weight: FontWeight.w700, color: _blue, spacing: 0.6)),
+          const SizedBox(height: 10),
+          isLoading
+              ? _shimmer(w: 160, h: 28)
+              : Text(_rp(pendapatanIni),
+                  style: _t(size: 26, weight: FontWeight.w800)),
+          const Spacer(),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isLoading ? null : _exportExcel,
+              icon: const Icon(Icons.download_rounded, size: 16, color: Colors.white),
+              label: Text('Unduh Laporan',
+                  style: _t(size: 13, weight: FontWeight.w600, color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _blue,
+                disabledBackgroundColor: _blue.withOpacity(0.5),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
-  // ── Booking Aktif Card ────────────────────────────────────────────────────
   Widget _buildBookingAktifCard({required int total, required bool isLoading}) {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -841,7 +890,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ── Pelanggan Baru Card ───────────────────────────────────────────────────
   Widget _buildPelangganCard({required int total}) {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -886,7 +934,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ── Tabel Booking Terbaru ─────────────────────────────────────────────────
   Widget _buildTableBooking({
     required List<Map<String, dynamic>> bookingList,
     required bool isLoading,
@@ -946,14 +993,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   );
 
   Widget _buildRow(Map<String, dynamic> b) {
-    final name   = b['customer_name']     ?? '-';
-    final lap    = b['nama_lapangan']     ?? '-';
-    final dur    = b['durasi']            ?? '';
-    final waktu  = _waktu(b['tanggal_booking']);
-    final total  = double.tryParse(b['total_harga'].toString()) ?? 0;
-    final status = b['status_pembayaran'] ?? b['status'] ?? '';
-    final dc     = _sc(status);
-    final docId  = b['id'].toString();
+    final name    = b['customer_name']     ?? '-';
+    final lap     = b['nama_lapangan']     ?? '-';
+    final dur     = b['durasi']            ?? '';
+    final waktu   = _waktu(b['tanggal_booking']);
+    final total   = double.tryParse(b['total_harga'].toString()) ?? 0;
+    final status  = b['status_pembayaran'] ?? b['status'] ?? '';
+    final dc      = _sc(status);
+    final docId   = b['id'].toString();
     final shortId = docId.length >= 4 ? docId.substring(0, 4).toUpperCase() : docId;
 
     return Column(children: [

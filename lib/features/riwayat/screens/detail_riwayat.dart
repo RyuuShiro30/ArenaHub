@@ -20,6 +20,7 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
   static const Color _warningColor = Color(0xFFFF9800);
 
   Map<String, dynamic>? _booking;
+  List<Map<String, dynamic>> _childBookings = [];
   bool _isLoading = true;
   String? _error;
 
@@ -56,8 +57,40 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
           }
         }
 
+        // Fetch child bookings if any
+        final int childCount = bookingData['child_count'] ?? 0;
+        List<Map<String, dynamic>> children = [];
+        if (childCount > 0) {
+          for (int i = 0; i < childCount; i++) {
+            final childDocId = '${widget.bookingId}_$i';
+            final childDoc = await FirebaseFirestore.instance
+                .collection('bookings')
+                .doc(childDocId)
+                .get();
+            if (childDoc.exists) {
+              final childData = childDoc.data()!;
+              final childLapanganId = childData['lapangan_id'] ?? '';
+              if (childLapanganId.isNotEmpty) {
+                final childLapanganDoc = await FirebaseFirestore.instance
+                    .collection('lapangan')
+                    .doc(childLapanganId)
+                    .get();
+                if (childLapanganDoc.exists) {
+                  final fotoList = childLapanganDoc.data()?['foto'];
+                  childData['foto'] = (fotoList is List && fotoList.isNotEmpty)
+                      ? fotoList[0].toString()
+                      : '';
+                  childData['harga_per_jam'] = childLapanganDoc['harga'] ?? 0;
+                }
+              }
+              children.add(childData);
+            }
+          }
+        }
+
         setState(() {
           _booking = bookingData;
+          _childBookings = children;
           _isLoading = false;
         });
       }
@@ -195,8 +228,22 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
       body: CustomScrollView(
         slivers: [
           _buildAppBar(status),
-          SliverToBoxAdapter(child: _buildKartuLapangan(b)),
-          SliverToBoxAdapter(child: _buildDetailJadwal(b)),
+          if (_childBookings.isEmpty) ...[
+            SliverToBoxAdapter(child: _buildKartuLapangan(b)),
+            SliverToBoxAdapter(child: _buildDetailJadwal(b)),
+          ] else ...[
+            ..._childBookings.map((cb) {
+              return SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    _buildKartuLapangan(cb),
+                    _buildDetailJadwal(cb),
+                    const SizedBox(height: 10),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
           SliverToBoxAdapter(child: _buildRincianPembayaran(b)),
           if (status == 'selesai' && b['sudah_review'] != true)
             SliverToBoxAdapter(child: _buildTombolReview(b)),
@@ -260,7 +307,7 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
   // ─── Kartu Lapangan ───────────────────────────────────────────────────────
 
   Widget _buildKartuLapangan(Map<String, dynamic> b) {
-    final fotoField = _booking?['foto'];
+    final fotoField = b['foto'];
     final imagePath = (fotoField is List && fotoField.isNotEmpty) ? fotoField.first.toString() : (fotoField is String ? fotoField : '');
     final namaLapangan = b['nama_lapangan'] ?? '-';
     final lokasi = b['lokasi'] ?? 'Arena Hub';
@@ -443,9 +490,20 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
     final biayaLayanan = (b['biaya_layanan'] as num?)?.toInt() ?? 5000;
     final diskon = (b['diskon'] as num?)?.toInt() ?? 0;
     final rawTimes = b['selected_times'];
-    final durasi = _hitungDurasi(rawTimes);
+    
+    int totalDurasi = 0;
+    int sewaLapangan = 0;
+    if (_childBookings.isNotEmpty) {
+      for (var cb in _childBookings) {
+        totalDurasi += _hitungDurasi(cb['selected_times'] as String? ?? cb['jam_main'] as String?);
+        sewaLapangan += (cb['total_harga'] as num?)?.toInt() ?? 0;
+      }
+    } else {
+      totalDurasi = _hitungDurasi(rawTimes);
+      sewaLapangan = hargaPerJam * totalDurasi;
+    }
+    
     final kodePromo = b['kode_promo'] as String?;
-    final sewaLapangan = hargaPerJam * durasi; // 
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -484,7 +542,7 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
             child: Divider(height: 1, color: Color(0xFFF0F0F0)),
           ),
           _BarisPembayaran(
-            label: 'Sewa Lapangan ($durasi Jam)',
+            label: 'Sewa Lapangan ($totalDurasi Jam)',
             nilai: _formatRupiah(sewaLapangan),
           ),
           const SizedBox(height: 8),

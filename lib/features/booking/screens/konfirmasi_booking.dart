@@ -2,16 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../data/model/booking_model.dart';
+import '../../keranjang/cart_manager.dart';
 import '../screens/payment_screen.dart';
 
 /// Data tambahan dari form booking yang diteruskan ke halaman ini
 class KonfirmasiData {
-  final String lapanganId;
-  final String namaLapangan;
-  final String imagePath;
-  final DateTime tanggal;
-  final List<String> selectedTimes;
-  final int hargaPerJam;
+  final List<KeranjangItem> bookingItems;
   final int biayaLayanan;
   final String namaPemesan;
   final String nomorTelepon;
@@ -19,12 +15,7 @@ class KonfirmasiData {
   final PromoData? promo;
 
   const KonfirmasiData({
-    required this.lapanganId,
-    required this.namaLapangan,
-    required this.imagePath,
-    required this.tanggal,
-    required this.selectedTimes,
-    required this.hargaPerJam,
+    required this.bookingItems,
     required this.biayaLayanan,
     required this.namaPemesan,
     required this.nomorTelepon,
@@ -32,7 +23,15 @@ class KonfirmasiData {
     this.promo,
   });
 
-  int get durasiJam => selectedTimes.length;
+  // Getter overrides untuk backward compatibility
+  String get lapanganId => bookingItems.first.lapanganId;
+  String get namaLapangan => bookingItems.map((item) => item.namaLapangan).join(', ');
+  String get imagePath => bookingItems.first.fotoUrl;
+  DateTime get tanggal => bookingItems.first.selectedDate;
+  List<String> get selectedTimes => bookingItems.first.selectedTimes;
+  int get hargaPerJam => bookingItems.first.pricePerHour;
+
+  int get durasiJam => bookingItems.fold(0, (sum, item) => sum + item.selectedTimes.length);
 
   String get tanggalDisplay {
     const bulan = [
@@ -80,7 +79,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
   bool _setujuSyarat = false;
 
   // kalkulasi harga
-  int get _hargaLapangan => widget.data.hargaPerJam * widget.data.durasiJam;
+  int get _hargaLapangan => widget.data.bookingItems.fold(0, (sum, item) => sum + item.subtotal);
   int get _diskon => widget.data.promo?.diskon ?? 0;
   int get _total => _hargaLapangan + widget.data.biayaLayanan - _diskon;
 
@@ -90,6 +89,14 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
       symbol: 'IDR ',
       decimalDigits: 0,
     ).format(nominal);
+  }
+
+  String _getNamaBulan(int month) {
+    const bulan = [
+      '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    return bulan[month];
   }
 
   // pop up syarat dan ketentuan
@@ -258,75 +265,88 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
             ),
           ),
 
-          // Foto lapangan
-          ClipRRect(
-            child: widget.data.imagePath.startsWith('http')
-                ? Image.network(widget.data.imagePath,
-                    height: 160,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const _PlaceholderGambar())
-                : Image.asset(widget.data.imagePath,
-                    height: 160,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const _PlaceholderGambar()),
-          ),
+          // Daftar lapangan yang dibooking
+          ...widget.data.bookingItems.map((item) {
+            final tanggalDisplay = '${item.selectedDate.day} ${_getNamaBulan(item.selectedDate.month)} ${item.selectedDate.year}';
+            final jamMulai = item.selectedTimes.first.split(' - ').first;
+            final jamSelesai = item.selectedTimes.last.split(' - ').last;
+            final waktuDisplay = '$jamMulai s/d $jamSelesai (${item.selectedTimes.length} Jam)';
 
-          // Info lapangan
+            return Container(
+              margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: item.fotoUrl.isNotEmpty
+                        ? Image.network(
+                            item.fotoUrl,
+                            height: 60,
+                            width: 60,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const _PlaceholderGambarMini(),
+                          )
+                        : const _PlaceholderGambarMini(),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.namaLapangan,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A1A2E),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.calendar_today_rounded, size: 11, color: _primaryColor),
+                            const SizedBox(width: 4),
+                            Text(tanggalDisplay, style: const TextStyle(fontSize: 11.5, color: Color(0xFF555555))),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            const Icon(Icons.access_time_rounded, size: 11, color: _primaryColor),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(waktuDisplay, style: const TextStyle(fontSize: 11.5, color: Color(0xFF555555))),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.data.namaLapangan,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A1A2E),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
                 const Divider(height: 1, color: Color(0xFFF0F0F0)),
                 const SizedBox(height: 14),
 
-                // Grid info: tanggal & pemesan
+                // Grid info: pemesan
                 Row(
                   children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('TANGGAL & WAKTU',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFF888888),
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.3)),
-                          const SizedBox(height: 4),
-                          Text(widget.data.tanggalDisplay,
-                              style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF1A1A2E))),
-                          Text(widget.data.waktuDisplay,
-                              style: const TextStyle(
-                                  fontSize: 13, color: Color(0xFF666666))),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           const Text('PEMESAN',
                               style: TextStyle(
@@ -431,7 +451,7 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
             child: Column(
               children: [
                 _BarisPricing(
-                  label: 'Harga Lapangan (${widget.data.durasiJam} Jam)',
+                  label: 'Sewa Lapangan (${widget.data.durasiJam} Jam)',
                   nilai: _formatRupiah(_hargaLapangan),
                 ),
                 const SizedBox(height: 8),
@@ -580,13 +600,10 @@ class _KonfirmasiBookingPageState extends State<KonfirmasiBookingPage> {
                           .first,
                       kodePromo: widget.data.promo?.kode,
                       durasiJam: widget.data.durasiJam,
-
-                      // ===== TAMBAHAN BARU =====
                       jamMain: widget.data.selectedTimes.join(', '),
-                      // =========================
-
                       subtotal: _hargaLapangan,
                       diskon: _diskon,
+                      bookingItems: widget.data.bookingItems,
                     ),
                   ),
                 );
@@ -650,17 +667,18 @@ class _BarisPricing extends StatelessWidget {
   }
 }
 
-class _PlaceholderGambar extends StatelessWidget {
-  const _PlaceholderGambar();
+class _PlaceholderGambarMini extends StatelessWidget {
+  const _PlaceholderGambarMini();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 160,
+      height: 60,
+      width: 60,
       color: const Color(0xFFE3EAF5),
       child: const Center(
         child: Icon(Icons.sports_soccer_rounded,
-            size: 48, color: Color(0xFF1B4E82)),
+            size: 24, color: Color(0xFF1B4E82)),
       ),
     );
   }
