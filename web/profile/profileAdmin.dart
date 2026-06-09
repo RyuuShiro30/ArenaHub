@@ -35,24 +35,28 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   static const Color _green  = Color(0xFF22C55E);
 
   bool _expanded    = true;
-  int  _selectedNav = 4;
+  int  _selectedNav = 6;
 
   static const double _collapsedW = 56;
   static const double _expandedW  = 220;
 
   static const Map<int, String> _navRoutes = {
-    0: '/admin-dashboard',
-    1: '/admin-booking',
-    2: '/admin-lapangan',
-    3: '/admin-jadwal',
-    4: '/profile',
+    0: '/dashboard',
+    1: '/booking',
+    2: '/refund',
+    3: '/promo',
+    4: '/jadwal',
+    5: '/field',
+    6: '/profile',
   };
 
   final List<Map<String, dynamic>> _navItems = [
     {'icon': Icons.dashboard_rounded,            'label': 'Dashboard'},
     {'icon': Icons.confirmation_number_outlined, 'label': 'Kelola Booking'},
-    {'icon': Icons.sports_soccer_rounded,        'label': 'Kelola Lapangan'},
+    {'icon': Icons.assignment_return_outlined,   'label': 'Kelola Refund'},
+    {'icon': Icons.percent_rounded,              'label': 'Kelola Promo'},
     {'icon': Icons.event_note_outlined,          'label': 'Kelola Jadwal'},
+    {'icon': Icons.sports_soccer_rounded,        'label': 'Kelola Lapangan'},
     {'icon': Icons.person_outline_rounded,       'label': 'Profil'},
   ];
 
@@ -447,7 +451,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
               return GestureDetector(
                 onTap: () {
                   setState(() => _selectedNav = i);
-                  if (i != 4) {
+                  if (i != 6) {
                     final route = _navRoutes[i];
                     if (route != null) {
                       Navigator.pushReplacementNamed(context, route);

@@ -146,6 +146,7 @@ class _CancelRefundPageState extends State<CancelRefundPage> {
         'order_id': _booking?['order_id'] ?? '',
         'user_id': user?.uid ?? '',
         'user_email': user?.email ?? '',
+        'user_phone': _booking?['phone'] ?? user?.phoneNumber ?? '',
         'nama_lapangan': _booking?['nama_lapangan'] ?? '',
         'tanggal_main': _booking?['tanggal_main'] ?? '',
         'total_harga': _booking?['total_harga'] ?? 0,

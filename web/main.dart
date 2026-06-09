@@ -11,6 +11,7 @@ import 'profile/profileAdmin.dart';
 import 'field/add_field.dart';
 import 'field/kelola_lapangan.dart';
 import 'booking/kelola_booking.dart';
+import 'booking/kelola_refund.dart';
 import 'promo/kelola_promo.dart';
 
 void main() async {
@@ -55,6 +56,7 @@ class MyApp extends StatelessWidget {
         '/field': (context) => const KelolaLapanganScreen(),
         '/add_field': (context) => const AddFieldScreen(),
         '/booking': (context) => const KelolaBookingScreen(),
+        '/refund': (context) => const KelolaRefundScreen(),
         '/promo': (context) => const KelolaPromoScreen(),
       },
     );

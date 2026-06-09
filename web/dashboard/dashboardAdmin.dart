@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../auth/login.dart';
 import '../booking/kelola_booking.dart'; 
+import '../booking/kelola_refund.dart';
 import '../kelola_jadwal/kelolaJadwal.dart';
 import '../promo/kelola_promo.dart';
 import '../profile/profileAdmin.dart';
@@ -49,6 +50,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final List<Map<String, dynamic>> _navItems = [
     {'icon': Icons.dashboard_rounded,            'label': 'Dashboard'},
     {'icon': Icons.confirmation_number_outlined, 'label': 'Kelola Booking'},
+    {'icon': Icons.assignment_return_outlined,   'label': 'Kelola Refund'},
     {'icon': Icons.percent_rounded,              'label': 'Kelola Promo'},
     {'icon': Icons.event_note_outlined,          'label': 'Kelola Jadwal'},
     {'icon': Icons.sports_soccer_rounded,        'label': 'Kelola Lapangan'},
@@ -434,12 +436,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: _selectedNav == 1
               ? const KelolaBookingScreen()
               : _selectedNav == 2
-              ? const KelolaPromoScreen()
+              ? const KelolaRefundScreen()
               : _selectedNav == 3
-              ? const KelolaJadwalScreen()
+              ? const KelolaPromoScreen()
               : _selectedNav == 4
-              ? const KelolaLapanganScreen()
+              ? const KelolaJadwalScreen()
               : _selectedNav == 5
+              ? const KelolaLapanganScreen()
+              : _selectedNav == 6
               ? ProfileAdminScreen(
                   // Kirim callback agar profil bisa update notifier ini
                   onChangesUpdated: (hasChanges) {
@@ -647,7 +651,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               return GestureDetector(
                 // ── onTap dengan pengecekan perubahan profil ──────────────
                 onTap: () async {
-                  if (_selectedNav == 5 && i != 5) {
+                  if (_selectedNav == 6 && i != 6) {
                     // Sedang di halaman Profil dan mau pindah ke halaman lain
                     final bolehPindah = await _konfirmasiPindahDariProfil();
                     if (!bolehPindah || !mounted) return;
