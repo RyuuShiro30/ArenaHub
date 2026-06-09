@@ -193,7 +193,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
     }
     if (cleanText.contains('tribun') || cleanText.contains('duduk'))
     if (cleanText.contains('net') || cleanText.contains('raket'))
-    if (cleanText.contains('bola') || cleanText.contains('ball'))
+    if (cleanText.contains('bola') || cleanText.contains('shuttlecock'))
     if (cleanText.contains('lampu') || cleanText.contains('lighting')) 
     if (cleanText.contains('ring') || cleanText.contains('audio')){
       return Icons.chair;
