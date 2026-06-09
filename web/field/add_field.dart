@@ -158,29 +158,42 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
 
   IconData _getIconFromKeyword(String text) {
     String cleanText = text.toLowerCase();
-    if (cleanText.contains('wifi') || cleanText.contains('internet'))
+    if (cleanText.contains('wifi') || cleanText.contains('internet')) {
       return Icons.wifi;
+    }
     if (cleanText.contains('minum') ||
         cleanText.contains('air') ||
-        cleanText.contains('water')) return Icons.water_drop_outlined;
-    if (cleanText.contains('ganti') || cleanText.contains('baju'))
+        cleanText.contains('water')) {
+      return Icons.water_drop_outlined;
+    }
+    if (cleanText.contains('ganti') || cleanText.contains('baju')) {
       return Icons.door_sliding_outlined;
-    if (cleanText.contains('parkir') || cleanText.contains('mobil'))
+    }
+    if (cleanText.contains('parkir') || cleanText.contains('mobil')) {
       return Icons.local_parking;
+    }
     if (cleanText.contains('kantin') ||
         cleanText.contains('makan') ||
-        cleanText.contains('kafe')) return Icons.restaurant;
+        cleanText.contains('kafe')) {
+      return Icons.restaurant;
+    }
     if (cleanText.contains('musholla') ||
         cleanText.contains('sholat') ||
-        cleanText.contains('mesjid')) return Icons.mosque;
+        cleanText.contains('mesjid')) {
+      return Icons.mosque;
+    }
     if (cleanText.contains('toilet') ||
         cleanText.contains('wc') ||
-        cleanText.contains('kamar mandi')) return Icons.wc;
+        cleanText.contains('kamar mandi')) {
+      return Icons.wc;
+    }
     if (cleanText.contains('shower')) return Icons.shower;
-    if (cleanText.contains('ac') || cleanText.contains('kipas'))
+    if (cleanText.contains('ac') || cleanText.contains('kipas')) {
       return Icons.ac_unit;
-    if (cleanText.contains('tribun') || cleanText.contains('duduk'))
+    }
+    if (cleanText.contains('tribun') || cleanText.contains('duduk')) {
       return Icons.chair;
+    }
     return Icons.star_border_rounded;
   }
 
@@ -647,7 +660,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     Text("TIPE LAPANGAN", style: _labelStyle()),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      value: _selectedType,
+                      initialValue: _selectedType,
                       items: _tipeLapangan
                           .map(
                               (e) => DropdownMenuItem(value: e, child: Text(e)))
@@ -733,7 +746,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     Text("JENIS LANTAI", style: _labelStyle()),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      value: _selectedJenisLantai,
+                      initialValue: _selectedJenisLantai,
                       items: _daftarJenisLantai
                           .map(
                               (e) => DropdownMenuItem(value: e, child: Text(e)))

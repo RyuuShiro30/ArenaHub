@@ -74,8 +74,9 @@ class FieldItem {
           ? (data['foto'] as List)
               .map((e) {
                 if (e is String) return e;
-                if (e is Map<String, dynamic>)
+                if (e is Map<String, dynamic>) {
                   return e['url']?.toString() ?? '';
+                }
                 return '';
               })
               .where((e) => e.isNotEmpty)
