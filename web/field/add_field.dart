@@ -12,7 +12,9 @@ import 'package:http_parser/http_parser.dart';
 import 'package:mime/mime.dart';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../sidebar.dart'; // IMPORT SIDEBAR BARU
+import '../sidebar.dart';
+import 'dart:html' as html; // Tambahan untuk fungsi Drag & Drop Web
+import 'dart:async'; // Tambahan untuk StreamSubscription
 
 class AddFieldScreen extends StatefulWidget {
   final FieldItem? fieldToEdit;
@@ -36,8 +38,10 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
   String _selectedJenisLantai = 'Lantai Kayu';
   final TextEditingController _kapasitasController = TextEditingController();
   final TextEditingController _lokasiController = TextEditingController();
+  
   bool _isUploading = false;
   bool _isSaving = false;
+  bool _isDragging = false; // State untuk deteksi drag and drop
 
   final List<String> _uploadedImages = [];
 
@@ -51,9 +55,9 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
   final List<String> _tipeLapangan = [
     'Futsal Rumput',
     'Futsal Sintetis',
-    'Badminton',
+    'Bulutangkis',
     'Basket',
-    'Tennis',
+    'Tenis',
     'Padel'
   ];
   
@@ -72,11 +76,17 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
   final String uploadPreset = "add_field";
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  StreamSubscription? _dragOverSub;
+  StreamSubscription? _dragLeaveSub;
+  StreamSubscription? _dropSub;
+
   bool get _isEditMode => widget.fieldToEdit != null;
 
   @override
   void initState() {
     super.initState();
+    _setupDragAndDrop(); // Inisialisasi listener Drag & Drop
+    
     if (_isEditMode) {
       final f = widget.fieldToEdit!;
       _nameController.text = f.name;
@@ -112,10 +122,37 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
     _descController.dispose();
     _kapasitasController.dispose();
     _lokasiController.dispose();
+    
+    // Bersihkan listener saat halaman ditutup
+    _dragOverSub?.cancel();
+    _dragLeaveSub?.cancel();
+    _dropSub?.cancel();
+    
     super.dispose();
   }
 
-  // PENGECEKAN PERUBAHAN DATA UNTUK MODE EDIT
+  // Mendaftarkan event listener untuk Native Web Drag & Drop
+  void _setupDragAndDrop() {
+    _dragOverSub = html.window.onDragOver.listen((event) {
+      event.preventDefault();
+      if (!_isDragging) setState(() => _isDragging = true);
+    });
+
+    _dragLeaveSub = html.window.onDragLeave.listen((event) {
+      event.preventDefault();
+      if (_isDragging) setState(() => _isDragging = false);
+    });
+
+    _dropSub = html.window.onDrop.listen((event) async {
+      event.preventDefault();
+      setState(() => _isDragging = false);
+      if (event.dataTransfer.files != null && event.dataTransfer.files!.isNotEmpty) {
+        final file = event.dataTransfer.files!.first;
+        await _uploadHtmlFile(file);
+      }
+    });
+  }
+
   bool _checkIfChanged() {
     if (!mounted || widget.fieldToEdit == null) return false;
     final f = widget.fieldToEdit!;
@@ -145,7 +182,6 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
     return false;
   }
 
-  // FUNGSI LOG AKTIVITAS
   Future<void> _logActivity(String type, String title, String subtitle, String fieldType) async {
     await FirebaseFirestore.instance.collection('aktivitas_lapangan').add({
       'activity_type': type,
@@ -158,47 +194,63 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
 
   IconData _getIconFromKeyword(String text) {
     String cleanText = text.toLowerCase();
-    if (cleanText.contains('wifi') || cleanText.contains('internet')) {
-      return Icons.wifi;
-    }
-    if (cleanText.contains('minum') ||
-        cleanText.contains('air') ||
-        cleanText.contains('water')) {
-      return Icons.water_drop_outlined;
-    }
-    if (cleanText.contains('ganti') || cleanText.contains('baju')) {
-      return Icons.door_sliding_outlined;
-    }
-    if (cleanText.contains('parkir') || cleanText.contains('mobil')) {
-      return Icons.local_parking;
-    }
-    if (cleanText.contains('kantin') ||
-        cleanText.contains('makan') ||
-        cleanText.contains('kafe')) {
-      return Icons.restaurant;
-    }
-    if (cleanText.contains('musala') ||
-        cleanText.contains('sholat') ||
-        cleanText.contains('mesjid')) {
-      return Icons.mosque;
-    }
-    if (cleanText.contains('toilet') ||
-        cleanText.contains('wc') ||
-        cleanText.contains('kamar mandi')) {
-      return Icons.wc;
-    }
+    if (cleanText.contains('wifi') || cleanText.contains('internet')) return Icons.wifi;
+    if (cleanText.contains('minum') || cleanText.contains('air') || cleanText.contains('water')) return Icons.water_drop_outlined;
+    if (cleanText.contains('ganti') || cleanText.contains('baju')) return Icons.door_sliding_outlined;
+    if (cleanText.contains('parkir') || cleanText.contains('mobil')) return Icons.local_parking;
+    if (cleanText.contains('kantin') || cleanText.contains('makan') || cleanText.contains('kafe')) return Icons.restaurant;
+    if (cleanText.contains('musholla') || cleanText.contains('sholat') || cleanText.contains('mesjid')) return Icons.mosque;
+    if (cleanText.contains('toilet') || cleanText.contains('wc') || cleanText.contains('kamar mandi')) return Icons.wc;
     if (cleanText.contains('shower')) return Icons.shower;
-    if (cleanText.contains('ac') || cleanText.contains('kipas')) {
-      return Icons.ac_unit;
-    }
-    if (cleanText.contains('tribun') || cleanText.contains('duduk'))
-    if (cleanText.contains('net') || cleanText.contains('raket'))
-    if (cleanText.contains('bola') || cleanText.contains('shuttlecock'))
-    if (cleanText.contains('lampu') || cleanText.contains('lighting')) 
-    if (cleanText.contains('ring') || cleanText.contains('audio')){
-      return Icons.chair;
-    }
+    if (cleanText.contains('ac') || cleanText.contains('kipas')) return Icons.ac_unit;
+    if (cleanText.contains('tribun') || cleanText.contains('duduk')) return Icons.chair;
     return Icons.star_border_rounded;
+  }
+
+  // Fungsi Upload Khusus untuk File hasil Drag & Drop Web
+  Future<void> _uploadHtmlFile(html.File file) async {
+    setState(() => _isUploading = true);
+    try {
+      final reader = html.FileReader();
+      reader.readAsArrayBuffer(file);
+      await reader.onLoad.first;
+      final bytes = reader.result as List<int>;
+
+      final cloudinaryUrl = Uri.parse("https://api.cloudinary.com/v1_1/$cloudName/image/upload");
+      final request = http.MultipartRequest("POST", cloudinaryUrl);
+      request.fields['upload_preset'] = uploadPreset;
+      
+      String mimeType = file.type;
+      if (mimeType.isEmpty) mimeType = 'image/jpeg';
+      final mimeTypeData = mimeType.split('/');
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: file.name,
+          contentType: MediaType(
+            mimeTypeData[0],
+            mimeTypeData.length > 1 ? mimeTypeData[1] : 'jpeg',
+          ),
+        ),
+      );
+
+      final response = await request.send();
+
+      if (response.statusCode == 200) {
+        final responseData = await response.stream.bytesToString();
+        final data = json.decode(responseData);
+        setState(() => _uploadedImages.add(data['secure_url']));
+        _showUploadStatusPopup(true);
+      } else {
+        _showUploadStatusPopup(false);
+      }
+    } catch (e) {
+      _showUploadStatusPopup(false);
+    } finally {
+      setState(() => _isUploading = false);
+    }
   }
 
   Future<void> _pickAndUploadImage() async {
@@ -216,8 +268,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       mimeType ??= 'image/jpeg';
       final mimeTypeData = mimeType.split('/');
 
-      final cloudinaryUrl =
-          Uri.parse("https://api.cloudinary.com/v1_1/$cloudName/image/upload");
+      final cloudinaryUrl = Uri.parse("https://api.cloudinary.com/v1_1/$cloudName/image/upload");
 
       final request = http.MultipartRequest("POST", cloudinaryUrl);
       request.fields['upload_preset'] = uploadPreset;
@@ -272,9 +323,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  isSuccess
-                      ? Icons.check_circle_rounded
-                      : Icons.error_outline_rounded,
+                  isSuccess ? Icons.check_circle_rounded : Icons.error_outline_rounded,
                   size: 54,
                   color: isSuccess ? Colors.green[600] : Colors.red[600],
                 ),
@@ -294,8 +343,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     ? "Foto lapangan berhasil diupload ke Cloudinary."
                     : "Koneksi gagal atau upload bermasalah.",
                 textAlign: TextAlign.center,
-                style: GoogleFonts.plusJakartaSans(
-                    color: Colors.grey, fontSize: 13),
+                style: GoogleFonts.plusJakartaSans(color: Colors.grey, fontSize: 13),
               ),
               const SizedBox(height: 24),
               SizedBox(
@@ -303,15 +351,11 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        isSuccess ? Colors.green[600] : Colors.red[600],
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                    backgroundColor: isSuccess ? Colors.green[600] : Colors.red[600],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: Text("Mengerti",
-                      style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text("Mengerti", style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               )
             ],
@@ -321,51 +365,88 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
     );
   }
 
+  // REDESIGN: Popup Tambah Fasilitas dengan Font Poppins & Tampilan Baru
   void _showAddFacilityDialog() {
     TextEditingController facilityController = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.add_box_rounded, color: Colors.blue[700]),
-            const SizedBox(width: 8),
-            Text("Tambah Fasilitas",
-                style:
-                    GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: TextField(
-          controller: facilityController,
-          decoration: InputDecoration(
-            labelText: "Nama Fasilitas",
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.add_box_rounded, color: Color(0xFF2563EB), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Text("Tambah Fasilitas", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+                ],
+              ),
+              const SizedBox(height: 28),
+              Text("Nama Fasilitas", style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500, color: const Color(0xFF64748B))),
+              const SizedBox(height: 8),
+              TextField(
+                controller: facilityController,
+                style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF334155)),
+                decoration: InputDecoration(
+                  hintText: "Contoh: WiFi, Toilet...",
+                  hintStyle: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF94A3B8)),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF2563EB))),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+                    child: Text("Batal", style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500, color: const Color(0xFF64748B))),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (facilityController.text.isNotEmpty) {
+                        setState(() {
+                          _facilities.add({
+                            'icon': _getIconFromKeyword(facilityController.text),
+                            'label': facilityController.text,
+                          });
+                        });
+                        Navigator.pop(context);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                    child: Text("Simpan", style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Batal")),
-          ElevatedButton(
-            onPressed: () {
-              if (facilityController.text.isNotEmpty) {
-                setState(() {
-                  _facilities.add({
-                    'icon': _getIconFromKeyword(facilityController.text),
-                    'label': facilityController.text,
-                  });
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text("Simpan"),
-          )
-        ],
       ),
     );
   }
 
+  // REDESIGN: Popup Jam Operasional dengan Font Poppins & Tampilan Baru
   void _showInteractiveTimePickerDialog() {
     int tempTutup = _selectedJamSelesaiHour;
     int tempBuka = _selectedJamMulaiHour;
@@ -374,65 +455,99 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Container(
-            width: 400,
-            padding: const EdgeInsets.all(24),
+            width: 360,
+            padding: const EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Jam Operasional",
-                    style: GoogleFonts.plusJakartaSans(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.access_time_rounded, color: Color(0xFF2563EB), size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Text("Jam Operasional", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+                  ],
+                ),
+                const SizedBox(height: 32),
                 Row(
                   children: [
                     Expanded(
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("BUKA"),
-                          DropdownButton<int>(
-                            value: tempBuka,
-                            items: List.generate(
-                                24,
-                                (i) => DropdownMenuItem(
-                                    value: i, child: Text("$i:00"))),
-                            onChanged: (v) =>
-                                setDialogState(() => tempBuka = v!),
+                          Text("BUKA", style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFE2E8F0))),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int>(
+                                value: tempBuka,
+                                isExpanded: true,
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+                                style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500, color: const Color(0xFF334155)),
+                                items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text("${i.toString().padLeft(2, '0')}:00"))),
+                                onChanged: (v) => setDialogState(() => tempBuka = v!),
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const Text("-"),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16).copyWith(top: 24),
+                      child: const Icon(Icons.arrow_forward_rounded, color: Color(0xFF94A3B8), size: 20),
+                    ),
                     Expanded(
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("TUTUP"),
-                          DropdownButton<int>(
-                            value: tempTutup,
-                            items: List.generate(
-                                24,
-                                (i) => DropdownMenuItem(
-                                    value: i, child: Text("$i:00"))),
-                            onChanged: (v) =>
-                                setDialogState(() => tempTutup = v!),
+                          Text("TUTUP", style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFE2E8F0))),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int>(
+                                value: tempTutup,
+                                isExpanded: true,
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+                                style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500, color: const Color(0xFF334155)),
+                                items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text("${i.toString().padLeft(2, '0')}:00"))),
+                                onChanged: (v) => setDialogState(() => tempTutup = v!),
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedJamMulaiHour = tempBuka;
-                      _selectedJamSelesaiHour = tempTutup;
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Terapkan"),
+                const SizedBox(height: 36),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _selectedJamMulaiHour = tempBuka;
+                        _selectedJamSelesaiHour = tempTutup;
+                      });
+                      Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                    child: Text("Terapkan", style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                  ),
                 )
               ],
             ),
@@ -443,7 +558,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
   }
 
   void _redirectToKelolaLapangan() {
-    Navigator.pop(context); // MENGGUNAKAN POP AGAR TIDAK MERUSAK STATE SEBELUMNYA
+    Navigator.pop(context);
   }
 
   Future<void> _saveField() async {
@@ -469,7 +584,6 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
 
         if (_isEditMode) {
           if (!_checkIfChanged()) {
-            // Jika tidak ada perubahan, langsung kembali tanpa eksekusi database
             Navigator.pop(context);
             return;
           }
@@ -479,7 +593,6 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
               .doc(widget.fieldToEdit!.id)
               .update(data);
               
-          // CATAT AKTIVITAS UPDATE
           await _logActivity(
             'update', 
             'Lapangan diperbarui: ${_nameController.text}', 
@@ -487,10 +600,9 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
             _selectedType ?? 'Lainnya'
           );
         } else {
-          data['created_at'] = FieldValue.serverTimestamp(); // Agar terhitung pada bulan ini
+          data['created_at'] = FieldValue.serverTimestamp(); 
           await _firestore.collection('lapangan').add(data);
           
-          // CATAT AKTIVITAS ADD
           await _logActivity(
             'add', 
             'Lapangan baru ditambahkan: ${_nameController.text}', 
@@ -499,7 +611,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
           );
         }
         
-        if(mounted) Navigator.pop(context, true); // Mengirim trigger reload
+        if(mounted) Navigator.pop(context, true); 
       } catch (e) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text("Error: $e")));
@@ -512,14 +624,13 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(
-          0xFFF4F6F9), // Background utama Abu-abu sangat muda (Light Mode)
+      backgroundColor: const Color(0xFFF4F6F9),
       body: Row(
         children: [
           const AdminSidebar(currentIndex: 5), // SIDEBAR
           Expanded(
             child: Container(
-              color: const Color(0xFFF4F6F9), // Latar konten Light Mode
+              color: const Color(0xFFF4F6F9),
               child: Column(
                 children: [
                   Expanded(
@@ -584,14 +695,13 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
               style: GoogleFonts.plusJakartaSans(
                   fontSize: 28,
                   fontWeight: FontWeight.w800,
-                  color: const Color(
-                      0xFF0F172A)), // TEKS GELAP SESUAI DESAIN TERANG
+                  color: const Color(0xFF0F172A)), 
             ),
             const SizedBox(height: 4),
             Text(
               "Input detail informasi lapangan untuk memperbarui katalog pada tahun 2026.",
               style: GoogleFonts.plusJakartaSans(
-                  color: const Color(0xFF64748B), // TEKS ABU-ABU SESUAI DESAIN
+                  color: const Color(0xFF64748B),
                   fontSize: 14),
             ),
           ],
@@ -601,17 +711,12 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
             OutlinedButton(
               onPressed: _redirectToKelolaLapangan,
               style: OutlinedButton.styleFrom(
-                  side: const BorderSide(
-                      color: Color(0xFFCBD5E1)), // BORDER ABU-ABU
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
                   backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF475569), // TEKS ABU GELAP
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10))),
-              child: Text("Batal",
-                  style:
-                      GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                  foregroundColor: const Color(0xFF475569),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              child: Text("Batal", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
             ),
             const SizedBox(width: 16),
             ElevatedButton.icon(
@@ -620,21 +725,16 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.save_alt_rounded,
-                      size: 18, color: Colors.white),
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.save_alt_rounded, size: 18, color: Colors.white),
               label: Text(
                 _isSaving ? "Menyimpan..." : "Simpan Lapangan",
-                style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white, fontWeight: FontWeight.w700),
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2563EB), // BIRU UTAMA
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                backgroundColor: const Color(0xFF2563EB),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
             )
@@ -666,8 +766,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     DropdownButtonFormField<String>(
                       initialValue: _selectedType,
                       items: _tipeLapangan
-                          .map(
-                              (e) => DropdownMenuItem(value: e, child: Text(e)))
+                          .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                           .toList(),
                       onChanged: (v) => setState(() => _selectedType = v),
                       decoration: _inputDecoration(),
@@ -752,8 +851,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     DropdownButtonFormField<String>(
                       initialValue: _selectedJenisLantai,
                       items: _daftarJenisLantai
-                          .map(
-                              (e) => DropdownMenuItem(value: e, child: Text(e)))
+                          .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                           .toList(),
                       onChanged: (v) =>
                           setState(() => _selectedJenisLantai = v!),
@@ -787,23 +885,26 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       title: "Media Lapangan",
       child: Column(
         children: [
+          // MODIFIKASI: Efek visual saat file di drag ke dalam area (Web Native Drop)
           GestureDetector(
             onTap: _isUploading ? null : _pickAndUploadImage,
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 32),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: _isDragging ? const Color(0xFFEFF6FF) : Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                // BORDER BIRU MUDA UNTUK AREA UPLOAD
-                border: Border.all(color: const Color(0xFFBFDBFE), width: 1.5),
+                border: Border.all(
+                  color: _isDragging ? const Color(0xFF2563EB) : const Color(0xFFBFDBFE), 
+                  width: _isDragging ? 2.0 : 1.5
+                ),
               ),
               child: Column(
                 children: [
-                  const Icon(Icons.cloud_upload_outlined,
-                      color: Color(0xFF2563EB), size: 32),
+                  Icon(Icons.cloud_upload_outlined, color: _isDragging ? const Color(0xFF1D4ED8) : const Color(0xFF2563EB), size: 32),
                   const SizedBox(height: 12),
-                  Text("Unggah Foto",
+                  Text(_isDragging ? "Lepaskan Foto Disini" : "Unggah Foto",
                       style: GoogleFonts.plusJakartaSans(
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
@@ -812,8 +913,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                   Text(
                       "Drag and drop file atau klik\nuntuk memilih. Maks. 5MB\n(JPG/PNG)",
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF94A3B8), fontSize: 11)),
+                      style: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8), fontSize: 11)),
                 ],
               ),
             ),
@@ -821,9 +921,9 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
           const SizedBox(height: 16),
           Row(
             children: [
+              // MODIFIKASI: Tombol "+" sekarang bisa di klik untuk mengunggah
               _mediaBox(isAdd: true),
               const SizedBox(width: 12),
-              // MENAMPILKAN PLACEHOLDER BOX JIKA KOSONG
               if (_uploadedImages.isEmpty) ...[
                 _mediaBox(),
                 const SizedBox(width: 12),
@@ -885,8 +985,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border:
-              Border.all(color: const Color(0xFFE2E8F0)) // Border sangat tipis
+          border: Border.all(color: const Color(0xFFE2E8F0))
           ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -942,7 +1041,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       InputDecoration(
         hintText: hint,
         filled: true,
-        fillColor: fillColor ?? Colors.white, // Default box putih
+        fillColor: fillColor ?? Colors.white,
         hintStyle: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8)),
         contentPadding: const EdgeInsets.all(14),
         border: OutlineInputBorder(
@@ -957,20 +1056,24 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       );
 
   Widget _mediaBox({bool isAdd = false, String? imageUrl}) {
-    return Container(
-      width: 60,
-      height: 60,
-      decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE2E8F0))),
-      child: isAdd
-          ? const Icon(Icons.add, color: Color(0xFF2563EB))
-          : imageUrl != null
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.network(imageUrl, fit: BoxFit.cover))
-              : const Icon(Icons.image_outlined, color: Color(0xFFCBD5E1)),
+    return GestureDetector(
+      // MODIFIKASI: Tombol "+" sekarang bisa di-klik untuk membuka image picker
+      onTap: (isAdd && !_isUploading) ? _pickAndUploadImage : null,
+      child: Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0))),
+        child: isAdd
+            ? const Icon(Icons.add, color: Color(0xFF2563EB))
+            : imageUrl != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(imageUrl, fit: BoxFit.cover))
+                : const Icon(Icons.image_outlined, color: Color(0xFFCBD5E1)),
+      ),
     );
   }
 }
