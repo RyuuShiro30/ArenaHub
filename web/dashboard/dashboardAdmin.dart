@@ -518,7 +518,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 final bookingList = sorted.where((b) {
                   final ts = b['tanggal_booking'];
                   if (ts == null) return false;
-                  return (ts as Timestamp).toDate().isAfter(last24h);
+                  
+                  final docId = b['id'].toString();
+                  final isChild = RegExp(r'_\d+$').hasMatch(docId);
+                  return !isChild && (ts as Timestamp).toDate().isAfter(last24h);
                 }).take(10).toList();
 
                 final lapanganList = lapanganSnap.hasData
@@ -965,9 +968,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Row(children: [
-            _th('PELANGGAN', 3), _th('LAYANAN', 2),
+            _th('PELANGGAN', 4), _th('LAYANAN', 3),
             _th('WAKTU', 2),     _th('TOTAL', 2),
-            _th('STATUS', 2),    _th('AKSI', 1),
+            _th('STATUS', 2), 
           ]),
         ),
         const SizedBox(height: 8),
@@ -993,21 +996,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   );
 
   Widget _buildRow(Map<String, dynamic> b) {
-    final name    = b['customer_name']     ?? '-';
-    final lap     = b['nama_lapangan']     ?? '-';
-    final dur     = b['durasi']            ?? '';
-    final waktu   = _waktu(b['tanggal_booking']);
-    final total   = double.tryParse(b['total_harga'].toString()) ?? 0;
-    final status  = b['status_pembayaran'] ?? b['status'] ?? '';
-    final dc      = _sc(status);
-    final docId   = b['id'].toString();
-    final shortId = docId.length >= 4 ? docId.substring(0, 4).toUpperCase() : docId;
+  final name    = b['customer_name']     ?? '-';
+  final lap     = b['nama_lapangan']     ?? '-';
+  final dur     = b['durasi']            ?? '';
+  final waktu   = _waktu(b['tanggal_booking']);
+  final total   = double.tryParse(b['total_harga'].toString()) ?? 0;
+  final status  = b['status_pembayaran'] ?? b['status'] ?? '';
+  final dc      = _sc(status);
+  final docId   = (b['order_id'] ?? b['id'] ?? '').toString();
+  final shortId = docId.toUpperCase();
 
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        child: Row(children: [
-          Expanded(flex: 3, child: Row(children: [
+  return Column(children: [
+    Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // PELANGGAN
+          Expanded(flex: 4, child: Row(children: [
             Container(
               width: 34, height: 34,
               decoration: BoxDecoration(color: _blueBg,
@@ -1020,45 +1026,46 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 children: [
               Text(name, style: _t(size: 13, weight: FontWeight.w600),
                   maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text('ID: #$shortId', style: _t(size: 11, color: _muted),
+              Text('ID: #$shortId', style: _t(size: 10, color: _muted),
                   maxLines: 1, overflow: TextOverflow.ellipsis),
             ])),
           ])),
-          Expanded(flex: 2,
+          // LAYANAN
+          Expanded(flex: 3,
               child: Text(dur.toString().isNotEmpty ? '$lap ($dur Jam)' : lap,
                   style: _t(size: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          // WAKTU
           Expanded(flex: 2,
               child: Text(waktu, style: _t(size: 13),
                   maxLines: 1, overflow: TextOverflow.ellipsis)),
+          // TOTAL
           Expanded(flex: 2,
               child: Text(_rp(total),
                   style: _t(size: 13, weight: FontWeight.w700),
                   maxLines: 1, overflow: TextOverflow.ellipsis)),
+          // STATUS
           Expanded(flex: 2,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                    color: dc.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20)),
-                child: Text(_sl(status),
-                    style: _t(size: 11, weight: FontWeight.w700, color: dc),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                      color: dc.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20)),
+                  child: Text(_sl(status),
+                      style: _t(size: 11, weight: FontWeight.w700, color: dc),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ],
             ),
           ),
-          Expanded(flex: 1,
-            child: IconButton(
-              icon: const Icon(Icons.more_vert_rounded, size: 18, color: _muted),
-              onPressed: () => _showActions(b),
-            ),
-          ),
-        ]),
+        ],
       ),
-      const Divider(color: _border, height: 1, indent: 24, endIndent: 24),
-    ]);
-  }
+    ),
+    const Divider(color: _border, height: 1, indent: 24, endIndent: 24),
+  ]);
+}
 
   void _showActions(Map<String, dynamic> b) {
     showModalBottomSheet(
