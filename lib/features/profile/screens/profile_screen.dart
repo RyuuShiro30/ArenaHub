@@ -595,7 +595,7 @@ Widget build(BuildContext context) {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: _accent,
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.grey.shade300,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import '../sidebar.dart';
 
 class KelolaPromoScreen extends StatefulWidget {
   const KelolaPromoScreen({super.key});
@@ -231,7 +232,7 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
                     const Spacer(),
                     Switch(
                       value: aktif,
-                      activeColor: _blue,
+                      activeThumbColor: _blue,
                       onChanged: (v) => setDlg(() => aktif = v),
                     ),
                   ]),
@@ -260,7 +261,7 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
                         };
                         if (isEdit) {
                           await _firestore.collection('promos')
-                              .doc(promo!['id']).update(data);
+                              .doc(promo['id']).update(data);
                         } else {
                           data['used'] = 0;
                           await _firestore.collection('promos').add(data);
@@ -311,16 +312,16 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: _border)),
+              borderSide: const BorderSide(color: _border)),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: _border)),
+              borderSide: const BorderSide(color: _border)),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: _blue)),
+              borderSide: const BorderSide(color: _blue)),
           errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: _red)),
+              borderSide: const BorderSide(color: _red)),
           filled: true,
           fillColor: _bg,
         ),
@@ -365,116 +366,126 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
   // build
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('promos').snapshots(),
-      builder: (ctx, snap) {
-        final all = snap.hasData
-            ? snap.data!.docs
-                .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
-                .toList()
-            : <Map<String, dynamic>>[];
-
-        final dateFiltered = all.where(_matchesFilter).toList();
-        final filtered = _search.isEmpty
-            ? dateFiltered
-            : dateFiltered.where((p) {
-                final kode = (p['kode'] ?? '').toString().toLowerCase();
-                return kode.contains(_search.toLowerCase());
-              }).toList();
-
-        final stats = _calcStats(all);
-
-        return Column(children: [
-          // Top Bar
-          _buildTopBar(),
-
+    return Scaffold(
+      backgroundColor: _bg,
+      body: Row( // <-- PENAMBAHAN ROW DAN SIDEBAR DI SINI
+        children: [
+          const AdminSidebar(currentIndex: 3), // PANGGIL SIDEBAR, INDEX 3 UNTUK KELOLA PROMO
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                    Row(
-                    children: [
-                        Text(
-                        'Kelola Promo',
-                        style: _t(size: 22, weight: FontWeight.w800),
-                        ),
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _firestore.collection('promos').snapshots(),
+              builder: (ctx, snap) {
+                final all = snap.hasData
+                    ? snap.data!.docs
+                        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+                        .toList()
+                    : <Map<String, dynamic>>[];
 
-                        const Spacer(),
+                final dateFiltered = all.where(_matchesFilter).toList();
+                final filtered = _search.isEmpty
+                    ? dateFiltered
+                    : dateFiltered.where((p) {
+                        final kode = (p['kode'] ?? '').toString().toLowerCase();
+                        return kode.contains(_search.toLowerCase());
+                      }).toList();
 
-                        GestureDetector(
-                        onTap: () => _showForm(),
-                        child: Container(
-                            padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                            color: _blue,
-                            borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                final stats = _calcStats(all);
+
+                return Column(children: [
+                  // Top Bar
+                  _buildTopBar(),
+
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                            Row(
                             children: [
-                                const Icon(
-                                Icons.add_rounded,
-                                size: 18,
-                                color: Colors.white,
-                                ),
-                                const SizedBox(width: 6),
                                 Text(
-                                'Tambah Promo',
-                                style: _t(
-                                    size: 13,
-                                    weight: FontWeight.w600,
-                                    color: Colors.white,
+                                'Kelola Promo',
+                                style: _t(size: 22, weight: FontWeight.w800),
+                                ),
+
+                                const Spacer(),
+
+                                GestureDetector(
+                                onTap: () => _showForm(),
+                                child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                    color: _blue,
+                                    borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                        const Icon(
+                                        Icons.add_rounded,
+                                        size: 18,
+                                        color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                        'Tambah Promo',
+                                        style: _t(
+                                            size: 13,
+                                            weight: FontWeight.w600,
+                                            color: Colors.white,
+                                        ),
+                                        ),
+                                    ],
+                                    ),
                                 ),
                                 ),
                             ],
                             ),
-                        ),
-                        ),
-                    ],
+
+                            const SizedBox(height: 8),
+
+                            Text(
+                            'Kelola kode promo dan diskon untuk pengguna ArenaHub.',
+                            style: _t(size: 13, color: _muted),
+                            ),
+
+                            const SizedBox(height: 8),
+
+
+                          // Stat Cards
+                          Row(children: [
+                            _statCard(icon: Icons.local_offer_outlined,
+                                iconColor: _blue, label: 'Total Promo',
+                                value: stats['total'].toString()),
+                            const SizedBox(width: 12),
+                            _statCard(icon: Icons.check_circle_outline_rounded,
+                                iconColor: _green, label: 'Promo Aktif',
+                                value: stats['aktif'].toString()),
+                            const SizedBox(width: 12),
+                            _statCard(icon: Icons.timelapse_rounded,
+                                iconColor: _orange, label: 'Sudah Kadaluarsa',
+                                value: stats['expired'].toString()),
+                            const SizedBox(width: 12),
+                            _statCard(icon: Icons.people_outline_rounded,
+                                iconColor: _blue, label: 'Total Pemakaian',
+                                value: stats['used'].toString()),
+                          ]),
+                          const SizedBox(height: 20),
+
+                          _buildTable(filtered, snap.connectionState),
+                        ],
+                      ),
                     ),
-
-                    const SizedBox(height: 8),
-
-                    Text(
-                    'Kelola kode promo dan diskon untuk pengguna ArenaHub.',
-                    style: _t(size: 13, color: _muted),
-                    ),
-
-                    const SizedBox(height: 8),
-
-
-                  // Stat Cards
-                  Row(children: [
-                    _statCard(icon: Icons.local_offer_outlined,
-                        iconColor: _blue, label: 'Total Promo',
-                        value: stats['total'].toString()),
-                    const SizedBox(width: 12),
-                    _statCard(icon: Icons.check_circle_outline_rounded,
-                        iconColor: _green, label: 'Promo Aktif',
-                        value: stats['aktif'].toString()),
-                    const SizedBox(width: 12),
-                    _statCard(icon: Icons.timelapse_rounded,
-                        iconColor: _orange, label: 'Sudah Kadaluarsa',
-                        value: stats['expired'].toString()),
-                    const SizedBox(width: 12),
-                    _statCard(icon: Icons.people_outline_rounded,
-                        iconColor: _blue, label: 'Total Pemakaian',
-                        value: stats['used'].toString()),
-                  ]),
-                  const SizedBox(height: 20),
-
-                  _buildTable(filtered, snap.connectionState),
-                ],
-              ),
+                  ),
+                ]);
+              },
             ),
           ),
-        ]);
-      },
+        ],
+      ),
     );
   }
 
@@ -482,7 +493,7 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
         return Container(
             height: 60,
             padding: const EdgeInsets.symmetric(horizontal: 28),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
             color: _white,
             border: Border(bottom: BorderSide(color: _border)),
             ),
@@ -550,7 +561,7 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
                     border: Border.all(color: _border)),
                 child: Row(children: [
                   const SizedBox(width: 12),
-                  Icon(Icons.search_rounded, size: 18, color: _muted),
+                  const Icon(Icons.search_rounded, size: 18, color: _muted),
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
@@ -571,8 +582,8 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
                         _searchCtrl.clear();
                         setState(() => _search = '');
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 10),
+                      child: const Padding(
+                        padding: EdgeInsets.only(right: 10),
                         child: Icon(Icons.close_rounded, size: 16, color: _muted),
                       ),
                     ),
@@ -611,14 +622,14 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: _blue.withOpacity(0.3))),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.calendar_today_rounded, size: 13, color: _blue),
+                    const Icon(Icons.calendar_today_rounded, size: 13, color: _blue),
                     const SizedBox(width: 5),
                     Text(_filterLabel,
                         style: _t(size: 12, weight: FontWeight.w600, color: _blue)),
                     const SizedBox(width: 6),
                     GestureDetector(
                       onTap: () => setState(() => _filterDate = null),
-                      child: Icon(Icons.close_rounded, size: 14, color: _blue),
+                      child: const Icon(Icons.close_rounded, size: 14, color: _blue),
                     ),
                   ]),
                 ),
@@ -626,7 +637,7 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
           ]),
         ),
         const SizedBox(height: 16),
-        Divider(color: _border, height: 1),
+        const Divider(color: _border, height: 1),
 
         if (state == ConnectionState.waiting)
           const Padding(padding: EdgeInsets.all(40),
@@ -635,7 +646,7 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
           Padding(
             padding: const EdgeInsets.all(40),
             child: Column(children: [
-              Icon(Icons.local_offer_outlined, size: 48, color: _muted),
+              const Icon(Icons.local_offer_outlined, size: 48, color: _muted),
               const SizedBox(height: 12),
               Text('Tidak ada promo', style: _t(size: 14, color: _muted)),
             ]),
@@ -647,7 +658,7 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
 
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: _border))),
           child: Row(children: [
             Text('Menampilkan ${list.length} entri',
@@ -756,7 +767,7 @@ class _KelolaPromoScreenState extends State<KelolaPromoScreen> {
           )),
         ]),
       ),
-      Divider(color: _border, height: 1, indent: 24, endIndent: 24),
+      const Divider(color: _border, height: 1, indent: 24, endIndent: 24),
     ]);
   }
 

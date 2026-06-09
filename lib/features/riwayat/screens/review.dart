@@ -213,7 +213,7 @@ class _ReviewPageState extends State<ReviewPage> {
 
         final docs = ulasanSnapshot.docs;
 
-        double _rata(String field) {
+        double rata(String field) {
           final list = docs
               .map((d) => (d.data()[field] as num?)?.toDouble() ?? 0)
               .where((v) => v > 0)
@@ -221,11 +221,11 @@ class _ReviewPageState extends State<ReviewPage> {
           return list.isEmpty ? 0.0 : list.reduce((a, b) => a + b) / list.length;
         }
 
-        final ratingBaru = _rata('rating_overall');
-        final ratingKebersihan = _rata('rating_kebersihan');
-        final ratingFasilitas = _rata('rating_fasilitas');
-        final ratingPelayanan = _rata('rating_pelayanan');
-        final ratingKondisi = _rata('rating_kondisi');
+        final ratingBaru = rata('rating_overall');
+        final ratingKebersihan = rata('rating_kebersihan');
+        final ratingFasilitas = rata('rating_fasilitas');
+        final ratingPelayanan = rata('rating_pelayanan');
+        final ratingKondisi = rata('rating_kondisi');
 
         // 3. Update rating_rata dan jumlah_ulasan di collection 'lapangan'
         await firestore

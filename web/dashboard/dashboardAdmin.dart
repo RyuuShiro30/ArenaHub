@@ -4,12 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../auth/login.dart';
-import '../booking/kelola_booking.dart'; 
-import '../booking/kelola_refund.dart';
-import '../kelola_jadwal/kelolaJadwal.dart';
-import '../promo/kelola_promo.dart';
-import '../profile/profileAdmin.dart';
-import '../field/kelola_lapangan.dart';
 import '../admin_notifiers.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:path_provider/path_provider.dart';
@@ -17,6 +11,7 @@ import 'package:open_filex/open_filex.dart';
 import 'dart:io';
 import 'dart:math' show min;
 import 'dart:html' as html;
+import '../sidebar.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -38,39 +33,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   static const Color _green  = Color(0xFF22C55E);
   static const Color _orange = Color(0xFFF59E0B);
 
-  final bool _expanded = true;
-  int _selectedNav = 0;
-
-  // ── Notifier untuk deteksi perubahan di halaman Profil ───────────────────
-  final ValueNotifier<bool> _profileHasChanges = ValueNotifier(false);
-
-  static const double _collapsedW = 56;
-  static const double _expandedW  = 220;
-
-  final List<Map<String, dynamic>> _navItems = [
-    {'icon': Icons.dashboard_rounded,            'label': 'Dashboard'},
-    {'icon': Icons.confirmation_number_outlined, 'label': 'Kelola Booking'},
-    {'icon': Icons.assignment_return_outlined,   'label': 'Kelola Refund'},
-    {'icon': Icons.percent_rounded,              'label': 'Kelola Promo'},
-    {'icon': Icons.event_note_outlined,          'label': 'Kelola Jadwal'},
-    {'icon': Icons.sports_soccer_rounded,        'label': 'Kelola Lapangan'},
-    {'icon': Icons.person_outline_rounded,       'label': 'Profil'},
-  ];
-
   String _adminName  = 'Admin';
-  String _adminEmail = '';
   String _adminRole  = 'Administrator';
 
   @override
   void initState() {
     super.initState();
     _fetchAdminSession();
-  }
-
-  @override
-  void dispose() {
-    _profileHasChanges.dispose();
-    super.dispose();
   }
 
   Future<void> _fetchAdminSession() async {
@@ -92,88 +61,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } catch (_) {}
   }
 
-  // ── Dialog konfirmasi jika ada perubahan belum disimpan di Profil ─────────
-  Future<bool> _konfirmasiPindahDariProfil() async {
-    if (!_profileHasChanges.value) return true;
-
-    final result = await showDialog<bool?>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Simpan Perubahan?',
-            style: _t(size: 16, weight: FontWeight.w700)),
-        content: Text(
-            'Kamu memiliki perubahan yang belum disimpan. Buang perubahan dan pindah halaman?',
-            style: _t(size: 13, color: _muted)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, null), // batal
-            child: Text('Batal', style: _t(size: 14, color: _muted)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true), // buang & pindah
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Buang & Pindah',
-                style: _t(size: 14, weight: FontWeight.w600,
-                    color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-
-    if (result == true) {
-      _profileHasChanges.value = false;
-      return true;
-    }
-    return false;
-  }
-
-  void _logout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Keluar dari Akun?',
-            style: _t(size: 16, weight: FontWeight.w700)),
-        content: Text('Kamu akan keluar dari panel admin.',
-            style: _t(size: 13, color: _muted)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Batal', style: _t(size: 14, color: _muted)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: Text('Keluar',
-                style: _t(size: 14, weight: FontWeight.w600,
-                    color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      await _auth.signOut();
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminLoginPage()),
-          (route) => false,
-        );
-      }
-    }
-  }
-
   bool _isSuccess(String s) {
     final v = s.toLowerCase().trim();
     return v == 'pembayaran selesai' || v == 'selesai' ||
@@ -189,15 +76,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final v = s.toLowerCase().trim();
     return v == 'gagal' || v == 'cancelled' || v == 'batal' ||
         v.contains('gagal') || v.contains('cancel') || v.contains('batal');
-  }
-
-  String _bulanIni() {
-    const bulan = [
-      '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-    ];
-    final now = DateTime.now();
-    return '${bulan[now.month]} ${now.year}';
   }
 
   String _rp(double v) =>
@@ -431,26 +309,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       backgroundColor: _bg,
       body: Row(children: [
-        ClipRect(child: _buildSidebar()),
+        const AdminSidebar(currentIndex: 0),
         Expanded(
-          child: _selectedNav == 1
-              ? const KelolaBookingScreen()
-              : _selectedNav == 2
-              ? const KelolaRefundScreen()
-              : _selectedNav == 3
-              ? const KelolaPromoScreen()
-              : _selectedNav == 4
-              ? const KelolaJadwalScreen()
-              : _selectedNav == 5
-              ? const KelolaLapanganScreen()
-              : _selectedNav == 6
-              ? ProfileAdminScreen(
-                  // Kirim callback agar profil bisa update notifier ini
-                  onChangesUpdated: (hasChanges) {
-                    _profileHasChanges.value = hasChanges;
-                  },
-                )
-              : _buildDashboardStreams(),
+          child: _buildDashboardStreams(),
         ),
       ]),
     );
@@ -497,17 +358,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   return dt.isAfter(todayStart) && dt.isBefore(todayEnd);
                 }).length;
 
-                double pendapatanIni = 0, pendapatanLalu = 0;
+                double pendapatanIni = 0;
                 for (final b in allBookings) {
                   final ts = b['tanggal_booking'];
                   if (ts == null) continue;
                   final dt     = (ts as Timestamp).toDate();
                   final harga  = double.tryParse(b['total_harga']?.toString() ?? '0') ?? 0;
                   final status = (b['status_pembayaran'] ?? '').toString();
-                  if (_isSuccess(status) && dt.isAfter(start) && dt.isBefore(end))
+                  if (_isSuccess(status) && dt.isAfter(start) && dt.isBefore(end)) {
                     pendapatanIni += harga;
-                  if (_isSuccess(status) && dt.isAfter(startLast) && dt.isBefore(endLast))
-                    pendapatanLalu += harga;
+                  }
                 }
 
                 final last24h = DateTime.now().subtract(const Duration(hours: 24));
@@ -527,20 +387,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   final isChild = RegExp(r'_\d+$').hasMatch(docId);
                   return !isChild && (ts as Timestamp).toDate().isAfter(last24h);
                 }).take(10).toList();
-
-                final lapanganList = lapanganSnap.hasData
-                    ? (lapanganSnap.data!.docs
-                        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
-                        .toList()
-                      ..sort((a, b) {
-                        final ta = a['createdAt'];
-                        final tb = b['createdAt'];
-                        if (ta == null && tb == null) return 0;
-                        if (ta == null) return 1;
-                        if (tb == null) return -1;
-                        return (tb as Timestamp).compareTo(ta as Timestamp);
-                      }))
-                    : <Map<String, dynamic>>[];
 
                 final pelangganBaru = userSnap.hasData
                     ? userSnap.data!.docs.where((d) {
@@ -595,224 +441,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ── Sidebar ───────────────────────────────────────────────────────────────
-  Widget _buildSidebar() {
-    return ClipRect(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeInOut,
-        width: _expanded ? _expandedW : _collapsedW,
-        color: _white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-                height: 64,
-                padding: EdgeInsets.symmetric(horizontal: _expanded ? 14 : 10),
-                decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: _border))),
-                child: Row(children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(
-                        color: _blue,
-                        borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.sports_soccer_rounded,
-                        color: Colors.white, size: 20),
-                  ),
-                  AnimatedOpacity(
-                    opacity: _expanded ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: SizedBox(
-                      width: _expandedW - 36 - 14 - 14,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 10),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('ArenaHub',
-                                style: _t(size: 14, weight: FontWeight.w800, color: _blue),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                            Text('PANEL ADMINISTRASI',
-                                style: _t(size: 8, weight: FontWeight.w600,
-                                    color: _muted, spacing: 0.5),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ])),
-            const SizedBox(height: 12),
-            ...List.generate(_navItems.length, (i) {
-              final active = _selectedNav == i;
-              final item   = _navItems[i];
-              return GestureDetector(
-                // ── onTap dengan pengecekan perubahan profil ──────────────
-                onTap: () async {
-                  if (_selectedNav == 6 && i != 6) {
-                    // Sedang di halaman Profil dan mau pindah ke halaman lain
-                    final bolehPindah = await _konfirmasiPindahDariProfil();
-                    if (!bolehPindah || !mounted) return;
-                  }
-                  setState(() => _selectedNav = i);
-                },
-                child: Container(
-                  margin: EdgeInsets.symmetric(
-                      horizontal: _expanded ? 8 : 4, vertical: 2),
-                  padding: EdgeInsets.symmetric(
-                      horizontal: _expanded ? 10 : 4, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: active ? _blueBg : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: 3, height: 20,
-                      margin: EdgeInsets.only(right: _expanded ? 7 : 2),
-                      decoration: BoxDecoration(
-                        color: active ? _blue : Colors.transparent,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    Icon(item['icon'] as IconData,
-                        color: active ? _blue : _muted, size: 20),
-                    AnimatedOpacity(
-                      opacity: _expanded ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 150),
-                      child: SizedBox(
-                        width: _expanded ? _expandedW - 80 : 0,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 10),
-                          child: Text(item['label'] as String,
-                              style: _t(size: 13,
-                                  weight: active ? FontWeight.w700 : FontWeight.w500,
-                                  color: active ? _blue : _muted),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ),
-                  ]),
-                ),
-              );
-            }),
-            const Spacer(),
-            GestureDetector(
-              onTap: _logout,
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const SizedBox(width: 3, height: 20),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.logout_rounded,
-                      color: Color(0xFFEF4444), size: 20),
-                  AnimatedOpacity(
-                    opacity: _expanded ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: SizedBox(
-                      width: _expanded ? _expandedW - 80 : 0,
-                      child: const Padding(
-                        padding: EdgeInsets.only(left: 10),
-                        child: Text('Keluar',
-                            style: TextStyle(fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFFEF4444)),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                    ),
-                  ),
-                ]),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: _border))),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                ValueListenableBuilder<String?>(
-                  valueListenable: adminPhotoNotifier,
-                  builder: (_, photoUrl, __) {
-                    return ValueListenableBuilder<String>(
-                      valueListenable: adminNameNotifier,
-                      builder: (_, name, __) {
-                        return Container(
-                          width: 36, height: 36,
-                          decoration: const BoxDecoration(
-                              shape: BoxShape.circle, color: _blue),
-                          child: ClipOval(
-                            child: photoUrl != null
-                                ? Image.network(
-                                    photoUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Center(
-                                      child: Text(_initials(name),
-                                          style: _t(size: 13,
-                                              weight: FontWeight.w700,
-                                              color: Colors.white)),
-                                    ),
-                                  )
-                                : Center(
-                                    child: Text(_initials(name),
-                                        style: _t(size: 13,
-                                            weight: FontWeight.w700,
-                                            color: Colors.white)),
-                                  ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-                AnimatedOpacity(
-                  opacity: _expanded ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: SizedBox(
-                    width: _expanded ? _expandedW - 36 - 12 - 12 - 10 : 0,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ValueListenableBuilder<String>(
-                            valueListenable: adminNameNotifier,
-                            builder: (_, name, __) => Text(name,
-                                style: _t(size: 12, weight: FontWeight.w700),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                          ),
-                          ValueListenableBuilder<String>(
-                            valueListenable: adminRoleNotifier,
-                            builder: (_, role, __) => Text(role,
-                                style: _t(size: 10, color: _muted),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildTopBar() {
-    final titles = ['Dashboard', 'Kelola Booking',
-        'Kelola Promo', 'Kelola Jadwal', 'Kelola Lapangan', 'Profil'];
     return Container(
       height: 60, color: _white,
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Row(children: [
-        Text(titles[_selectedNav],
+        Text('Dashboard',
             style: _t(size: 17, weight: FontWeight.w700)),
         const Spacer(),
       ]),
@@ -961,11 +595,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   style: _t(size: 12, color: _muted)),
             ]),
             const Spacer(),
-            TextButton(
-              onPressed: () => setState(() => _selectedNav = 1),
-              child: Text('Lihat Semua',
-                  style: _t(size: 13, weight: FontWeight.w600, color: _blue)),
-            ),
           ]),
         ),
         const SizedBox(height: 16),
@@ -1000,109 +629,70 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   );
 
   Widget _buildRow(Map<String, dynamic> b) {
-  final name    = b['customer_name']     ?? '-';
-  final lap     = b['nama_lapangan']     ?? '-';
-  final dur     = b['durasi']            ?? '';
-  final waktu   = _waktu(b['tanggal_booking']);
-  final total   = double.tryParse(b['total_harga'].toString()) ?? 0;
-  final status  = b['status_pembayaran'] ?? b['status'] ?? '';
-  final dc      = _sc(status);
-  final docId   = (b['order_id'] ?? b['id'] ?? '').toString();
-  final shortId = docId.toUpperCase();
+    final name    = b['customer_name']     ?? '-';
+    final lap     = b['nama_lapangan']     ?? '-';
+    final dur     = b['durasi']            ?? '';
+    final waktu   = _waktu(b['tanggal_booking']);
+    final total   = double.tryParse(b['total_harga'].toString()) ?? 0;
+    final status  = b['status_pembayaran'] ?? b['status'] ?? '';
+    final dc      = _sc(status);
+    final docId   = (b['order_id'] ?? b['id'] ?? '').toString();
+    final shortId = docId.toUpperCase();
 
-  return Column(children: [
-    Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // PELANGGAN
-          Expanded(flex: 4, child: Row(children: [
-            Container(
-              width: 34, height: 34,
-              decoration: BoxDecoration(color: _blueBg,
-                  borderRadius: BorderRadius.circular(8)),
-              child: Center(child: Text(_initials(name),
-                  style: _t(size: 12, weight: FontWeight.w700, color: _blue))),
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-              Text(name, style: _t(size: 13, weight: FontWeight.w600),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text('ID: #$shortId', style: _t(size: 10, color: _muted),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(flex: 4, child: Row(children: [
+              Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(color: _blueBg,
+                    borderRadius: BorderRadius.circular(8)),
+                child: Center(child: Text(_initials(name),
+                    style: _t(size: 12, weight: FontWeight.w700, color: _blue))),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(name, style: _t(size: 13, weight: FontWeight.w600),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text('ID: #$shortId', style: _t(size: 10, color: _muted),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ])),
             ])),
-          ])),
-          // LAYANAN
-          Expanded(flex: 3,
-              child: Text(dur.toString().isNotEmpty ? '$lap ($dur Jam)' : lap,
-                  style: _t(size: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
-          // WAKTU
-          Expanded(flex: 2,
-              child: Text(waktu, style: _t(size: 13),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
-          // TOTAL
-          Expanded(flex: 2,
-              child: Text(_rp(total),
-                  style: _t(size: 13, weight: FontWeight.w700),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
-          // STATUS
-          Expanded(flex: 2,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                      color: dc.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20)),
-                  child: Text(_sl(status),
-                      style: _t(size: 11, weight: FontWeight.w700, color: dc),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
-              ],
+            Expanded(flex: 3,
+                child: Text(dur.toString().isNotEmpty ? '$lap ($dur Jam)' : lap,
+                    style: _t(size: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            Expanded(flex: 2,
+                child: Text(waktu, style: _t(size: 13),
+                    maxLines: 1, overflow: TextOverflow.ellipsis)),
+            Expanded(flex: 2,
+                child: Text(_rp(total),
+                    style: _t(size: 13, weight: FontWeight.w700),
+                    maxLines: 1, overflow: TextOverflow.ellipsis)),
+            Expanded(flex: 2,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                        color: dc.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Text(_sl(status),
+                        style: _t(size: 11, weight: FontWeight.w700, color: dc),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-    const Divider(color: _border, height: 1, indent: 24, endIndent: 24),
-  ]);
-}
-
-  void _showActions(Map<String, dynamic> b) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Aksi Booking', style: _t(size: 15, weight: FontWeight.w700)),
-          const SizedBox(height: 16),
-          ListTile(
-            leading: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
-            title: Text('Konfirmasi Selesai', style: _t(size: 14)),
-            onTap: () async {
-              Navigator.pop(context);
-              await _firestore.collection('bookings').doc(b['id'])
-                  .update({'status_pembayaran': 'lunas'});
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.cancel_outlined, color: Color(0xFFEF4444)),
-            title: Text('Batalkan Booking',
-                style: _t(size: 14, color: const Color(0xFFEF4444))),
-            onTap: () async {
-              Navigator.pop(context);
-              await _firestore.collection('bookings').doc(b['id'])
-                  .update({'status_pembayaran': 'batal'});
-            },
-          ),
-        ]),
-      ),
-    );
+      const Divider(color: _border, height: 1, indent: 24, endIndent: 24),
+    ]);
   }
 
   Widget _shimmer({required double w, required double h, bool dark = false}) =>

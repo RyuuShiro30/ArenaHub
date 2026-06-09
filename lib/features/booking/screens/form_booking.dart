@@ -408,10 +408,10 @@ class _FormBookingPageState extends State<FormBookingPage> {
             // toggle
             Row(
               children: [
-                Expanded(
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text(
                         'Tambahkan sebagai pemesan',
                         style: TextStyle(
@@ -446,8 +446,8 @@ class _FormBookingPageState extends State<FormBookingPage> {
               color: const Color(0xFFF0F4FF),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
-              children: const [
+            child: const Row(
+              children: [
                 Icon(Icons.info_outline_rounded,
                     size: 14, color: _primaryColor),
                 SizedBox(width: 8),
@@ -570,7 +570,7 @@ class _FormBookingPageState extends State<FormBookingPage> {
               const Spacer(),
               GestureDetector(
                 onTap: () => Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => PromoPage())),
+                    context, MaterialPageRoute(builder: (_) => const PromoPage())),
                 child: const Text('Lihat Promo',
                     style: TextStyle(
                         fontSize: 12.5,

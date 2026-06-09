@@ -208,7 +208,7 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
-                Icon(Icons.info_outline_rounded, color: _accent, size: 20),
+                const Icon(Icons.info_outline_rounded, color: _accent, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text('Tentang Arena Hub',
@@ -258,7 +258,7 @@ class _PusatBantuanScreenState extends State<PusatBantuanScreen> {
       children: [
         Row(
           children: [
-            Icon(Icons.quiz_outlined, color: _accent, size: 20),
+            const Icon(Icons.quiz_outlined, color: _accent, size: 20),
             const SizedBox(width: 8),
             Text('Pertanyaan Umum (FAQ)',
                 style: _p(size: 15,

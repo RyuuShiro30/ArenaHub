@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import '../sidebar.dart';
 
 class KelolaBookingScreen extends StatefulWidget {
   const KelolaBookingScreen({super.key});
@@ -14,10 +15,9 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
   final _searchCtrl = TextEditingController();
   String _search = '';
 
-  // Filter state
-  DateTime? _filterDate;      // filter spesifik tanggal
-  int? _filterMonth;          // filter bulan
-  int? _filterYear;           // filter tahun
+  DateTime? _filterDate;      
+  int? _filterMonth;          
+  int? _filterYear;           
   bool get _hasFilter => _filterDate != null;
   
   static const Color _blue    = Color(0xFF2563EB);
@@ -31,7 +31,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
   static const Color _orange  = Color(0xFFF59E0B);
   static const Color _red     = Color(0xFFEF4444);
 
-  // helper
   TextStyle _t({double size = 14, FontWeight weight = FontWeight.normal,
       Color color = _text, double spacing = 0}) =>
       GoogleFonts.plusJakartaSans(
@@ -78,7 +77,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
         : name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
-  // status helper
   bool _isLunas(String s) {
     final v = s.toLowerCase().trim();
     return v == 'lunas' || v == 'paid' || v == 'selesai' ||
@@ -112,7 +110,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     return s;
   }
 
-  // filter table
   String get _filterLabel {
     if (_filterDate != null) {
       return DateFormat('d MMMM yyyy', 'id_ID').format(_filterDate!);
@@ -120,7 +117,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     return '';
   }
 
-  // apply filter
   bool _matchesFilter(Map<String, dynamic> b) {
     if (!_hasFilter) return true;
     final rawDate = b['tanggal_main'] ?? b['tanggal_booking'];
@@ -143,7 +139,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     return true;
   }
 
-  // stats
   Map<String, dynamic> _calcStats(List<Map<String, dynamic>> all) {
     final now = DateTime.now();
     final todayStr =
@@ -164,7 +159,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
             'pendapatanHariIni': pendapatanHariIni};
   }
 
-  // filter
   void _showFilterSheet() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -183,88 +177,89 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     }
   }
 
-  Widget _sheetSection({required String label, required Widget child}) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: _t(size: 12, weight: FontWeight.w600, color: _muted)),
-        const SizedBox(height: 6),
-        child,
-      ]);
-
-  // BUILD
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(  // ← tambah return
-      stream: _firestore
-          .collection('bookings')
-          .orderBy('tanggal_booking', descending: true)
-          .snapshots(),
-      builder: (ctx, snap) {
-        final allBookings = snap.hasData
-            ? snap.data!.docs
-                .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
-                .toList()
-            : <Map<String, dynamic>>[];
-
-        final dateFiltered = allBookings.where(_matchesFilter).toList();
-        final filtered = _search.isEmpty
-            ? dateFiltered
-            : dateFiltered.where((b) {
-                final name = (b['customer_name'] ?? '').toString().toLowerCase();
-                final lap  = (b['nama_lapangan'] ?? '').toString().toLowerCase();
-                final q    = _search.toLowerCase();
-                return name.contains(q) || lap.contains(q);
-              }).toList();
-
-        final stats = _calcStats(allBookings);
-
-        return Column(children: [
-          _buildTopBar(),
+    return Scaffold(
+      backgroundColor: _bg,
+      body: Row(
+        children: [
+          const AdminSidebar(currentIndex: 1),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Kelola Booking',
-                      style: _t(size: 22, weight: FontWeight.w800)),
-                  const SizedBox(height: 4),
-                  Text('Pantau dan kelola seluruh reservasi lapangan aktif di sistem ArenaHub.',
-                      style: _t(size: 13, color: _muted)),
-                  const SizedBox(height: 20),
-                  Row(children: [
-                    _statCard(icon: Icons.confirmation_number_outlined,
-                        iconColor: _blue, label: 'Total Booking',
-                        value: stats['total'].toString()),
-                    const SizedBox(width: 12),
-                    _statCard(icon: Icons.hourglass_empty_rounded,
-                        iconColor: _orange, label: 'Menunggu Verifikasi',
-                        value: stats['pending'].toString()),
-                    const SizedBox(width: 12),
-                    _statCard(icon: Icons.payments_outlined,
-                        iconColor: _green, label: 'Pendapatan Hari Ini',
-                        value: _rp(stats['pendapatanHariIni'])),
-                    const SizedBox(width: 12),
-                    _statCard(icon: Icons.cancel_outlined,
-                        iconColor: _red, label: 'Dibatalkan',
-                        value: stats['batal'].toString()),
-                  ]),
-                  const SizedBox(height: 20),
-                  _buildTable(filtered, snap.connectionState),
-                ],
-              ),
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _firestore
+                  .collection('bookings')
+                  .orderBy('tanggal_booking', descending: true)
+                  .snapshots(),
+              builder: (ctx, snap) {
+                final allBookings = snap.hasData
+                    ? snap.data!.docs
+                        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+                        .toList()
+                    : <Map<String, dynamic>>[];
+
+                final dateFiltered = allBookings.where(_matchesFilter).toList();
+                final filtered = _search.isEmpty
+                    ? dateFiltered
+                    : dateFiltered.where((b) {
+                        final name = (b['customer_name'] ?? '').toString().toLowerCase();
+                        final lap  = (b['nama_lapangan'] ?? '').toString().toLowerCase();
+                        final q    = _search.toLowerCase();
+                        return name.contains(q) || lap.contains(q);
+                      }).toList();
+
+                final stats = _calcStats(allBookings);
+
+                return Column(children: [
+                  _buildTopBar(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Kelola Booking',
+                              style: _t(size: 22, weight: FontWeight.w800)),
+                          const SizedBox(height: 4),
+                          Text('Pantau dan kelola seluruh reservasi lapangan aktif di sistem ArenaHub.',
+                              style: _t(size: 13, color: _muted)),
+                          const SizedBox(height: 20),
+                          Row(children: [
+                            _statCard(icon: Icons.confirmation_number_outlined,
+                                iconColor: _blue, label: 'Total Booking',
+                                value: stats['total'].toString()),
+                            const SizedBox(width: 12),
+                            _statCard(icon: Icons.hourglass_empty_rounded,
+                                iconColor: _orange, label: 'Menunggu Verifikasi',
+                                value: stats['pending'].toString()),
+                            const SizedBox(width: 12),
+                            _statCard(icon: Icons.payments_outlined,
+                                iconColor: _green, label: 'Pendapatan Hari Ini',
+                                value: _rp(stats['pendapatanHariIni'])),
+                            const SizedBox(width: 12),
+                            _statCard(icon: Icons.cancel_outlined,
+                                iconColor: _red, label: 'Dibatalkan',
+                                value: stats['batal'].toString()),
+                          ]),
+                          const SizedBox(height: 20),
+                          _buildTable(filtered, snap.connectionState),
+                        ],
+                      ),
+                    ),
+                  ),
+                ]);
+              },
             ),
           ),
-        ]);
-      },
-    );  // ← titik koma, bukan koma
+        ],
+      ),
+    );
   }
 
-  // TOP BAR
   Widget _buildTopBar() {
     return Container(
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
           color: _white,
           border: Border(bottom: BorderSide(color: _border))),
       child: Row(children: [
@@ -275,7 +270,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     );
   }
 
-  // STAT CARD
   Widget _statCard({required IconData icon, required Color iconColor,
       required String label, required String value}) {
     return Expanded(
@@ -304,14 +298,12 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     );
   }
 
-  //TABEL
   Widget _buildTable(List<Map<String, dynamic>> list, ConnectionState state) {
     return Container(
       decoration: BoxDecoration(color: _white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: _border)),
       child: Column(children: [
-        // Header area: judul + search + filter
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
           child: Column(
@@ -326,7 +318,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                       style: _t(size: 12, color: _muted)),
                 ]),
                 const Spacer(),
-                // Search box
                 Container(
                   width: 240, height: 38,
                   decoration: BoxDecoration(color: _bg,
@@ -334,7 +325,7 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                       border: Border.all(color: _border)),
                   child: Row(children: [
                     const SizedBox(width: 12),
-                    Icon(Icons.search_rounded, size: 18, color: _muted),
+                    const Icon(Icons.search_rounded, size: 18, color: _muted),
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
@@ -355,8 +346,8 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                           _searchCtrl.clear();
                           setState(() => _search = '');
                         },
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 10),
+                        child: const Padding(
+                          padding: EdgeInsets.only(right: 10),
                           child: Icon(Icons.close_rounded,
                               size: 16, color: _muted),
                         ),
@@ -364,7 +355,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                   ]),
                 ),
                 const SizedBox(width: 8),
-                // Filter button
                 _actionBtn(
                   icon: Icons.filter_list_rounded,
                   label: 'Filter',
@@ -372,8 +362,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                   primary: _hasFilter,
                 ),
               ]),
-
-              // Badge filter aktif
               if (_hasFilter)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
@@ -387,7 +375,7 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                           border: Border.all(
                               color: _blue.withOpacity(0.3))),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.calendar_today_rounded,
+                        const Icon(Icons.calendar_today_rounded,
                             size: 13, color: _blue),
                         const SizedBox(width: 5),
                         Text(_filterLabel,
@@ -400,7 +388,7 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
                             _filterMonth = null;
                             _filterYear  = null;
                           }),
-                          child: Icon(Icons.close_rounded,
+                          child: const Icon(Icons.close_rounded,
                               size: 14, color: _blue),
                         ),
                       ]),
@@ -411,7 +399,7 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        Divider(color: _border, height: 1),
+        const Divider(color: _border, height: 1),
 
         if (state == ConnectionState.waiting)
           const Padding(padding: EdgeInsets.all(40),
@@ -420,7 +408,7 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
           Padding(
             padding: const EdgeInsets.all(40),
             child: Column(children: [
-              Icon(Icons.inbox_outlined, size: 48, color: _muted),
+              const Icon(Icons.inbox_outlined, size: 48, color: _muted),
               const SizedBox(height: 12),
               Text('Tidak ada data booking',
                   style: _t(size: 14, color: _muted)),
@@ -433,7 +421,7 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
 
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          decoration: BoxDecoration(border: Border(top: BorderSide(color: _border))),
+          decoration: const BoxDecoration(border: Border(top: BorderSide(color: _border))),
           child: Row(children: [
             Text('Menampilkan ${list.length} entri',
                 style: _t(size: 12, color: _muted)),
@@ -538,11 +526,10 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
           )),
         ]),
       ),
-      Divider(color: _border, height: 1, indent: 24, endIndent: 24),
+      const Divider(color: _border, height: 1, indent: 24, endIndent: 24),
     ]);
   }
 
-  // ACTION BUTTON
   Widget _actionBtn({required IconData icon, required String label,
       required VoidCallback onTap, bool primary = false}) {
     return GestureDetector(
@@ -586,7 +573,6 @@ class _KelolaBookingScreenState extends State<KelolaBookingScreen> {
     ),
   );
 
-  //ACTION
   void _showDetail(Map<String, dynamic> b) {
     showDialog(
       context: context,

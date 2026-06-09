@@ -242,7 +242,7 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
           SliverToBoxAdapter(child: _buildRincianPembayaran(b)),
           if (status == 'selesai' && b['sudah_review'] != true)

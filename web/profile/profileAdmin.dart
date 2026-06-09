@@ -5,12 +5,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:html' as html;
-import '../auth/login.dart';
-import '../admin_notifiers.dart';
 import 'package:http_parser/http_parser.dart';
 
+import '../sidebar.dart';
+import '../admin_notifiers.dart';
+
 class ProfileAdminScreen extends StatefulWidget {
-  final void Function(bool)? onChangesUpdated; // ← jembatan ke dashboard
+  final void Function(bool)? onChangesUpdated; 
   const ProfileAdminScreen({super.key, this.onChangesUpdated});
   @override
   State<ProfileAdminScreen> createState() => _ProfileAdminScreenState();
@@ -34,32 +35,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   static const Color _red    = Color(0xFFEF4444);
   static const Color _green  = Color(0xFF22C55E);
 
-  bool _expanded    = true;
-  int  _selectedNav = 6;
-
-  static const double _collapsedW = 56;
-  static const double _expandedW  = 220;
-
-  static const Map<int, String> _navRoutes = {
-    0: '/dashboard',
-    1: '/booking',
-    2: '/refund',
-    3: '/promo',
-    4: '/jadwal',
-    5: '/field',
-    6: '/profile',
-  };
-
-  final List<Map<String, dynamic>> _navItems = [
-    {'icon': Icons.dashboard_rounded,            'label': 'Dashboard'},
-    {'icon': Icons.confirmation_number_outlined, 'label': 'Kelola Booking'},
-    {'icon': Icons.assignment_return_outlined,   'label': 'Kelola Refund'},
-    {'icon': Icons.percent_rounded,              'label': 'Kelola Promo'},
-    {'icon': Icons.event_note_outlined,          'label': 'Kelola Jadwal'},
-    {'icon': Icons.sports_soccer_rounded,        'label': 'Kelola Lapangan'},
-    {'icon': Icons.person_outline_rounded,       'label': 'Profil'},
-  ];
-
   final _namaController  = TextEditingController();
   final _emailController = TextEditingController();
   final _sandiController = TextEditingController();
@@ -78,7 +53,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   String? _adminDocId;
   String? _fotoUrl;
 
-  // ── Cek ada perubahan belum disimpan ─────────────────────────────────────
   bool get _adaPerubahan =>
       _namaController.text.trim() != _namaAwal ||
       _emailController.text.trim() != _emailAwal ||
@@ -88,13 +62,11 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
   void initState() {
     super.initState();
     _fetchAdminProfile();
-    // Pantau perubahan di semua controller
     _namaController.addListener(_notifyChanges);
     _emailController.addListener(_notifyChanges);
     _sandiController.addListener(_notifyChanges);
   }
 
-  // Kirim status perubahan ke dashboard
   void _notifyChanges() {
     widget.onChangesUpdated?.call(_adaPerubahan);
   }
@@ -266,7 +238,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
         _showSnackBar('Profil berhasil diperbarui!');
         adminNameNotifier.value = nama;
         adminRoleNotifier.value = _level;
-        widget.onChangesUpdated?.call(false); // ← reset notifier setelah simpan
+        widget.onChangesUpdated?.call(false);
       }
     } catch (e) {
       if (mounted) {
@@ -282,49 +254,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
       _emailController.text = _emailAwal;
       _sandiController.clear();
     });
-    widget.onChangesUpdated?.call(false); // ← reset notifier setelah batal
-  }
-
-  void _logout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
-        title: Text('Keluar dari Akun?',
-            style: _t(size: 16, weight: FontWeight.w700)),
-        content: Text('Kamu akan keluar dari panel admin.',
-            style: _t(size: 13, color: _muted)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Batal', style: _t(size: 14, color: _muted)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _red,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: Text('Keluar',
-                style: _t(size: 14, weight: FontWeight.w600,
-                    color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      await _auth.signOut();
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminLoginPage()),
-          (route) => false,
-        );
-      }
-    }
+    widget.onChangesUpdated?.call(false); 
   }
 
   void _showSnackBar(String msg, {bool isError = false}) {
@@ -349,13 +279,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     );
   }
 
-  String _initials(String name) {
-    final p = name.trim().split(' ');
-    return p.length >= 2
-        ? '${p[0][0]}${p[1][0]}'.toUpperCase()
-        : name.isNotEmpty ? name[0].toUpperCase() : '?';
-  }
-
   TextStyle _t({double size = 14, FontWeight weight = FontWeight.normal,
       Color color = _text, double spacing = 0}) =>
       GoogleFonts.plusJakartaSans(fontSize: size, fontWeight: weight,
@@ -363,250 +286,40 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return _loading
-        ? const Center(child: CircularProgressIndicator(color: _blue))
-        : SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Profil Saya',
-                    style: _t(size: 24, weight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                Text(
-                  'Kelola informasi akun dan preferensi keamanan Anda di ArenaHub.',
-                  style: _t(size: 14, color: _muted),
-                ),
-                const SizedBox(height: 28),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 300, child: _buildProfileCard()),
-                    const SizedBox(width: 24),
-                    Expanded(child: _buildDetailForm()),
-                  ],
-                ),
-              ],
-            ),
-          );
-  }
-
-  Widget _buildSidebar() {
-    return ClipRect(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeInOut,
-        width: _expanded ? _expandedW : _collapsedW,
-        color: _white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 64,
-              padding: EdgeInsets.symmetric(
-                  horizontal: _expanded ? 14 : 10),
-              decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: _border))),
-              child: Row(children: [
-                Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(
-                      color: _blue,
-                      borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.sports_soccer_rounded,
-                      color: Colors.white, size: 20),
-                ),
-                AnimatedOpacity(
-                  opacity: _expanded ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: SizedBox(
-                    width: _expandedW - 36 - 14 - 14,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+    return Scaffold(
+      backgroundColor: _bg,
+      body: Row(
+        children: [
+          const AdminSidebar(currentIndex: 6), // SIDEBAR
+          Expanded(
+            child: _loading
+              ? const Center(child: CircularProgressIndicator(color: _blue))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Profil Saya', style: _t(size: 24, weight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Kelola informasi akun dan preferensi keamanan Anda di ArenaHub.',
+                        style: _t(size: 14, color: _muted),
+                      ),
+                      const SizedBox(height: 28),
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('ArenaHub',
-                              style: _t(size: 14, weight: FontWeight.w800,
-                                  color: _blue),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                          Text('PANEL ADMINISTRASI',
-                              style: _t(size: 8, weight: FontWeight.w600,
-                                  color: _muted, spacing: 0.5),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
+                          SizedBox(width: 300, child: _buildProfileCard()),
+                          const SizedBox(width: 24),
+                          Expanded(child: _buildDetailForm()),
                         ],
-                      ),
-                    ),
-                  ),
-                ),
-              ]),
-            ),
-            const SizedBox(height: 12),
-            ...List.generate(_navItems.length, (i) {
-              final active = _selectedNav == i;
-              final item   = _navItems[i];
-              return GestureDetector(
-                onTap: () {
-                  setState(() => _selectedNav = i);
-                  if (i != 6) {
-                    final route = _navRoutes[i];
-                    if (route != null) {
-                      Navigator.pushReplacementNamed(context, route);
-                    }
-                  }
-                },
-                child: Container(
-                  margin: EdgeInsets.symmetric(
-                      horizontal: _expanded ? 8 : 4, vertical: 2),
-                  padding: EdgeInsets.symmetric(
-                      horizontal: _expanded ? 10 : 4, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: active ? _blueBg : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        width: 3, height: 20,
-                        margin: EdgeInsets.only(right: _expanded ? 7 : 2),
-                        decoration: BoxDecoration(
-                          color: active ? _blue : Colors.transparent,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      Icon(item['icon'] as IconData,
-                          color: active ? _blue : _muted, size: 20),
-                      AnimatedOpacity(
-                        opacity: _expanded ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 150),
-                        child: SizedBox(
-                          width: _expanded ? _expandedW - 80 : 0,
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 10),
-                            child: Text(item['label'] as String,
-                                style: _t(size: 13,
-                                    weight: active
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: active ? _blue : _muted),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
-                          ),
-                        ),
                       ),
                     ],
                   ),
                 ),
-              );
-            }),
-            const Spacer(),
-            GestureDetector(
-              onTap: _logout,
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 10),
-                decoration: BoxDecoration(
-                  color: _red.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(width: 3, height: 20),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.logout_rounded, color: _red, size: 20),
-                    AnimatedOpacity(
-                      opacity: _expanded ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 150),
-                      child: SizedBox(
-                        width: _expanded ? _expandedW - 80 : 0,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 10),
-                          child: Text('Keluar',
-                              style: TextStyle(fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _red),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: _border))),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: const BoxDecoration(
-                        shape: BoxShape.circle, color: _blue),
-                    child: ClipOval(
-                      child: _fotoUrl != null
-                          ? Image.network(_fotoUrl!, fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  Center(child: Text(_initials(_adminName),
-                                      style: _t(size: 13,
-                                          weight: FontWeight.w700,
-                                          color: Colors.white))))
-                          : Center(child: Text(_initials(_adminName),
-                              style: _t(size: 13, weight: FontWeight.w700,
-                                  color: Colors.white))),
-                    ),
-                  ),
-                  AnimatedOpacity(
-                    opacity: _expanded ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: SizedBox(
-                      width: _expanded
-                          ? _expandedW - 36 - 12 - 12 - 10
-                          : 0,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_adminName,
-                                style: _t(size: 12, weight: FontWeight.w700),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
-                            Text(_adminRole,
-                                style: _t(size: 10, color: _muted),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Container(
-      height: 60, color: _white,
-      padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Row(children: [
-        Text('Profil', style: _t(size: 17, weight: FontWeight.w700)),
-        const Spacer(),
-      ]),
     );
   }
 

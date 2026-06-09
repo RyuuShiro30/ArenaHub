@@ -141,11 +141,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _formatStatus(String? status) {
     final s = status?.toLowerCase() ?? '';
-    if (s == 'paid' || s == 'selesai' || s.contains('selesai'))
+    if (s == 'paid' || s == 'selesai' || s.contains('selesai')) {
       return 'SELESAI';
+    }
     if (s == 'pending') return 'PENDING';
-    if (s == 'cancelled' || s == 'batal' || s.contains('gagal'))
+    if (s == 'cancelled' || s == 'batal' || s.contains('gagal')) {
       return 'DIBATALKAN';
+    }
     return (status ?? '').toUpperCase();
   }
 
@@ -153,8 +155,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final s = status?.toLowerCase() ?? '';
     if (s == 'paid' || s == 'selesai' || s.contains('selesai')) return _accent;
     if (s == 'pending') return Colors.orange;
-    if (s == 'cancelled' || s == 'batal' || s.contains('gagal'))
+    if (s == 'cancelled' || s == 'batal' || s.contains('gagal')) {
       return Colors.red;
+    }
     return _accent;
   }
 

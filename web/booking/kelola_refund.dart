@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'dart:html' as html;
+import '../sidebar.dart';
 
 class KelolaRefundScreen extends StatefulWidget {
   const KelolaRefundScreen({super.key});
@@ -201,101 +202,111 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('refund_requests')
-          .orderBy('created_at', descending: true)
-          .snapshots(),
-      builder: (ctx, snap) {
-        final allRequests = snap.hasData
-            ? snap.data!.docs
-                .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
-                .toList()
-            : <Map<String, dynamic>>[];
+    return Scaffold(
+      backgroundColor: _bg, // Menambahkan warna background dari variabel yang ada
+      body: Row(
+        children: [
+          const AdminSidebar(currentIndex: 2), // PANGGIL SIDEBAR, INDEX 2 UNTUK REFUND
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _firestore
+                  .collection('refund_requests')
+                  .orderBy('created_at', descending: true)
+                  .snapshots(),
+              builder: (ctx, snap) {
+                final allRequests = snap.hasData
+                    ? snap.data!.docs
+                        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+                        .toList()
+                    : <Map<String, dynamic>>[];
 
-        // Filter by current tab
-        final tabFiltered = allRequests.where((r) {
-          final s = (r['status_refund'] ?? 'menunggu').toString().toLowerCase();
-          if (_currentTab == 'menunggu') return s == 'menunggu';
-          if (_currentTab == 'disetujui') return s == 'disetujui' || s == 'selesai';
-          if (_currentTab == 'ditolak') return s == 'ditolak';
-          return true;
-        }).toList();
+                // Filter by current tab
+                final tabFiltered = allRequests.where((r) {
+                  final s = (r['status_refund'] ?? 'menunggu').toString().toLowerCase();
+                  if (_currentTab == 'menunggu') return s == 'menunggu';
+                  if (_currentTab == 'disetujui') return s == 'disetujui' || s == 'selesai';
+                  if (_currentTab == 'ditolak') return s == 'ditolak';
+                  return true;
+                }).toList();
 
-        // Search filter
-        final filtered = _search.isEmpty
-            ? tabFiltered
-            : tabFiltered.where((r) {
-                final email = (r['user_email'] ?? '').toString().toLowerCase();
-                final name = (r['nama_rekening'] ?? '').toString().toLowerCase();
-                final lap = (r['nama_lapangan'] ?? '').toString().toLowerCase();
-                final orderId = (r['order_id'] ?? '').toString().toLowerCase();
-                final q = _search.toLowerCase();
-                return email.contains(q) ||
-                    name.contains(q) ||
-                    lap.contains(q) ||
-                    orderId.contains(q);
-              }).toList();
+                // Search filter
+                final filtered = _search.isEmpty
+                    ? tabFiltered
+                    : tabFiltered.where((r) {
+                        final email = (r['user_email'] ?? '').toString().toLowerCase();
+                        final name = (r['nama_rekening'] ?? '').toString().toLowerCase();
+                        final lap = (r['nama_lapangan'] ?? '').toString().toLowerCase();
+                        final orderId = (r['order_id'] ?? '').toString().toLowerCase();
+                        final q = _search.toLowerCase();
+                        return email.contains(q) ||
+                            name.contains(q) ||
+                            lap.contains(q) ||
+                            orderId.contains(q);
+                      }).toList();
 
-        final stats = _calcStats(allRequests);
+                final stats = _calcStats(allRequests);
 
-        return Column(
-          children: [
-            _buildTopBar(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                return Column(
                   children: [
-                    Text('Kelola Refund & Pembatalan',
-                        style: _t(size: 22, weight: FontWeight.w800)),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Tinjau permohonan refund dari pengguna dan catat bukti penyelesaian transaksi pembatalan.',
-                      style: _t(size: 13, color: _muted),
+                    _buildTopBar(),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Kelola Refund & Pembatalan',
+                                style: _t(size: 22, weight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Tinjau permohonan refund dari pengguna dan catat bukti penyelesaian transaksi pembatalan.',
+                              style: _t(size: 13, color: _muted),
+                            ),
+                            const SizedBox(height: 20),
+                            Row(
+                              children: [
+                                _statCard(
+                                  icon: Icons.assignment_return_outlined,
+                                  iconColor: _blue,
+                                  label: 'Total Permohonan',
+                                  value: stats['total'].toString(),
+                                ),
+                                const SizedBox(width: 12),
+                                _statCard(
+                                  icon: Icons.hourglass_empty_rounded,
+                                  iconColor: _orange,
+                                  label: 'Menunggu Verifikasi',
+                                  value: stats['pending'].toString(),
+                                ),
+                                const SizedBox(width: 12),
+                                _statCard(
+                                  icon: Icons.check_circle_outline_rounded,
+                                  iconColor: _green,
+                                  label: 'Total Dana Direfund',
+                                  value: _rp(stats['totalRefunded']),
+                                ),
+                                const SizedBox(width: 12),
+                                _statCard(
+                                  icon: Icons.cancel_outlined,
+                                  iconColor: _red,
+                                  label: 'Permohonan Ditolak',
+                                  value: stats['rejected'].toString(),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            _buildTable(filtered, snap.connectionState),
+                          ],
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        _statCard(
-                          icon: Icons.assignment_return_outlined,
-                          iconColor: _blue,
-                          label: 'Total Permohonan',
-                          value: stats['total'].toString(),
-                        ),
-                        const SizedBox(width: 12),
-                        _statCard(
-                          icon: Icons.hourglass_empty_rounded,
-                          iconColor: _orange,
-                          label: 'Menunggu Verifikasi',
-                          value: stats['pending'].toString(),
-                        ),
-                        const SizedBox(width: 12),
-                        _statCard(
-                          icon: Icons.check_circle_outline_rounded,
-                          iconColor: _green,
-                          label: 'Total Dana Direfund',
-                          value: _rp(stats['totalRefunded']),
-                        ),
-                        const SizedBox(width: 12),
-                        _statCard(
-                          icon: Icons.cancel_outlined,
-                          iconColor: _red,
-                          label: 'Permohonan Ditolak',
-                          value: stats['rejected'].toString(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    _buildTable(filtered, snap.connectionState),
                   ],
-                ),
-              ),
+                );
+              },
             ),
-          ],
-        );
-      },
+          ),
+        ],
+      ),
     );
   }
 
@@ -304,7 +315,7 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
     return Container(
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _white,
         border: Border(bottom: BorderSide(color: _border)),
       ),
@@ -403,7 +414,7 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                   child: Row(
                     children: [
                       const SizedBox(width: 12),
-                      Icon(Icons.search_rounded, size: 18, color: _muted),
+                      const Icon(Icons.search_rounded, size: 18, color: _muted),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
@@ -424,8 +435,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                             _searchCtrl.clear();
                             setState(() => _search = '');
                           },
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 10),
+                          child: const Padding(
+                            padding: EdgeInsets.only(right: 10),
                             child: Icon(Icons.close_rounded, size: 16, color: _muted),
                           ),
                         ),
@@ -446,7 +457,7 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
               padding: const EdgeInsets.all(40),
               child: Column(
                 children: [
-                  Icon(Icons.inbox_outlined, size: 48, color: _muted),
+                  const Icon(Icons.inbox_outlined, size: 48, color: _muted),
                   const SizedBox(height: 12),
                   Text('Tidak ada data permohonan refund', style: _t(size: 14, color: _muted)),
                 ],
@@ -460,7 +471,7 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
 
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: _border)),
             ),
             child: Row(
@@ -689,7 +700,7 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
             ],
           ),
         ),
-        Divider(color: _border, height: 1, indent: 24, endIndent: 24),
+        const Divider(color: _border, height: 1, indent: 24, endIndent: 24),
       ],
     );
   }
@@ -1046,9 +1057,9 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
   String _formatWhatsAppNumber(String phone) {
     String digits = phone.replaceAll(RegExp(r'\D'), '');
     if (digits.startsWith('0')) {
-      digits = '62' + digits.substring(1);
+      digits = '62${digits.substring(1)}';
     } else if (digits.startsWith('8')) {
-      digits = '62' + digits;
+      digits = '62$digits';
     }
     return digits;
   }
@@ -1124,8 +1135,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                     'processed_at': FieldValue.serverTimestamp(),
                   });
                   messenger.showSnackBar(
-                    SnackBar(
-                      content: const Text('Permohonan refund berhasil ditolak'),
+                    const SnackBar(
+                      content: Text('Permohonan refund berhasil ditolak'),
                       backgroundColor: _red,
                     ),
                   );
@@ -1249,8 +1260,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                   await batch.commit();
 
                   messenger.showSnackBar(
-                    SnackBar(
-                      content: const Text('Refund disetujui dan status berhasil diperbarui'),
+                    const SnackBar(
+                      content: Text('Refund disetujui dan status berhasil diperbarui'),
                       backgroundColor: _green,
                     ),
                   );
