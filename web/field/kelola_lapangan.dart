@@ -248,44 +248,65 @@ class _KelolaLapanganScreenState extends State<KelolaLapanganScreen> {
     );
   }
 
+  // REDESIGN: Action Menu / Pop-Up 3 titik
   void _showActionMenu(BuildContext context, FieldItem field, Offset offset) {
     showMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(
-          offset.dx, offset.dy, offset.dx + 1, offset.dy + 1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      position: RelativeRect.fromLTRB(offset.dx, offset.dy, offset.dx + 1, offset.dy + 1),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      color: Colors.white,
+      elevation: 6,
       items: [
         PopupMenuItem<String>(
           value: 'edit',
+          height: 50,
           child: Row(children: [
-            const Icon(Icons.edit_outlined, size: 18, color: Colors.orange),
-            const SizedBox(width: 8),
-            Text("Edit Lapangan", style: GoogleFonts.inter(fontSize: 13))
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.edit_outlined, size: 18, color: Colors.orange),
+            ),
+            const SizedBox(width: 12),
+            Text("Edit Lapangan", style: GoogleFonts.poppins(fontSize: 13.5, fontWeight: FontWeight.w500, color: const Color(0xFF1E293B)))
           ]),
         ),
         PopupMenuItem<String>(
           value: 'toggle',
+          height: 50,
           child: Row(children: [
-            Icon(
-              field.status == 'Aktif'
-                  ? Icons.pause_circle_outline
-                  : Icons.play_circle_outline,
-              size: 18,
-              color: field.status == 'Aktif' ? Colors.grey : Colors.green,
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: field.status == 'Aktif' ? Colors.grey.shade100 : Colors.green.shade50, 
+                borderRadius: BorderRadius.circular(8)
+              ),
+              child: Icon(
+                field.status == 'Aktif' ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                size: 18,
+                color: field.status == 'Aktif' ? Colors.grey.shade600 : Colors.green,
+              ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Text(field.status == 'Aktif' ? "Non-Aktifkan" : "Aktifkan",
-                style: GoogleFonts.inter(fontSize: 13))
+                style: GoogleFonts.poppins(fontSize: 13.5, fontWeight: FontWeight.w500, color: const Color(0xFF1E293B)))
           ]),
         ),
-        const PopupMenuDivider(),
+        const PopupMenuDivider(height: 1),
         PopupMenuItem<String>(
           value: 'delete',
+          height: 50,
           child: Row(children: [
-            const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+            ),
+            const SizedBox(width: 12),
             Text("Hapus",
-                style: GoogleFonts.inter(fontSize: 13, color: Colors.red))
+                style: GoogleFonts.poppins(fontSize: 13.5, fontWeight: FontWeight.w600, color: Colors.red))
           ]),
         ),
       ],
