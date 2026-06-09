@@ -51,9 +51,9 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
   final List<String> _tipeLapangan = [
     'Futsal Rumput',
     'Futsal Sintetis',
-    'Bulutangkis',
+    'Badminton',
     'Basket',
-    'Tenis',
+    'Tennis',
     'Padel'
   ];
   
@@ -177,7 +177,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
         cleanText.contains('kafe')) {
       return Icons.restaurant;
     }
-    if (cleanText.contains('musholla') ||
+    if (cleanText.contains('musala') ||
         cleanText.contains('sholat') ||
         cleanText.contains('mesjid')) {
       return Icons.mosque;
@@ -191,7 +191,11 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
     if (cleanText.contains('ac') || cleanText.contains('kipas')) {
       return Icons.ac_unit;
     }
-    if (cleanText.contains('tribun') || cleanText.contains('duduk')) {
+    if (cleanText.contains('tribun') || cleanText.contains('duduk'))
+    if (cleanText.contains('net') || cleanText.contains('raket'))
+    if (cleanText.contains('bola') || cleanText.contains('ball'))
+    if (cleanText.contains('lampu') || cleanText.contains('lighting')) 
+    if (cleanText.contains('ring') || cleanText.contains('audio')){
       return Icons.chair;
     }
     return Icons.star_border_rounded;
