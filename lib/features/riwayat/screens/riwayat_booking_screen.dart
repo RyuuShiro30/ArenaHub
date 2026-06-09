@@ -8,6 +8,7 @@ import '../widgets/riwayat_booking_card.dart';
 import '../screens/detail_riwayat.dart';
 import '../screens/review.dart';
 import '../../booking/screens/cancel_refund_page.dart';
+import '../../auth/screens/pencarian_lapangan_screen.dart'; // Import Halaman Pencarian Lapangan
 import 'package:google_fonts/google_fonts.dart';
 
 class RiwayatBookingScreen extends StatefulWidget {
@@ -147,24 +148,23 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
   }
 
   PreferredSizeWidget _buildAppBar() {
-  return AppBar(
-    backgroundColor: Colors.white,
-    elevation: 0.5,
-    surfaceTintColor: Colors.white,
-    leading: IconButton(
-      icon: const Icon(Icons.arrow_back,
-          color: Color(0xFF0B4E89), size: 24),
-      onPressed: () => Navigator.of(context).maybePop(),
-    ),
-    title: Text(
-      'Riwayat Booking',
-      style: GoogleFonts.poppins(
-          color: const Color(0xFF0B4E89),
-          fontWeight: FontWeight.w700,
-          fontSize: 18),
-    ),
-  );
-}
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0.5,
+      surfaceTintColor: Colors.white,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Color(0xFF0B4E89), size: 24),
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
+      title: Text(
+        'Riwayat Booking',
+        style: GoogleFonts.poppins(
+            color: const Color(0xFF0B4E89),
+            fontWeight: FontWeight.w700,
+            fontSize: 18),
+      ),
+    );
+  }
 
   Widget _buildTabBar() {
     return Container(
@@ -301,10 +301,9 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
             final item = filtered[index];
             final isSelesai = item.model.status == BookingStatus.selesai;
 
-            return RiwayatBookingCard(
-              booking: item.model,
-              sudahReview: item.sudahReview,
-              onLihatDetail: () {
+            return GestureDetector(
+              onTap: () {
+                // Navigasi ke Detail Booking jika card diklik
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -312,28 +311,36 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                   ),
                 );
               },
-              // 2. Pasang callback onCancel untuk tombol Batalkan
-              onCancel: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CancelRefundPage(bookingId: item.docId),
-                  ),
-                );
-              },
-              onBeriUlasan: (isSelesai && !item.sudahReview)
-                  ? () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ReviewPage(bookingId: item.docId),
-                        ),
-                      );
-                    }
-                  : null,
-              onPesanLagi: () {
-                // Implementasi logika pesan lagi jika diperlukan
-              },
+              child: RiwayatBookingCard(
+                booking: item.model,
+                sudahReview: item.sudahReview,
+                // Pastikan teks tombol di dalam file riwayat_booking_card.dart diganti jadi "Reschedule"
+                // Fungsi di bawah ini memanggil pop up reschedule
+                onLihatDetail: () {
+                  _showRescheduleInfoBottomSheet(context, item.model);
+                },
+                onCancel: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CancelRefundPage(bookingId: item.docId),
+                    ),
+                  );
+                },
+                onBeriUlasan: (isSelesai && !item.sudahReview)
+                    ? () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ReviewPage(bookingId: item.docId),
+                          ),
+                        );
+                      }
+                    : null,
+                onPesanLagi: () {
+                  // Implementasi logika pesan lagi jika diperlukan
+                },
+              ),
             );
           },
         );
@@ -366,6 +373,224 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: Colors.grey.shade400)),
+        ],
+      ),
+    );
+  }
+
+  // ── Bottom Sheet untuk menampilkan Syarat & Ketentuan Reschedule ────
+  void _showRescheduleInfoBottomSheet(BuildContext context, RiwayatBookingModel model) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).padding.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle garis di atas modal
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Reschedule Booking',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A1A2E),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Detail Booking Card 
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'DETAIL BOOKING',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: model.imagePath.isNotEmpty && model.imagePath.startsWith('http')
+                              ? Image.network(model.imagePath, width: 70, height: 70, fit: BoxFit.cover)
+                              : Container(
+                                  width: 70,
+                                  height: 70,
+                                  color: const Color(0xFFE3EAF5),
+                                  child: const Icon(Icons.sports_soccer_rounded, color: Color(0xFF1B4E82)),
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                model.namaLapangan,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1A1A2E)),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${model.tanggal}\n${model.waktu}',
+                                style: const TextStyle(color: Color(0xFF666666), fontSize: 13),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                NumberFormat.currency(locale: 'id_ID', symbol: 'IDR ', decimalDigits: 0)
+                                    .format(model.totalPembayaran),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF135B9D),
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0F5FF),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Booking ID: ${model.bookingId}',
+                        style: const TextStyle(
+                          color: Color(0xFF135B9D),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Ketentuan Reschedule (Box Kuning)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF9E6),
+                  border: Border.all(color: const Color(0xFFFFD54F)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Color(0xFFF57F17), size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'Ketentuan Reschedule',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFF57F17)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildRuleText('Reschedule dapat dilakukan maksimal H-2 dari jadwal yang telah dipesan.'),
+                    _buildRuleText('Tidak ada biaya tambahan untuk melakukan reschedule.'),
+                    _buildRuleText('Silakan pilih jadwal dan lapangan baru pada halaman pencarian.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Tombol Aksi - Langsung Navigasi ke Pencarian Lapangan Screen
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context); // Menutup bottom sheet
+
+                      // Langsung navigasi ke layar pencarian lapangan
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PencarianLapanganScreen(),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF135B9D),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    child: const Text('Pilih Lapangan Baru', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRuleText(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(color: Color(0xFF666666), fontSize: 16, height: 1.0)),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: Color(0xFF666666), fontSize: 13.5, height: 1.4),
+            ),
+          ),
         ],
       ),
     );
