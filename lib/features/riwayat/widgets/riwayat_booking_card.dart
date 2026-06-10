@@ -305,7 +305,7 @@ class RiwayatBookingCard extends StatelessWidget {
               child: SizedBox(
                 height: 44,
                 child: ElevatedButton(
-                  onPressed: onPesanLagi,
+                  onPressed: onLihatDetail,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1565C0),
                     foregroundColor: Colors.white,
@@ -315,7 +315,7 @@ class RiwayatBookingCard extends StatelessWidget {
                     elevation: 0,
                   ),
                   child: const Text(
-                    'Pesan Lagi',
+                    'Detail Booking',
                     style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w700,
