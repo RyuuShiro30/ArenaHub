@@ -131,12 +131,12 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
       final hoursDifference = difference.inHours;
 
       if (hoursDifference < 24) {
-        final recommendedAmount = totalHarga * 0.5;
+        final recommendedAmount = totalHarga * 0.75;
         return {
-          'percent': 50,
+          'percent': 75,
           'amount': recommendedAmount,
           'message':
-              'Pembatalan dilakukan kurang dari 24 jam sebelum jadwal main ($hoursDifference jam sebelumnya). Sesuai ketentuan, dikenakan potongan 50%.',
+              'Pembatalan dilakukan kurang dari 24 jam sebelum jadwal main ($hoursDifference jam sebelumnya). Sesuai ketentuan, dikenakan potongan 25%.',
           'isPenalty': true,
         };
       } else {
@@ -515,7 +515,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
               ],
             ),
           ),
-
           if (state == ConnectionState.waiting)
             const Padding(
               padding: EdgeInsets.all(40),
@@ -538,7 +537,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
             const Divider(color: _border, height: 1),
             ...list.map(_tableRow),
           ],
-
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             decoration: const BoxDecoration(
@@ -840,16 +838,13 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-
                       _buildDialogSectionHeader('Informasi Pelanggan'),
                       _detailRow('Nama Pemohon', r['nama_rekening'] ?? '-'),
                       _detailRow('Email Akun', r['user_email'] ?? '-'),
                       if (userPhone.isNotEmpty)
                         _phoneRow('No. Telepon', userPhone),
                       _detailRow('ID Booking', r['order_id'] ?? '-'),
-
                       const Divider(height: 20),
-
                       _buildDialogSectionHeader('Detail Lapangan & Jadwal'),
                       _detailRow('Nama Lapangan', r['nama_lapangan'] ?? '-'),
                       _detailRow('Tanggal Main',
@@ -860,9 +855,7 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                               ? selectedTimes.toString()
                               : '-'),
                       _detailRow('Waktu Pengajuan', _dateTime(createdAt)),
-
                       const Divider(height: 20),
-
                       _buildDialogSectionHeader('Rekening Pengembalian Dana'),
                       _rekeningRow('Bank Tujuan', r['nama_bank'] ?? '-'),
                       _rekeningRow('Nomor Rekening', r['no_rekening'] ?? '-'),
@@ -870,9 +863,7 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                           'Atas Nama (Rek)', r['nama_rekening'] ?? '-'),
                       _detailRow('Alasan Pembatalan', r['alasan_cancel'] ?? '-',
                           isItalic: true),
-
                       const Divider(height: 20),
-
                       if (status == 'menunggu') ...[
                         Container(
                           width: double.infinity,
@@ -903,7 +894,7 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                                   const SizedBox(width: 8),
                                   Text(
                                     rec['isPenalty']
-                                        ? 'Kebijakan: Potongan 50%'
+                                        ? 'Kebijakan: Potongan 25%'
                                         : 'Kebijakan: Refund Penuh 100%',
                                     style: _t(
                                       size: 13,
@@ -985,7 +976,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                         ],
                         const SizedBox(height: 20),
                       ],
-
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
