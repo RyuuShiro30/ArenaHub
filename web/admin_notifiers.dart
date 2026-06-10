@@ -8,3 +8,5 @@ final ValueNotifier<String> adminRoleNotifier = ValueNotifier<String>('Administr
 final ValueNotifier<String?> adminPhotoNotifier = ValueNotifier<String?>(null);
 // Notifier untuk manajemen state indeks halaman/navigasi admin secara global
 final ValueNotifier<int> adminCurrentIndexNotifier = ValueNotifier<int>(0);
+// Notifier untuk menandai ada/tidaknya perubahan yang belum disimpan di halaman Profil
+final ValueNotifier<bool> adminHasUnsavedChangesNotifier = ValueNotifier<bool>(false);

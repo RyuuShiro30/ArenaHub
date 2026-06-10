@@ -55,7 +55,6 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
 
   bool get _adaPerubahan =>
       _namaController.text.trim() != _namaAwal ||
-      _emailController.text.trim() != _emailAwal ||
       _sandiController.text.trim().isNotEmpty;
 
   @override
@@ -63,16 +62,19 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     super.initState();
     _fetchAdminProfile();
     _namaController.addListener(_notifyChanges);
-    _emailController.addListener(_notifyChanges);
     _sandiController.addListener(_notifyChanges);
   }
 
   void _notifyChanges() {
     widget.onChangesUpdated?.call(_adaPerubahan);
+    // Update notifier global agar sidebar bisa membacanya
+    adminHasUnsavedChangesNotifier.value = _adaPerubahan;
   }
 
   @override
   void dispose() {
+    // Reset notifier saat halaman ini ditutup
+    adminHasUnsavedChangesNotifier.value = false;
     _namaController.dispose();
     _emailController.dispose();
     _sandiController.dispose();
@@ -187,15 +189,96 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
     }
   }
 
+  Future<void> _hapusFoto() async {
+    // Tidak ada foto untuk dihapus
+    if (_fotoUrl == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: Container(
+          width: 48, height: 48,
+          decoration: BoxDecoration(
+            color: _red.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.delete_outline_rounded, color: _red, size: 26),
+        ),
+        title: Text('Hapus Foto Profil?',
+            style: _t(size: 16, weight: FontWeight.w700),
+            textAlign: TextAlign.center),
+        content: Text(
+          'Foto profil akan dihapus dan diganti dengan avatar default.',
+          style: _t(size: 13, color: _muted),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context, false),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: _border),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Batal', style: _t(size: 13, weight: FontWeight.w600, color: _muted)),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _red,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Hapus', style: _t(size: 13, weight: FontWeight.w600, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _uploadingFoto = true);
+    try {
+      if (_adminDocId != null) {
+        await _firestore
+            .collection('admin_profile')
+            .doc(_adminDocId)
+            .update({
+          'photoUrl' : FieldValue.delete(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      if (mounted) {
+        setState(() {
+          _fotoUrl       = null;
+          _uploadingFoto = false;
+        });
+        adminPhotoNotifier.value = null;
+        _showSnackBar('Foto profil berhasil dihapus.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploadingFoto = false);
+        _showSnackBar('Gagal menghapus foto: $e', isError: true);
+      }
+    }
+  }
+
   Future<void> _simpanPerubahan() async {
     if (_saving) return;
 
     final nama  = _namaController.text.trim();
-    final email = _emailController.text.trim();
     final sandi = _sandiController.text.trim();
 
-    if (nama.isEmpty || email.isEmpty) {
-      _showSnackBar('Nama dan Email tidak boleh kosong', isError: true);
+    if (nama.isEmpty) {
+      _showSnackBar('Nama tidak boleh kosong', isError: true);
       return;
     }
 
@@ -208,14 +291,8 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
             .doc(_adminDocId)
             .update({
           'fullName' : nama,
-          'email'    : email,
           'updatedAt': FieldValue.serverTimestamp(),
         });
-      }
-
-      final user = _auth.currentUser;
-      if (user != null && email != user.email) {
-        await user.verifyBeforeUpdateEmail(email);
       }
 
       if (sandi.isNotEmpty) {
@@ -224,13 +301,13 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
           setState(() => _saving = false);
           return;
         }
+        final user = _auth.currentUser;
         if (user != null) await user.updatePassword(sandi);
       }
 
       if (mounted) {
         setState(() {
           _namaAwal  = nama;
-          _emailAwal = email;
           _adminName = nama;
           _sandiController.clear();
           _saving = false;
@@ -239,6 +316,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
         adminNameNotifier.value = nama;
         adminRoleNotifier.value = _level;
         widget.onChangesUpdated?.call(false);
+        adminHasUnsavedChangesNotifier.value = false;
       }
     } catch (e) {
       if (mounted) {
@@ -254,7 +332,8 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
       _emailController.text = _emailAwal;
       _sandiController.clear();
     });
-    widget.onChangesUpdated?.call(false); 
+    widget.onChangesUpdated?.call(false);
+    adminHasUnsavedChangesNotifier.value = false;
   }
 
   void _showSnackBar(String msg, {bool isError = false}) {
@@ -363,25 +442,91 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
                             color: _blue.withOpacity(0.4)),
               ),
             ),
+            // Tombol pensil — kanan bawah, membuka popup menu
             Positioned(
               bottom: 4, right: 4,
-              child: GestureDetector(
-                onTap: _uploadingFoto ? null : _pilihDanUploadFoto,
-                child: Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(
-                    color: _blue,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: _white, width: 2.5),
-                    boxShadow: [
-                      BoxShadow(color: _blue.withOpacity(0.3),
-                          blurRadius: 6, offset: const Offset(0, 2)),
-                    ],
-                  ),
-                  child: const Icon(Icons.camera_alt_rounded,
-                      size: 15, color: Colors.white),
-                ),
-              ),
+              child: _uploadingFoto
+                  ? Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        color: _blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _white, width: 2.5),
+                      ),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 14, height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        ),
+                      ),
+                    )
+                  : PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'ganti') _pilihDanUploadFoto();
+                        if (value == 'hapus') _hapusFoto();
+                      },
+                      offset: const Offset(0, -100),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      elevation: 6,
+                      color: _white,
+                      tooltip: 'Edit foto profil',
+                      itemBuilder: (_) => [
+                        PopupMenuItem(
+                          value: 'ganti',
+                          height: 48,
+                          child: Row(children: [
+                            Container(
+                              width: 32, height: 32,
+                              decoration: BoxDecoration(
+                                color: _blueBg,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.camera_alt_rounded,
+                                  size: 17, color: _blue),
+                            ),
+                            const SizedBox(width: 10),
+                            Text('Ganti Foto',
+                                style: _t(size: 13, weight: FontWeight.w600)),
+                          ]),
+                        ),
+                        if (_fotoUrl != null)
+                          PopupMenuItem(
+                            value: 'hapus',
+                            height: 48,
+                            child: Row(children: [
+                              Container(
+                                width: 32, height: 32,
+                                decoration: BoxDecoration(
+                                  color: _red.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.delete_outline_rounded,
+                                    size: 17, color: _red),
+                              ),
+                              const SizedBox(width: 10),
+                              Text('Hapus Foto',
+                                  style: _t(size: 13,
+                                      weight: FontWeight.w600, color: _red)),
+                            ]),
+                          ),
+                      ],
+                      child: Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(
+                          color: _blue,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _white, width: 2.5),
+                          boxShadow: [
+                            BoxShadow(color: _blue.withOpacity(0.3),
+                                blurRadius: 6, offset: const Offset(0, 2)),
+                          ],
+                        ),
+                        child: const Icon(Icons.edit_rounded,
+                            size: 14, color: Colors.white),
+                      ),
+                    ),
             ),
           ],
         ),
@@ -475,12 +620,7 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
 
           _buildLabel('Alamat Email'),
           const SizedBox(height: 8),
-          _buildTextField(
-            controller: _emailController,
-            icon: Icons.email_outlined,
-            hint: 'Masukkan alamat email',
-            keyboardType: TextInputType.emailAddress,
-          ),
+          _buildEmailReadOnly(),
           const SizedBox(height: 22),
 
           _buildLabel('Kata Sandi Baru'),
@@ -622,6 +762,28 @@ class _ProfileAdminScreenState extends State<ProfileAdminScreen> {
               const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
         ),
       ),
+    );
+  }
+
+  Widget _buildEmailReadOnly() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+        color: const Color(0xFFF9FAFB), // latar abu-abu
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+      child: Row(children: [
+        Icon(Icons.email_outlined, size: 20, color: _muted),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            _emailAwal.isNotEmpty ? _emailAwal : '-',
+            style: _t(size: 14, color: _muted),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ]),
     );
   }
 }
