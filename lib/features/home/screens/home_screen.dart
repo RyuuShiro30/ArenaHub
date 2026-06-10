@@ -123,6 +123,12 @@ class _HomeScreenState extends State<HomeScreen> {
         final dt = tanggal.toDate();
         return DateFormat('EEEE, d MMM yyyy', 'id_ID').format(dt).toUpperCase();
       }
+      if (tanggal is String) {
+        final dt = DateTime.tryParse(tanggal);
+        if (dt != null) {
+          return DateFormat('EEEE, d MMM yyyy', 'id_ID').format(dt).toUpperCase();
+        }
+      }
       return tanggal.toString();
     } catch (_) {
       return '';
@@ -767,10 +773,11 @@ class _HomeScreenState extends State<HomeScreen> {
             final booking =
                 snapshot.data!.docs.first.data() as Map<String, dynamic>;
             final namaLapangan = booking['nama_lapangan'] ?? '-';
-            final tanggal = booking['tanggal_booking'];
+            final tanggal = booking['tanggal_main'] ?? booking['tanggal_booking'];
             final totalHarga = booking['total_harga'] ?? 0;
             final status = booking['status_pembayaran'] ?? '';
             final customerName = booking['customer_name'] ?? '';
+            final selectedTimes = booking['selected_times'] as String? ?? '';
             return Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -825,6 +832,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                   weight: FontWeight.bold,
                                   color: _textDark))),
                     ]),
+                    if (selectedTimes.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        Icon(Icons.access_time_rounded,
+                            size: 14, color: Colors.grey.shade400),
+                        const SizedBox(width: 5),
+                        Expanded(
+                            child: Text(selectedTimes,
+                                style: _p(
+                                    size: 12,
+                                    color: Colors.grey.shade500))),
+                      ]),
+                    ],
                     const SizedBox(height: 14),
                     Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
