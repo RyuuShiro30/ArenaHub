@@ -58,8 +58,93 @@ class _AdminSidebarState extends State<AdminSidebar> {
   }
 
   void _navigateTo(int index) {
-    if (widget.currentIndex == index) return; 
+    if (widget.currentIndex == index) return;
 
+    // Jika sedang di halaman Profil dan ada perubahan yang belum disimpan,
+    // tampilkan dialog konfirmasi sebelum pindah halaman
+    if (widget.currentIndex == 6 && adminHasUnsavedChangesNotifier.value) {
+      _showUnsavedChangesDialog(index);
+      return;
+    }
+
+    _doNavigateTo(index);
+  }
+
+  Future<void> _showUnsavedChangesDialog(int targetIndex) async {
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: Container(
+          width: 48, height: 48,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF3C7),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.edit_note_rounded,
+              color: Color(0xFFF59E0B), size: 26),
+        ),
+        title: Text('Ada Perubahan yang Belum Disimpan',
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 16, fontWeight: FontWeight.w700,
+                color: const Color(0xFF1A2B3C)),
+            textAlign: TextAlign.center),
+        content: Text(
+          'Kamu memiliki perubahan pada profil yang belum disimpan.\n'
+          'Apakah ingin menyimpan sebelum meninggalkan halaman ini?',
+          style: GoogleFonts.plusJakartaSans(
+              fontSize: 13, color: const Color(0xFF6B7280)),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actions: [
+          // Tombol Batal — tetap di halaman profil
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context, 'stay'),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFFE5E7EB)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Batal',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: const Color(0xFF6B7280))),
+          ),
+          const SizedBox(width: 8),
+          // Tombol Buang & Pindah — buang perubahan lalu navigasi
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, 'discard'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Buang & Pindah',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (result == 'discard') {
+      // Reset flag lalu navigasi
+      adminHasUnsavedChangesNotifier.value = false;
+      _doNavigateTo(targetIndex);
+    }
+    // result == 'stay' atau dialog ditutup → tetap di halaman Profil
+  }
+
+  void _doNavigateTo(int index) {
     Widget nextScreen;
     switch (index) {
       case 0: nextScreen = const AdminDashboardScreen(); break;
@@ -73,12 +158,12 @@ class _AdminSidebarState extends State<AdminSidebar> {
     }
 
     Navigator.pushReplacement(
-      context, 
+      context,
       PageRouteBuilder(
         pageBuilder: (context, animation1, animation2) => nextScreen,
-        transitionDuration: Duration.zero, 
+        transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
-      )
+      ),
     );
   }
 
