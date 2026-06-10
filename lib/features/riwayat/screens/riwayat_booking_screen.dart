@@ -7,6 +7,7 @@ import '../../../data/model/riwayat_booking_model.dart';
 import '../widgets/riwayat_booking_card.dart';
 import '../screens/detail_riwayat.dart';
 import '../screens/review.dart';
+import '../../booking/screens/reschedule_page.dart'; // ← TAMBAH
 import '../../booking/screens/cancel_refund_page.dart';
 import '../../auth/screens/pencarian_lapangan_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -87,8 +88,6 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
     final lower = (statusPembayaran ?? '').toLowerCase().trim();
 
     // ── Cek field 'dibatalkan' dulu — paling reliable ────────────
-    // Field ini di-set true saat user cancel dan tidak akan pernah
-    // ditimpa oleh proses admin approve refund
     if (data['dibatalkan'] == true) {
       return BookingStatus.dibatalkan;
     }
@@ -98,7 +97,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
         lower == 'gagal' ||
         lower == 'canceled' ||
         lower == 'cancelled' ||
-        lower == 'refunded' || // admin approve refund set ini
+        lower == 'refunded' ||
         lower == 'batal') {
       return BookingStatus.dibatalkan;
     }
@@ -308,6 +307,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
           separatorBuilder: (_, __) => const SizedBox(height: 14),
           itemBuilder: (context, index) {
             final item = filtered[index];
+            final isAktif   = item.model.status == BookingStatus.aktif;
             final isSelesai = item.model.status == BookingStatus.selesai;
 
             return GestureDetector(
@@ -322,9 +322,35 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
               child: RiwayatBookingCard(
                 booking: item.model,
                 sudahReview: item.sudahReview,
-                onLihatDetail: () {
-                  _showRescheduleInfoBottomSheet(context, item.model);
-                },
+
+                // ── PERUBAHAN UTAMA ────────────────────────────────────
+                // Status AKTIF  → onLihatDetail = tombol "Reschedule"
+                //                 langsung push ke ReschedulePage
+                // Status SELESAI → onLihatDetail = tombol "Detail Booking"
+                //                  tetap push ke DetailRiwayatPage (tidak berubah)
+                onLihatDetail: isAktif
+                    ? () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ReschedulePage(bookingId: item.docId),
+                          ),
+                        );
+                      }
+                    : isSelesai
+                        ? () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    DetailRiwayatPage(bookingId: item.docId),
+                              ),
+                            );
+                          }
+                        : null,
+                // ──────────────────────────────────────────────────────
+
                 onCancel: () {
                   Navigator.push(
                     context,
@@ -382,7 +408,9 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
     );
   }
 
-  // ── Bottom Sheet Reschedule ──────────────────────────────────
+  // ── Bottom Sheet Reschedule — DIPERTAHANKAN (tidak dihapus) ──
+  // Tidak dipakai lagi dari card, tapi tetap ada kalau dibutuhkan
+  // dari tempat lain di masa depan
   void _showRescheduleInfoBottomSheet(
       BuildContext context, RiwayatBookingModel model) {
     showModalBottomSheet(

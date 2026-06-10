@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../screens/review.dart';
+import '../../booking/screens/reschedule_page.dart';
 
 class DetailRiwayatPage extends StatefulWidget {
   final String bookingId;
@@ -30,7 +31,6 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
     _fetchBooking();
   }
 
-
   Future<void> _fetchBooking() async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -39,7 +39,7 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
           .get();
       if (doc.exists) {
         final bookingData = doc.data()!;
-        
+
         // Fetch lapangan untuk ambil foto
         final lapanganId = bookingData['lapangan_id'] ?? '';
         if (lapanganId.isNotEmpty) {
@@ -157,9 +157,8 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
   // ─── Format ───────────────────────────────────────────────────────────────
 
   String _formatRupiah(dynamic nominal) {
-    final int amount = nominal is int
-        ? nominal
-        : int.tryParse(nominal.toString()) ?? 0;
+    final int amount =
+        nominal is int ? nominal : int.tryParse(nominal.toString()) ?? 0;
     return NumberFormat.currency(
       locale: 'id_ID',
       symbol: 'IDR ',
@@ -172,8 +171,19 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
     final dt = DateTime.tryParse(tanggalStr);
     if (dt == null) return tanggalStr;
     const bulan = [
-      '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      '',
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember'
     ];
     return '${dt.day} ${bulan[dt.month]} ${dt.year}';
   }
@@ -182,6 +192,23 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
     if (jamMain == null || jamMain.isEmpty) return 1;
     final slots = jamMain.split(',');
     return slots.length;
+  }
+
+  // ─── Reschedule ───────────────────────────────────────────────────────────
+
+  /// Buka ReschedulePage dan refresh data jika berhasil
+  Future<void> _bukaReschedule() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReschedulePage(bookingId: widget.bookingId),
+      ),
+    );
+    // Kalau reschedule sukses, refresh halaman ini
+    if (result == true && mounted) {
+      setState(() => _isLoading = true);
+      _fetchBooking();
+    }
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -245,8 +272,15 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
             }),
           ],
           SliverToBoxAdapter(child: _buildRincianPembayaran(b)),
+
+          // ── Tombol Reschedule (hanya saat AKTIF) ──────────────
+          if (status == 'aktif')
+            SliverToBoxAdapter(child: _buildTombolReschedule()),
+
+          // ── Tombol Beri Ulasan (hanya saat SELESAI & belum review) ──
           if (status == 'selesai' && b['sudah_review'] != true)
             SliverToBoxAdapter(child: _buildTombolReview(b)),
+
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
@@ -282,8 +316,7 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
           padding: const EdgeInsets.only(right: 16),
           child: Center(
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               decoration: BoxDecoration(
                 color: warna.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
@@ -308,7 +341,9 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
 
   Widget _buildKartuLapangan(Map<String, dynamic> b) {
     final fotoField = b['foto'];
-    final imagePath = (fotoField is List && fotoField.isNotEmpty) ? fotoField.first.toString() : (fotoField is String ? fotoField : '');
+    final imagePath = (fotoField is List && fotoField.isNotEmpty)
+        ? fotoField.first.toString()
+        : (fotoField is String ? fotoField : '');
     final namaLapangan = b['nama_lapangan'] ?? '-';
     final lokasi = b['lokasi'] ?? 'Arena Hub';
     final mapsUrl = b['maps_url'] as String?;
@@ -331,8 +366,7 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
         children: [
           // Foto
           ClipRRect(
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(16)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: imagePath.isNotEmpty && imagePath.startsWith('http')
                 ? Image.network(
                     imagePath,
@@ -360,8 +394,8 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
                 const SizedBox(height: 4),
                 Text(
                   lokasi,
-                  style: const TextStyle(
-                      fontSize: 13.5, color: Color(0xFF888888)),
+                  style:
+                      const TextStyle(fontSize: 13.5, color: Color(0xFF888888)),
                 ),
                 if (mapsUrl != null && mapsUrl.isNotEmpty) ...[
                   const SizedBox(height: 10),
@@ -402,11 +436,9 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
 
   Widget _buildDetailJadwal(Map<String, dynamic> b) {
     final tanggal = _formatTanggal(b['tanggal_main'] as String?);
-
-    final jamMain = b['selected_times'] as String? ?? b['jam_main'] as String? ?? '-';
-    
-    final durasi =_hitungDurasi(jamMain);
-    
+    final jamMain =
+        b['selected_times'] as String? ?? b['jam_main'] as String? ?? '-';
+    final durasi = _hitungDurasi(jamMain);
     final slots = jamMain.split(',');
     final jamMulai = slots.first.split(' - ').first.trim();
     final jamSelesai = slots.last.split(' - ').last.trim();
@@ -490,19 +522,20 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
     final biayaLayanan = (b['biaya_layanan'] as num?)?.toInt() ?? 5000;
     final diskon = (b['diskon'] as num?)?.toInt() ?? 0;
     final rawTimes = b['selected_times'];
-    
+
     int totalDurasi = 0;
     int sewaLapangan = 0;
     if (_childBookings.isNotEmpty) {
       for (var cb in _childBookings) {
-        totalDurasi += _hitungDurasi(cb['selected_times'] as String? ?? cb['jam_main'] as String?);
+        totalDurasi += _hitungDurasi(
+            cb['selected_times'] as String? ?? cb['jam_main'] as String?);
         sewaLapangan += (cb['total_harga'] as num?)?.toInt() ?? 0;
       }
     } else {
       totalDurasi = _hitungDurasi(rawTimes);
       sewaLapangan = hargaPerJam * totalDurasi;
     }
-    
+
     final kodePromo = b['kode_promo'] as String?;
 
     return Container(
@@ -589,6 +622,37 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
     );
   }
 
+  // ─── Tombol Reschedule ────────────────────────────────────────────────────
+
+  Widget _buildTombolReschedule() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: ElevatedButton.icon(
+          onPressed: _bukaReschedule,
+          icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
+          label: const Text(
+            'Reschedule Booking',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _warningColor,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ─── Tombol Beri Ulasan ───────────────────────────────────────────────────
 
   Widget _buildTombolReview(Map<String, dynamic> b) {
@@ -617,8 +681,8 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
           ),
           style: OutlinedButton.styleFrom(
             side: const BorderSide(color: _primaryColor),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
       ),
@@ -713,8 +777,7 @@ class _BarisPembayaran extends StatelessWidget {
           nilai,
           style: TextStyle(
             fontSize: 14,
-            fontWeight:
-                nilaiTebal ? FontWeight.w700 : FontWeight.w500,
+            fontWeight: nilaiTebal ? FontWeight.w700 : FontWeight.w500,
             color: warnaNilai ?? const Color(0xFF1A1A2E),
           ),
         ),
