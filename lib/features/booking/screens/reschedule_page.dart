@@ -245,11 +245,36 @@ class _ReschedulePageState extends State<ReschedulePage> {
   // ────────────────────────────────────────────────────────────────
 
   void _toggleSlot(String time) {
+    if (_booking == null) return;
+
+    // Hitung jumlah slot asli
+    final originalSlots = _booking!['slots'];
+    final int allowedCount = originalSlots is List
+        ? originalSlots.length
+        : (_booking!['selected_times']?.toString().split(',') ??
+           _booking!['jam_main']?.toString().split(',') ??
+           ['']).where((s) => s.trim().isNotEmpty).length;
+
     setState(() {
       if (_selectedTimes.contains(time)) {
         _selectedTimes.remove(time);
       } else {
-        _selectedTimes.add(time);
+        if (allowedCount == 1) {
+          // Jika hanya 1 slot, ganti slot lama dengan yang baru
+          _selectedTimes.clear();
+          _selectedTimes.add(time);
+        } else {
+          // Jika lebih dari 1 slot, batasi maksimal allowedCount
+          if (_selectedTimes.length >= allowedCount) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Anda hanya dapat memilih maksimal $allowedCount slot.'),
+              backgroundColor: _errorColor,
+              behavior: SnackBarBehavior.floating,
+            ));
+            return;
+          }
+          _selectedTimes.add(time);
+        }
       }
     });
   }
@@ -293,11 +318,31 @@ class _ReschedulePageState extends State<ReschedulePage> {
 
       final firestore = FirebaseFirestore.instance;
 
-      // ① Restore slot LAMA → tersedia
+      // ① Restore slot LAMA → tersedia (Parent)
       await _restoreOldSlots(
           lapId: oldLapId,
           tanggalStr: oldTanggalStr,
           jamMain: oldJamMain);
+
+      // Restore child slots jika ada
+      final int childCount = (_booking?['child_count'] ?? 0) as int;
+      if (childCount > 0) {
+        for (int i = 0; i < childCount; i++) {
+          final childDoc = await firestore.collection('bookings').doc('${widget.bookingId}_$i').get();
+          if (childDoc.exists) {
+            final childData = childDoc.data()!;
+            final cLapId = (childData['lapangan_id'] ?? '').toString();
+            final cTanggalStr = (childData['tanggal_main'] ?? '').toString();
+            final cJamMain = (childData['selected_times'] ?? childData['jam_main'] ?? '').toString();
+            if (cLapId.isNotEmpty && cTanggalStr.isNotEmpty && cJamMain.isNotEmpty) {
+              await _restoreOldSlots(
+                  lapId: cLapId,
+                  tanggalStr: cTanggalStr,
+                  jamMain: cJamMain);
+            }
+          }
+        }
+      }
 
       // ② Tandai slot BARU → dipesan di koleksi jadwal
       await _markNewSlots(
@@ -305,8 +350,11 @@ class _ReschedulePageState extends State<ReschedulePage> {
           tanggalStr: newTanggalStr,
           selectedTimes: sortedNew);
 
-      // ③ Update dokumen booking
-      await firestore.collection('bookings').doc(widget.bookingId).update({
+      // ③ Update dokumen booking (Parent & Child)
+      final batch = firestore.batch();
+      
+      final bookingRef = firestore.collection('bookings').doc(widget.bookingId);
+      batch.update(bookingRef, {
         'tanggal_main'  : newTanggalStr,
         'tanggal'       : newTanggalStr,
         'selected_times': newJamMain,
@@ -317,6 +365,22 @@ class _ReschedulePageState extends State<ReschedulePage> {
         'rescheduled_from_tanggal': oldTanggalStr,
         'rescheduled_from_jam'    : oldJamMain,
       });
+
+      if (childCount > 0) {
+        for (int i = 0; i < childCount; i++) {
+          final childRef = firestore.collection('bookings').doc('${widget.bookingId}_$i');
+          batch.update(childRef, {
+            'tanggal_main'  : newTanggalStr,
+            'tanggal'       : newTanggalStr,
+            'selected_times': newJamMain,
+            'jam_main'      : newJamMain,
+            'slots'         : sortedNew,
+            'total_harga'   : newSubtotal,
+          });
+        }
+      }
+
+      await batch.commit();
 
       if (mounted) {
         setState(() => _isSubmitting = false);
