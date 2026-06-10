@@ -29,8 +29,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   static const Color _green  = Color(0xFF22C55E);
   static const Color _orange = Color(0xFFF59E0B);
 
-  String _adminName  = 'Admin';
-  String _adminRole  = 'Administrator';
+  String _adminName = 'Admin';
+  String _adminRole = 'Administrator';
 
   @override
   void initState() {
@@ -161,9 +161,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         fontSize: 10,
         fontColorHex: ExcelColor.fromHexString('#6B7280'),
       );
-      final currencyStyle = CellStyle(
-        numberFormat: NumFormat.defaultNumeric,
-      );
+      final currencyStyle = CellStyle(numberFormat: NumFormat.defaultNumeric);
       final successStyle = CellStyle(
         fontColorHex: ExcelColor.fromHexString('#22C55E'),
         bold: true,
@@ -218,8 +216,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         else if (_isGagal(status))   gagalCount++;
 
         final row = i + 4;
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value =
-            IntCellValue(i + 1);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value = IntCellValue(i + 1);
         sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row)).value =
             TextCellValue('#${docId.substring(0, min(8, docId.length)).toUpperCase()}');
         sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row)).value =
@@ -232,8 +229,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ..value = DoubleCellValue(total)
           ..cellStyle = currencyStyle;
 
-        final statusCell = sheet.cell(
-            CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row));
+        final statusCell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row));
         statusCell.value = TextCellValue(_sl(status));
         statusCell.cellStyle = _isSuccess(status) ? successStyle
             : _isPending(status) ? pendingStyle
@@ -241,44 +237,95 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             : CellStyle();
       }
 
-      final summaryRow = snap.docs.length + 5;
-      sheet.merge(
-        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow),
-        CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: summaryRow),
-      );
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).value =
-          TextCellValue('TOTAL PENDAPATAN (SELESAI)');
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).cellStyle =
-          CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'));
+      final refundSnap = await _firestore
+    .collection('refund_requests')
+    .where('status_refund', isEqualTo: 'disetujui')
+    .get();
 
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).value =
-          DoubleCellValue(grandTotal);
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).cellStyle =
-          CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'),
-              numberFormat: NumFormat.defaultNumeric);
+double totalRefund = 0;
+for (final doc in refundSnap.docs) {
+  final data      = doc.data();
+  final harga     = double.tryParse(data['total_harga']?.toString() ?? '0') ?? 0;
+  final createdAt = data['created_at'];
+  if (createdAt != null) {
+    final dt = (createdAt as Timestamp).toDate();
+    if (dt.isAfter(start) && dt.isBefore(end)) {
+      totalRefund += harga * 0.75; // 75% dari harga asli
+    }
+  }
+}
+final pendapatanBersih = grandTotal - totalRefund;
 
-      final s2 = summaryRow + 1;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).value =
-          TextCellValue('Selesai: $successCount  |  Pending: $pendingCount  |  Gagal: $gagalCount');
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).cellStyle =
-          CellStyle(italic: true, fontColorHex: ExcelColor.fromHexString('#6B7280'));
+  final summaryRow = snap.docs.length + 5;
 
-      sheet.setColumnWidth(0, 6);
-      sheet.setColumnWidth(1, 14);
-      sheet.setColumnWidth(2, 24);
-      sheet.setColumnWidth(3, 20);
-      sheet.setColumnWidth(4, 22);
-      sheet.setColumnWidth(5, 20);
-      sheet.setColumnWidth(6, 14);
+  // Baris 1: Pendapatan Kotor
+  sheet.merge(
+    CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow),
+    CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: summaryRow),
+  );
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).value =
+      TextCellValue('TOTAL PENDAPATAN KOTOR');
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: summaryRow)).cellStyle =
+      CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'));
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).value =
+      DoubleCellValue(grandTotal);
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: summaryRow)).cellStyle =
+      CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#2563EB'),
+          numberFormat: NumFormat.defaultNumeric);
+
+  // Baris 2: Total Refund
+  final refundRow = summaryRow + 1;
+  sheet.merge(
+    CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: refundRow),
+    CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: refundRow),
+  );
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: refundRow)).value =
+      TextCellValue('TOTAL REFUND (75%)');
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: refundRow)).cellStyle =
+      CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#EF4444'));
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: refundRow)).value =
+      DoubleCellValue(-totalRefund);
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: refundRow)).cellStyle =
+      CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#EF4444'),
+          numberFormat: NumFormat.defaultNumeric);
+
+  // Baris 3: Pendapatan Bersih
+  final bersihRow = summaryRow + 2;
+  sheet.merge(
+    CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: bersihRow),
+    CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: bersihRow),
+  );
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: bersihRow)).value =
+      TextCellValue('PENDAPATAN BERSIH');
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: bersihRow)).cellStyle =
+      CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#22C55E'));
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: bersihRow)).value =
+      DoubleCellValue(pendapatanBersih);
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: bersihRow)).cellStyle =
+      CellStyle(bold: true, fontColorHex: ExcelColor.fromHexString('#22C55E'),
+          numberFormat: NumFormat.defaultNumeric);
+
+  // Baris 4: Ringkasan status
+  final s2 = summaryRow + 3;
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).value =
+      TextCellValue('Selesai: $successCount  |  Pending: $pendingCount  |  Gagal: $gagalCount');
+  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: s2)).cellStyle =
+      CellStyle(italic: true, fontColorHex: ExcelColor.fromHexString('#6B7280'));
+
+  sheet.setColumnWidth(0, 6);
+  sheet.setColumnWidth(1, 14);
+  sheet.setColumnWidth(2, 24);
+  sheet.setColumnWidth(3, 20);
+  sheet.setColumnWidth(4, 22);
+  sheet.setColumnWidth(5, 20);
+  sheet.setColumnWidth(6, 14);
 
       final bytes = excelFile.encode();
       if (bytes == null) throw Exception('Gagal encode Excel');
 
       final fileName = 'Laporan_Booking_${bulan[now.month]}_${now.year}.xlsx';
-      final blob = html.Blob(
-        [bytes],
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      );
+      final blob = html.Blob([bytes],
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       final url    = html.Url.createObjectUrlFromBlob(blob);
       final anchor = html.AnchorElement(href: url)
         ..setAttribute('download', fileName)
@@ -286,7 +333,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       html.Url.revokeObjectUrl(url);
 
       if (mounted) Navigator.pop(context);
-
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
@@ -306,9 +352,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       backgroundColor: _bg,
       body: Row(children: [
         const AdminSidebar(currentIndex: 0),
-        Expanded(
-          child: _buildDashboardStreams(),
-        ),
+        Expanded(child: _buildDashboardStreams()),
       ]),
     );
   }
@@ -323,112 +367,136 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             return StreamBuilder<QuerySnapshot>(
               stream: _firestore.collection('users').snapshots(),
               builder: (context, userSnap) {
-                final now        = DateTime.now();
-                final start      = DateTime(now.year, now.month, 1);
-                final startLast  = DateTime(now.year, now.month - 1, 1);
-                final endLast    = DateTime(now.year, now.month, 1);
-                final end        = DateTime(now.year, now.month + 1, 1);
-                final todayStart = DateTime(now.year, now.month, now.day);
-                final todayEnd   = todayStart.add(const Duration(days: 1));
+                return StreamBuilder<QuerySnapshot>(
+                  stream: _firestore.collection('refund_requests').snapshots(),
+                  builder: (context, refundSnap) {
+                    final now        = DateTime.now();
+                    final start      = DateTime(now.year, now.month, 1);
+                    final startLast  = DateTime(now.year, now.month - 1, 1);
+                    final endLast    = DateTime(now.year, now.month, 1);
+                    final end        = DateTime(now.year, now.month + 1, 1);
+                    final todayStart = DateTime(now.year, now.month, now.day);
+                    final todayEnd   = todayStart.add(const Duration(days: 1));
 
-                final isLoading =
-                    (bookingSnap.connectionState == ConnectionState.waiting && !bookingSnap.hasData) ||
-                    (lapanganSnap.connectionState == ConnectionState.waiting && !lapanganSnap.hasData) ||
-                    (userSnap.connectionState == ConnectionState.waiting && !userSnap.hasData);
+                    final isLoading =
+                        (bookingSnap.connectionState == ConnectionState.waiting && !bookingSnap.hasData) ||
+                        (lapanganSnap.connectionState == ConnectionState.waiting && !lapanganSnap.hasData) ||
+                        (userSnap.connectionState == ConnectionState.waiting && !userSnap.hasData);
 
-                final allBookings = bookingSnap.hasData
-                    ? bookingSnap.data!.docs
-                        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
-                        .toList()
-                    : <Map<String, dynamic>>[];
+                    final allBookings = bookingSnap.hasData
+                        ? bookingSnap.data!.docs
+                            .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+                            .toList()
+                        : <Map<String, dynamic>>[];
 
-                final todayStr = '${now.year}-'
-                    '${now.month.toString().padLeft(2, '0')}-'
-                    '${now.day.toString().padLeft(2, '0')}';
-                final bookingHariIni = allBookings.where((b) {
-                  final tanggalMain = b['tanggal_main']?.toString() ?? '';
-                  if (tanggalMain.isNotEmpty) return tanggalMain == todayStr;
-                  final ts = b['tanggal_booking'];
-                  if (ts == null) return false;
-                  final dt = (ts as Timestamp).toDate();
-                  return dt.isAfter(todayStart) && dt.isBefore(todayEnd);
-                }).length;
+                    final todayStr = '${now.year}-'
+                        '${now.month.toString().padLeft(2, '0')}-'
+                        '${now.day.toString().padLeft(2, '0')}';
 
-                double pendapatanIni = 0;
-                for (final b in allBookings) {
-                  final ts = b['tanggal_booking'];
-                  if (ts == null) continue;
-                  final dt     = (ts as Timestamp).toDate();
-                  final harga  = double.tryParse(b['total_harga']?.toString() ?? '0') ?? 0;
-                  final status = (b['status_pembayaran'] ?? '').toString();
-                  if (_isSuccess(status) && dt.isAfter(start) && dt.isBefore(end)) {
-                    pendapatanIni += harga;
-                  }
-                }
+                    final bookingHariIni = allBookings.where((b) {
+                      final tanggalMain = b['tanggal_main']?.toString() ?? '';
+                      if (tanggalMain.isNotEmpty) return tanggalMain == todayStr;
+                      final ts = b['tanggal_booking'];
+                      if (ts == null) return false;
+                      final dt = (ts as Timestamp).toDate();
+                      return dt.isAfter(todayStart) && dt.isBefore(todayEnd);
+                    }).length;
 
-                final last24h = DateTime.now().subtract(const Duration(hours: 24));
-                final sorted = List<Map<String, dynamic>>.from(allBookings)
-                  ..sort((a, b) {
-                    final ta = a['tanggal_booking'];
-                    final tb = b['tanggal_booking'];
-                    if (ta == null || tb == null) return 0;
-                    return (tb as Timestamp).compareTo(ta as Timestamp);
-                  });
+                    double pendapatanIni = 0, pendapatanLalu = 0;
+                    for (final b in allBookings) {
+                      final ts = b['tanggal_booking'];
+                      if (ts == null) continue;
+                      final dt     = (ts as Timestamp).toDate();
+                      final harga  = double.tryParse(b['total_harga']?.toString() ?? '0') ?? 0;
+                      final status = (b['status_pembayaran'] ?? '').toString();
+                      if (_isSuccess(status) && dt.isAfter(start) && dt.isBefore(end))
+                        pendapatanIni += harga;
+                      if (_isSuccess(status) && dt.isAfter(startLast) && dt.isBefore(endLast))
+                        pendapatanLalu += harga;
+                    }
 
-                final bookingList = sorted.where((b) {
-                  final ts = b['tanggal_booking'];
-                  if (ts == null) return false;
-                  
-                  final docId = b['id'].toString();
-                  final isChild = RegExp(r'_\d+$').hasMatch(docId);
-                  return !isChild && (ts as Timestamp).toDate().isAfter(last24h);
-                }).take(10).toList();
+                    double totalRefundIni = 0;
+                    if (refundSnap.hasData) {
+                      for (final doc in refundSnap.data!.docs) {
+                        final data      = doc.data() as Map<String, dynamic>;
+                        final status    = (data['status_refund'] ?? '').toString().toLowerCase();
+                        final harga     = double.tryParse(data['total_harga']?.toString() ?? '0') ?? 0;
+                        final createdAt = data['created_at'];
+                        if (status == 'disetujui' && createdAt != null) {
+                          final dt = (createdAt as Timestamp).toDate();
+                          if (dt.isAfter(start) && dt.isBefore(end)) {
+                            totalRefundIni += harga * 0.75; // 75% dari harga asli
+                          }
+                        }
+                      }
+                    }
+                    final pendapatanBersih = pendapatanIni - totalRefundIni;
 
-                final pelangganBaru = userSnap.hasData
-                    ? userSnap.data!.docs.where((d) {
-                        final data = d.data() as Map<String, dynamic>;
-                        final ts   = data['createdAt'];
-                        if (ts == null) return false;
-                        return (ts as Timestamp).toDate().isAfter(start);
-                      }).length
-                    : 0;
+                    final last24h = DateTime.now().subtract(const Duration(hours: 24));
+                    final sorted = List<Map<String, dynamic>>.from(allBookings)
+                      ..sort((a, b) {
+                        final ta = a['tanggal_booking'];
+                        final tb = b['tanggal_booking'];
+                        if (ta == null || tb == null) return 0;
+                        return (tb as Timestamp).compareTo(ta as Timestamp);
+                      });
 
-                return Column(children: [
-                  _buildTopBar(),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          IntrinsicHeight(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(child: _buildPerformaCard(
-                                  pendapatanIni: pendapatanIni,
-                                  isLoading: isLoading,
-                                )),
-                                const SizedBox(width: 16),
-                                Expanded(child: _buildPelangganCard(total: pelangganBaru)),
-                                const SizedBox(width: 16),
-                                Expanded(child: _buildBookingAktifCard(
-                                  total: bookingHariIni,
-                                  isLoading: isLoading,
-                                )),
-                              ],
-                            ),
+                    final bookingList = sorted.where((b) {
+                      final ts = b['tanggal_booking'];
+                      if (ts == null) return false;
+                      final docId   = b['id'].toString();
+                      final isChild = RegExp(r'_\d+$').hasMatch(docId);
+                      return !isChild && (ts as Timestamp).toDate().isAfter(last24h);
+                    }).take(10).toList();
+
+                    final pelangganBaru = userSnap.hasData
+                        ? userSnap.data!.docs.where((d) {
+                            final data = d.data() as Map<String, dynamic>;
+                            final ts   = data['createdAt'];
+                            if (ts == null) return false;
+                            return (ts as Timestamp).toDate().isAfter(start);
+                          }).length
+                        : 0;
+
+                    return Column(children: [
+                      _buildTopBar(),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              IntrinsicHeight(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Expanded(child: _buildPerformaCard(
+                                      pendapatanIni: pendapatanBersih,
+                                      totalRefund: totalRefundIni,
+                                      isLoading: isLoading,
+                                    )),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _buildPelangganCard(total: pelangganBaru)),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _buildBookingAktifCard(
+                                      total: bookingHariIni,
+                                      isLoading: isLoading,
+                                    )),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              _buildTableBooking(
+                                bookingList: bookingList,
+                                isLoading: isLoading,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 24),
-                          _buildTableBooking(
-                            bookingList: bookingList,
-                            isLoading: isLoading,
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ]);
+                    ]);
+                  },
+                );
               },
             );
           },
@@ -442,8 +510,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       height: 60, color: _white,
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Row(children: [
-        Text('Dashboard',
-            style: _t(size: 17, weight: FontWeight.w700)),
+        Text('Dashboard', style: _t(size: 17, weight: FontWeight.w700)),
         const Spacer(),
       ]),
     );
@@ -451,6 +518,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _buildPerformaCard({
     required double pendapatanIni,
+    required double totalRefund,
     required bool isLoading,
   }) {
     return Container(
@@ -470,6 +538,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ? _shimmer(w: 160, h: 28)
               : Text(_rp(pendapatanIni),
                   style: _t(size: 26, weight: FontWeight.w800)),
+          if (!isLoading && totalRefund > 0) ...[
+            const SizedBox(height: 4),
+            Row(children: [
+              const Icon(Icons.arrow_downward_rounded,
+                  size: 13, color: Color(0xFFEF4444)),
+              const SizedBox(width: 4),
+              Text('Refund: -${_rp(totalRefund)}',
+                  style: _t(size: 11, color: const Color(0xFFEF4444))),
+            ]),
+            const SizedBox(height: 2),
+            Text('Pendapatan kotor: ${_rp(pendapatanIni + totalRefund)}',
+                style: _t(size: 10, color: _muted)),
+          ],
           const Spacer(),
           const SizedBox(height: 20),
           SizedBox(
@@ -508,13 +589,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12)),
-          child: const Icon(Icons.calendar_today_rounded,
-              color: Colors.white, size: 22),
+          child: const Icon(Icons.calendar_today_rounded, color: Colors.white, size: 22),
         ),
         const SizedBox(height: 16),
         Text('BOOKING AKTIF HARI INI',
-            style: _t(size: 11, weight: FontWeight.w700,
-                color: Colors.white70, spacing: 0.5)),
+            style: _t(size: 11, weight: FontWeight.w700, color: Colors.white70, spacing: 0.5)),
         const SizedBox(height: 8),
         isLoading
             ? _shimmer(w: 60, h: 36, dark: true)
@@ -562,7 +641,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       left: left,
       child: Container(
         width: 28, height: 28,
-        decoration: BoxDecoration(color: colors[idx],
+        decoration: BoxDecoration(
+            color: colors[idx],
             shape: BoxShape.circle,
             border: Border.all(color: _white, width: 2)),
         child: Center(child: Text(init,
@@ -576,7 +656,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     required bool isLoading,
   }) {
     return Container(
-      decoration: BoxDecoration(color: _white,
+      decoration: BoxDecoration(
+          color: _white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: _border)),
       child: Column(children: [
@@ -584,11 +665,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
           child: Row(children: [
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Booking Terbaru',
-                  style: _t(size: 15, weight: FontWeight.w700)),
+              Text('Booking Terbaru', style: _t(size: 15, weight: FontWeight.w700)),
               const SizedBox(height: 2),
-              Text('Daftar transaksi 24 jam terakhir',
-                  style: _t(size: 12, color: _muted)),
+              Text('Daftar transaksi 24 jam terakhir', style: _t(size: 12, color: _muted)),
             ]),
             const Spacer(),
           ]),
@@ -598,19 +677,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Row(children: [
             _th('PELANGGAN', 4), _th('LAYANAN', 3),
-            _th('WAKTU', 2),     _th('TOTAL', 2),
-            _th('STATUS', 2), 
+            _th('WAKTU', 2), _th('TOTAL', 2),
+            _th('STATUS', 2),
           ]),
         ),
         const SizedBox(height: 8),
         const Divider(color: _border, height: 1),
         if (isLoading)
-          const Padding(padding: EdgeInsets.all(32),
-              child: CircularProgressIndicator())
+          const Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())
         else if (bookingList.isEmpty)
           Padding(padding: const EdgeInsets.all(32),
-              child: Text('Tidak ada data booking',
-                  style: _t(size: 13, color: _muted)))
+              child: Text('Tidak ada data booking', style: _t(size: 13, color: _muted)))
         else
           ...bookingList.map(_buildRow),
         const SizedBox(height: 8),
@@ -620,19 +697,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _th(String label, int flex) => Expanded(
     flex: flex,
-    child: Text(label, style: _t(size: 11, weight: FontWeight.w700,
-        color: _muted, spacing: 0.4)),
+    child: Text(label, style: _t(size: 11, weight: FontWeight.w700, color: _muted, spacing: 0.4)),
   );
 
   Widget _buildRow(Map<String, dynamic> b) {
-    final name    = b['customer_name']     ?? '-';
-    final lap     = b['nama_lapangan']     ?? '-';
-    final dur     = b['durasi']            ?? '';
-    final waktu   = _waktu(b['tanggal_booking']);
-    final total   = double.tryParse(b['total_harga'].toString()) ?? 0;
-    final status  = b['status_pembayaran'] ?? b['status'] ?? '';
-    final dc      = _sc(status);
-    final docId   = (b['order_id'] ?? b['id'] ?? '').toString();
+    final name   = b['customer_name']  ?? '-';
+    final lap    = b['nama_lapangan']  ?? '-';
+    final dur    = b['durasi']         ?? '';
+    final waktu  = _waktu(b['tanggal_booking']);
+    final total  = double.tryParse(b['total_harga'].toString()) ?? 0;
+    final status = b['status_pembayaran'] ?? b['status'] ?? '';
+    final dc     = _sc(status);
+    final docId  = (b['order_id'] ?? b['id'] ?? '').toString();
     final shortId = docId.toUpperCase();
 
     return Column(children: [
@@ -644,14 +720,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Expanded(flex: 4, child: Row(children: [
               Container(
                 width: 34, height: 34,
-                decoration: BoxDecoration(color: _blueBg,
-                    borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(color: _blueBg, borderRadius: BorderRadius.circular(8)),
                 child: Center(child: Text(_initials(name),
                     style: _t(size: 12, weight: FontWeight.w700, color: _blue))),
               ),
               const SizedBox(width: 10),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(name, style: _t(size: 13, weight: FontWeight.w600),
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 Text('ID: #$shortId', style: _t(size: 10, color: _muted),
