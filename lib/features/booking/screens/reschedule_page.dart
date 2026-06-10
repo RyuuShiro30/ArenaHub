@@ -515,7 +515,7 @@ class _ReschedulePageState extends State<ReschedulePage> {
               ),
             ),
             const SizedBox(height: 8),
-            Center(
+            const Center(
               child: Icon(Icons.arrow_downward_rounded,
                   color: _primaryColor, size: 20),
             ),

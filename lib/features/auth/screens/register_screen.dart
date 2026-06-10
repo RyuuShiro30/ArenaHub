@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart'; 
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'syaratKetentuan_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -18,7 +20,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController = TextEditingController();
 
-  // --- FUNGSI VALIDASI ---
   bool _validateInputs() {
     // 1. Validasi Nama Lengkap
     if (fullNameController.text.trim().isEmpty) {
@@ -85,6 +86,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     passwordController.dispose();
     confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  // TAMBAHAN: Fungsi navigasi ke halaman Syarat & Ketentuan
+  void _navigateToTerms() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const TermsAndConditionsScreen(),
+      ),
+    );
   }
 
   @override
@@ -228,7 +239,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   hintText: "Ulangi password Anda",
                   icon: Icons.verified_user_outlined,
                   obscure: _obscureConfirmPassword,
-                  // UBAH BAGIAN INI:
                   suffix: _obscureConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
                   onSuffixPressed: () {
                     setState(() {
@@ -240,6 +250,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 30),
 
               /// --- 3. CHECKBOX & TERMS OF USE ---
+              // =====================================================================
+              // PERUBAHAN: Menghapus text decoration underline pada Syarat & Ketentuan.
+              // =====================================================================
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -258,14 +271,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       child: RichText(
                         text: TextSpan(
                           text: "Saya menyetujui ",
-                          style: GoogleFonts.poppins(color: textGrey, fontSize: 14, letterSpacing: 0.5),
+                          style: GoogleFonts.poppins(
+                            color: textGrey,
+                            fontSize: 14,
+                            letterSpacing: 0.5,
+                          ),
                           children: [
                             TextSpan(
                               text: "Syarat & Ketentuan ",
-                              style: TextStyle(color: accentGreen, fontWeight: FontWeight.bold),
-                              // TODO: Add recognized for navigation
+                              style: TextStyle(
+                                color: accentGreen,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = _navigateToTerms,
                             ),
-                            TextSpan(text: "ArenaHub", style: TextStyle(color: textGrey, fontWeight: FontWeight.bold)),
+                            TextSpan(
+                              text: "ArenaHub",
+                              style: TextStyle(
+                                color: textGrey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -282,26 +309,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 30),
 
               /// --- 5. SUDAH PUNYA AKUN? ---
-              // ... bagian kode lainnya tetap sama ...
-
-              /// --- 5. SUDAH PUNYA AKUN? ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text("Sudah punya akun? ", style: TextStyle(color: textGrey)),
                   GestureDetector(
                     onTap: () {
-                      // PERBAIKAN: Gunakan pushReplacementNamed jika kamu pakai routes, 
-                      // atau pushReplacement jika manual agar tidak menumpuk halaman.
-                      // Jika kamu menggunakan penamaan route di main.dart:
                       Navigator.pushReplacementNamed(context, '/login'); 
-                      
-                      // ATAU jika kamu ingin kembali ke halaman sebelumnya (jika yakin dari login):
-                      // if (Navigator.canPop(context)) {
-                      //   Navigator.pop(context);
-                      // } else {
-                      //   Navigator.pushReplacementNamed(context, '/login');
-                      // }
                     },
                     child: Text(
                       "Masuk di sini",
@@ -352,7 +366,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       child: TextField(
         controller: controller,
         obscureText: obscure,
-        // INI YANG BARU:
         keyboardType: icon == Icons.email_outlined 
             ? TextInputType.emailAddress 
             : (icon == Icons.phone_outlined ? TextInputType.phone : TextInputType.text),
@@ -361,7 +374,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
           hintText: hintText,
           hintStyle: TextStyle(color: textGrey.withOpacity(0.6)),
           prefixIcon: Icon(icon, color: textGrey),
-          // Ikon Mata dengan Toggle (View/Hide)
           suffixIcon: suffix != null
               ? IconButton(
                   icon: Icon(suffix, color: textGrey),
@@ -369,7 +381,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 )
               : null,
           filled: true,
-          fillColor: Colors.transparent, // Warna sudah di Container
+          fillColor: Colors.transparent,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
           contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
         ),
@@ -425,12 +437,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
             Navigator.pop(context);
           } on FirebaseAuthException catch (e) {
-            // Print tetap ada buat kamu cek di terminal VS Code
             print("REGISTER ERROR CODE: ${e.code}"); 
             
             String pesanUser;
             
-            // Mapping error code ke bahasa Indonesia yang ramah
             switch (e.code) {
               case 'email-already-in-use':
                 pesanUser = "Email sudah terdaftar. Yuk, langsung login aja!";
@@ -445,7 +455,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 pesanUser = "Ups! Terjadi kesalahan: ${e.message}";
             }
 
-            // Panggil snackbar (otomatis merah karena tidak isi parameter color)
             _showSnackBar(pesanUser);
           }
         },
