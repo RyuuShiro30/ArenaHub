@@ -100,31 +100,77 @@ class _DetailRiwayatPageState extends State<DetailRiwayatPage> {
   }
 
   // ─── Hitung status ────────────────────────────────────────────────────────
+String _hitungStatus() {
+  if (_booking == null) return 'aktif';
 
-  String _hitungStatus() {
-    if (_booking == null) return 'aktif';
+  final data = _booking!;
 
-    // Kalau admin batalkan
-    if (_booking!['status_pembayaran'] == 'canceled' ||
-        _booking!['dibatalkan'] == true) {
-      return 'dibatalkan';
+  // Dibatalkan
+  if (data['dibatalkan'] == true) {
+    return 'dibatalkan';
+  }
+
+  final statusPembayaran =
+      (data['status_pembayaran'] ?? '').toString().toLowerCase();
+
+  if (statusPembayaran == 'dibatalkan' ||
+      statusPembayaran == 'gagal' ||
+      statusPembayaran == 'canceled' ||
+      statusPembayaran == 'cancelled' ||
+      statusPembayaran == 'refunded' ||
+      statusPembayaran == 'batal') {
+    return 'dibatalkan';
+  }
+
+  try {
+    final tanggalStr =
+        (data['tanggal_main'] ?? data['tanggal'] ?? '').toString().trim();
+
+    if (tanggalStr.isEmpty) return 'aktif';
+
+    final tanggal = DateTime.tryParse(tanggalStr);
+
+    if (tanggal == null) return 'aktif';
+
+    final rawJam =
+        (data['selected_times'] ?? data['jam_main'] ?? '').toString().trim();
+
+    if (rawJam.isEmpty) return 'aktif';
+
+    final slots = rawJam.split(',');
+    final lastSlot = slots.last.trim();
+
+    final parts = lastSlot.split(' - ');
+
+    if (parts.length < 2) return 'aktif';
+
+    final waktuSelesaiStr =
+        parts.last.trim().replaceAll('.', ':');
+
+    final jamMenit = waktuSelesaiStr.split(':');
+
+    if (jamMenit.length < 2) return 'aktif';
+
+    final jam = int.parse(jamMenit[0]);
+    final menit = int.parse(jamMenit[1]);
+
+    final waktuSelesai = DateTime(
+      tanggal.year,
+      tanggal.month,
+      tanggal.day,
+      jam,
+      menit,
+    );
+
+    if (DateTime.now().isAfter(waktuSelesai)) {
+      return 'selesai';
     }
 
-    // Cek tanggal main
-    final tanggalMainStr = _booking!['tanggal_main'] as String?;
-    if (tanggalMainStr == null) return 'aktif';
-
-    final tanggalMain = DateTime.tryParse(tanggalMainStr);
-    if (tanggalMain == null) return 'aktif';
-
-    final sekarang = DateTime.now();
-    final hariIni = DateTime(sekarang.year, sekarang.month, sekarang.day);
-    final hariMain =
-        DateTime(tanggalMain.year, tanggalMain.month, tanggalMain.day);
-
-    if (hariIni.isAfter(hariMain)) return 'selesai';
+    return 'aktif';
+  } catch (e) {
     return 'aktif';
   }
+}
 
   // ─── Warna & label status ─────────────────────────────────────────────────
 
