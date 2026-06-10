@@ -8,7 +8,7 @@ import '../widgets/riwayat_booking_card.dart';
 import '../screens/detail_riwayat.dart';
 import '../screens/review.dart';
 import '../../booking/screens/cancel_refund_page.dart';
-import '../../auth/screens/pencarian_lapangan_screen.dart'; // Import Halaman Pencarian Lapangan
+import '../../auth/screens/pencarian_lapangan_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class RiwayatBookingScreen extends StatefulWidget {
@@ -86,15 +86,24 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
       String? statusPembayaran, Map<String, dynamic> data) {
     final lower = (statusPembayaran ?? '').toLowerCase().trim();
 
-    // Dibatalkan → langsung return
-    if (lower == 'dibatalkan' ||
-        lower == 'gagal' ||
-        lower == 'canceled' ||
-        lower == 'cancelled') {
+    // ── Cek field 'dibatalkan' dulu — paling reliable ────────────
+    // Field ini di-set true saat user cancel dan tidak akan pernah
+    // ditimpa oleh proses admin approve refund
+    if (data['dibatalkan'] == true) {
       return BookingStatus.dibatalkan;
     }
 
-    // Semua status lunas / aktif → cek waktu selesai
+    // ── Cek status string dibatalkan ─────────────────────────────
+    if (lower == 'dibatalkan' ||
+        lower == 'gagal' ||
+        lower == 'canceled' ||
+        lower == 'cancelled' ||
+        lower == 'refunded' || // admin approve refund set ini
+        lower == 'batal') {
+      return BookingStatus.dibatalkan;
+    }
+
+    // ── Semua status lunas/aktif → cek waktu selesai ─────────────
     final waktuSelesai = _parseWaktuSelesai(data);
 
     if (waktuSelesai != null) {
@@ -237,10 +246,10 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                 DateFormat('d MMMM yyyy', 'id_ID').format(tanggalBooking);
           }
 
-          // Status berbasis waktu
+          // Status berbasis waktu + cek field dibatalkan
           final status = _parseStatusWithTime(data['status_pembayaran'], data);
 
-          // Sudah review atau belum — baca field 'sudah_review' dari Firestore
+          // Sudah review atau belum
           final sudahReview = data['sudah_review'] == true;
 
           // Gambar dengan fallback
@@ -303,7 +312,6 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
 
             return GestureDetector(
               onTap: () {
-                // Navigasi ke Detail Booking jika card diklik
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -314,8 +322,6 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
               child: RiwayatBookingCard(
                 booking: item.model,
                 sudahReview: item.sudahReview,
-                // Pastikan teks tombol di dalam file riwayat_booking_card.dart diganti jadi "Reschedule"
-                // Fungsi di bawah ini memanggil pop up reschedule
                 onLihatDetail: () {
                   _showRescheduleInfoBottomSheet(context, item.model);
                 },
@@ -337,9 +343,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                         );
                       }
                     : null,
-                onPesanLagi: () {
-                  // Implementasi logika pesan lagi jika diperlukan
-                },
+                onPesanLagi: () {},
               ),
             );
           },
@@ -378,8 +382,9 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
     );
   }
 
-  // ── Bottom Sheet untuk menampilkan Syarat & Ketentuan Reschedule ────
-  void _showRescheduleInfoBottomSheet(BuildContext context, RiwayatBookingModel model) {
+  // ── Bottom Sheet Reschedule ──────────────────────────────────
+  void _showRescheduleInfoBottomSheet(
+      BuildContext context, RiwayatBookingModel model) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -396,7 +401,6 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Handle garis di atas modal
               Center(
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 12),
@@ -420,8 +424,6 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                 ),
               ),
               const SizedBox(height: 16),
-
-              // Detail Booking Card 
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
@@ -450,13 +452,17 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: model.imagePath.isNotEmpty && model.imagePath.startsWith('http')
-                              ? Image.network(model.imagePath, width: 70, height: 70, fit: BoxFit.cover)
+                          child: model.imagePath.isNotEmpty &&
+                                  model.imagePath.startsWith('http')
+                              ? Image.network(model.imagePath,
+                                  width: 70, height: 70, fit: BoxFit.cover)
                               : Container(
                                   width: 70,
                                   height: 70,
                                   color: const Color(0xFFE3EAF5),
-                                  child: const Icon(Icons.sports_soccer_rounded, color: Color(0xFF1B4E82)),
+                                  child: const Icon(
+                                      Icons.sports_soccer_rounded,
+                                      color: Color(0xFF1B4E82)),
                                 ),
                         ),
                         const SizedBox(width: 12),
@@ -466,18 +472,25 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                             children: [
                               Text(
                                 model.namaLapangan,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1A1A2E)),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Color(0xFF1A1A2E)),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 '${model.tanggal}\n${model.waktu}',
-                                style: const TextStyle(color: Color(0xFF666666), fontSize: 13),
+                                style: const TextStyle(
+                                    color: Color(0xFF666666), fontSize: 13),
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                NumberFormat.currency(locale: 'id_ID', symbol: 'IDR ', decimalDigits: 0)
+                                NumberFormat.currency(
+                                        locale: 'id_ID',
+                                        symbol: 'IDR ',
+                                        decimalDigits: 0)
                                     .format(model.totalPembayaran),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
@@ -492,7 +505,8 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                     ),
                     const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF0F5FF),
                         borderRadius: BorderRadius.circular(6),
@@ -510,8 +524,6 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                 ),
               ),
               const SizedBox(height: 16),
-
-              // Ketentuan Reschedule (Box Kuning)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 padding: const EdgeInsets.all(16),
@@ -525,24 +537,28 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.info_outline, color: Color(0xFFF57F17), size: 20),
+                        Icon(Icons.info_outline,
+                            color: Color(0xFFF57F17), size: 20),
                         SizedBox(width: 8),
                         Text(
                           'Ketentuan Reschedule',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFF57F17)),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFF57F17)),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _buildRuleText('Reschedule dapat dilakukan maksimal H-2 dari jadwal yang telah dipesan.'),
-                    _buildRuleText('Tidak ada biaya tambahan untuk melakukan reschedule.'),
-                    _buildRuleText('Silakan pilih jadwal dan lapangan baru pada halaman pencarian.'),
+                    _buildRuleText(
+                        'Reschedule dapat dilakukan maksimal H-2 dari jadwal yang telah dipesan.'),
+                    _buildRuleText(
+                        'Tidak ada biaya tambahan untuk melakukan reschedule.'),
+                    _buildRuleText(
+                        'Silakan pilih jadwal dan lapangan baru pada halaman pencarian.'),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-
-              // Tombol Aksi - Langsung Navigasi ke Pencarian Lapangan Screen
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: SizedBox(
@@ -550,9 +566,7 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                   height: 50,
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.pop(context); // Menutup bottom sheet
-
-                      // Langsung navigasi ke layar pencarian lapangan
+                      Navigator.pop(context);
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -562,10 +576,15 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF135B9D),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),
-                    child: const Text('Pilih Lapangan Baru', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                    child: const Text('Pilih Lapangan Baru',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15)),
                   ),
                 ),
               ),
@@ -583,12 +602,15 @@ class _RiwayatBookingScreenState extends State<RiwayatBookingScreen>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('• ', style: TextStyle(color: Color(0xFF666666), fontSize: 16, height: 1.0)),
+          const Text('• ',
+              style: TextStyle(
+                  color: Color(0xFF666666), fontSize: 16, height: 1.0)),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: Color(0xFF666666), fontSize: 13.5, height: 1.4),
+              style: const TextStyle(
+                  color: Color(0xFF666666), fontSize: 13.5, height: 1.4),
             ),
           ),
         ],

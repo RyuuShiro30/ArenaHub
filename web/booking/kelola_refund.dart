@@ -77,7 +77,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
   }
 
   // Calculate refund policy recommendation (50% or 100%)
-  // Returns Map with 'percent', 'amount', 'message', and 'isPenalty'
   Map<String, dynamic> _calculateRefundRecommendation({
     required dynamic tanggalMainRaw,
     required dynamic selectedTimesRaw,
@@ -88,31 +87,30 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
       return {
         'percent': 100,
         'amount': totalHarga,
-        'message': 'Data pengajuan tidak lengkap. Direkomendasikan refund penuh.',
+        'message':
+            'Data pengajuan tidak lengkap. Direkomendasikan refund penuh.',
         'isPenalty': false,
       };
     }
 
     try {
-      // Parse tanggal main
       String dateStr = tanggalMainRaw?.toString() ?? '';
       if (dateStr.isEmpty) {
         return {
           'percent': 100,
           'amount': totalHarga,
-          'message': 'Tanggal main tidak ditemukan. Direkomendasikan refund penuh.',
+          'message':
+              'Tanggal main tidak ditemukan. Direkomendasikan refund penuh.',
           'isPenalty': false,
         };
       }
 
       DateTime playDate = DateTime.parse(dateStr);
 
-      // Extract earliest hour from times
-      int startHour = 8; // Default
+      int startHour = 8;
       int startMinute = 0;
       String timesStr = selectedTimesRaw?.toString() ?? '';
       if (timesStr.isNotEmpty) {
-        // e.g. "08.00 - 09.00" or List of times
         final match = RegExp(r'(\d{2})[:\.](\d{2})').firstMatch(timesStr);
         if (match != null) {
           startHour = int.tryParse(match.group(1) ?? '8') ?? 8;
@@ -154,13 +152,13 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
       return {
         'percent': 100,
         'amount': totalHarga,
-        'message': 'Gagal menghitung kebijakan otomatis secara akurat. Direkomendasikan refund penuh.',
+        'message':
+            'Gagal menghitung kebijakan otomatis secara akurat. Direkomendasikan refund penuh.',
         'isPenalty': false,
       };
     }
   }
 
-  // Calculate overview statistics
   Map<String, dynamic> _calcStats(List<Map<String, dynamic>> all) {
     int pending = 0;
     int approved = 0;
@@ -168,12 +166,14 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
     double totalRefunded = 0;
 
     for (final r in all) {
-      final status = (r['status_refund'] ?? 'menunggu').toString().toLowerCase();
+      final status =
+          (r['status_refund'] ?? 'menunggu').toString().toLowerCase();
       if (status == 'menunggu') {
         pending++;
       } else if (status == 'disetujui' || status == 'selesai') {
         approved++;
-        totalRefunded += double.tryParse(r['refund_amount']?.toString() ?? '0') ?? 0;
+        totalRefunded +=
+            double.tryParse(r['refund_amount']?.toString() ?? '0') ?? 0;
       } else if (status == 'ditolak') {
         rejected++;
       }
@@ -200,13 +200,80 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
     );
   }
 
+  // ── BARU: Restore slot jadwal → 'tersedia' berdasarkan bookingId ──
+  Future<void> _restoreSlotJadwalFromBookingId(String bookingId) async {
+    try {
+      final bookingDoc =
+          await _firestore.collection('bookings').doc(bookingId).get();
+      if (!bookingDoc.exists) return;
+
+      final data = bookingDoc.data()!;
+      final lapanganId = (data['lapangan_id'] ?? '').toString();
+      final tanggalMainStr = (data['tanggal_main'] ?? '').toString();
+      final jamMain =
+          (data['jam_main'] ?? data['selected_times'] ?? '').toString();
+
+      if (lapanganId.isEmpty || tanggalMainStr.isEmpty || jamMain.isEmpty) {
+        return;
+      }
+
+      final tanggal = DateTime.tryParse(tanggalMainStr);
+      if (tanggal == null) return;
+
+      final startOfDay =
+          DateTime(tanggal.year, tanggal.month, tanggal.day, 0, 0, 0);
+      final endOfDay =
+          DateTime(tanggal.year, tanggal.month, tanggal.day, 23, 59, 59);
+
+      // Parse slots — pisah koma, normalize titik → titik dua
+      final rawSlots = jamMain
+          .split(',')
+          .map((s) => s.trim().replaceAll('.', ':'))
+          .where((s) => s.isNotEmpty)
+          .toSet();
+
+      if (rawSlots.isEmpty) return;
+
+      final snap = await _firestore
+          .collection('jadwal')
+          .where('lapangan_id', isEqualTo: lapanganId)
+          .where('tanggal',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+          .where('tanggal', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+          .get();
+
+      if (snap.docs.isEmpty) return;
+
+      final batch = _firestore.batch();
+      int updateCount = 0;
+
+      for (final doc in snap.docs) {
+        final docData = doc.data();
+        final waktu = (docData['waktu_operasional'] as String? ?? '')
+            .trim()
+            .replaceAll('.', ':');
+
+        // Hanya restore slot yang statusnya 'dipesan'
+        if (rawSlots.contains(waktu) && docData['status'] == 'dipesan') {
+          batch.update(doc.reference, {'status': 'tersedia'});
+          updateCount++;
+        }
+      }
+
+      if (updateCount > 0) await batch.commit();
+      debugPrint('Berhasil restore $updateCount slot jadwal → tersedia');
+    } catch (e) {
+      debugPrint('_restoreSlotJadwalFromBookingId error: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg, // Menambahkan warna background dari variabel yang ada
+      backgroundColor: _bg,
       body: Row(
         children: [
-          const AdminSidebar(currentIndex: 2), // PANGGIL SIDEBAR, INDEX 2 UNTUK REFUND
+          const AdminSidebar(currentIndex: 2),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _firestore
@@ -216,27 +283,33 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
               builder: (ctx, snap) {
                 final allRequests = snap.hasData
                     ? snap.data!.docs
-                        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+                        .map((d) =>
+                            {'id': d.id, ...d.data() as Map<String, dynamic>})
                         .toList()
                     : <Map<String, dynamic>>[];
 
-                // Filter by current tab
                 final tabFiltered = allRequests.where((r) {
-                  final s = (r['status_refund'] ?? 'menunggu').toString().toLowerCase();
+                  final s = (r['status_refund'] ?? 'menunggu')
+                      .toString()
+                      .toLowerCase();
                   if (_currentTab == 'menunggu') return s == 'menunggu';
-                  if (_currentTab == 'disetujui') return s == 'disetujui' || s == 'selesai';
+                  if (_currentTab == 'disetujui')
+                    return s == 'disetujui' || s == 'selesai';
                   if (_currentTab == 'ditolak') return s == 'ditolak';
                   return true;
                 }).toList();
 
-                // Search filter
                 final filtered = _search.isEmpty
                     ? tabFiltered
                     : tabFiltered.where((r) {
-                        final email = (r['user_email'] ?? '').toString().toLowerCase();
-                        final name = (r['nama_rekening'] ?? '').toString().toLowerCase();
-                        final lap = (r['nama_lapangan'] ?? '').toString().toLowerCase();
-                        final orderId = (r['order_id'] ?? '').toString().toLowerCase();
+                        final email =
+                            (r['user_email'] ?? '').toString().toLowerCase();
+                        final name =
+                            (r['nama_rekening'] ?? '').toString().toLowerCase();
+                        final lap =
+                            (r['nama_lapangan'] ?? '').toString().toLowerCase();
+                        final orderId =
+                            (r['order_id'] ?? '').toString().toLowerCase();
                         final q = _search.toLowerCase();
                         return email.contains(q) ||
                             name.contains(q) ||
@@ -310,7 +383,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
     );
   }
 
-  // Top bar
   Widget _buildTopBar() {
     return Container(
       height: 60,
@@ -328,7 +400,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
     );
   }
 
-  // Stat card
   Widget _statCard({
     required IconData icon,
     required Color iconColor,
@@ -378,7 +449,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
     );
   }
 
-  // Main list & table area
   Widget _buildTable(List<Map<String, dynamic>> list, ConnectionState state) {
     return Container(
       decoration: BoxDecoration(
@@ -388,7 +458,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
       ),
       child: Column(
         children: [
-          // Filter Tabs (Menunggu, Disetujui, Ditolak)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             decoration: const BoxDecoration(
@@ -402,7 +471,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                 const SizedBox(width: 8),
                 _tabButton('ditolak', 'Ditolak'),
                 const Spacer(),
-                // Search box
                 Container(
                   width: 260,
                   height: 38,
@@ -437,7 +505,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                           },
                           child: const Padding(
                             padding: EdgeInsets.only(right: 10),
-                            child: Icon(Icons.close_rounded, size: 16, color: _muted),
+                            child: Icon(Icons.close_rounded,
+                                size: 16, color: _muted),
                           ),
                         ),
                     ],
@@ -459,7 +528,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                 children: [
                   const Icon(Icons.inbox_outlined, size: 48, color: _muted),
                   const SizedBox(height: 12),
-                  Text('Tidak ada data permohonan refund', style: _t(size: 14, color: _muted)),
+                  Text('Tidak ada data permohonan refund',
+                      style: _t(size: 14, color: _muted)),
                 ],
               ),
             )
@@ -476,7 +546,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
             ),
             child: Row(
               children: [
-                Text('Menampilkan ${list.length} entri', style: _t(size: 12, color: _muted)),
+                Text('Menampilkan ${list.length} entri',
+                    style: _t(size: 12, color: _muted)),
                 const Spacer(),
               ],
             ),
@@ -545,7 +616,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
       flex: flex,
       child: Text(
         label,
-        style: _t(size: 11, weight: FontWeight.w700, color: _muted, spacing: 0.4),
+        style:
+            _t(size: 11, weight: FontWeight.w700, color: _muted, spacing: 0.4),
       ),
     );
   }
@@ -577,7 +649,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           child: Row(
             children: [
-              // User & Rekening Info
               Expanded(
                 flex: 3,
                 child: Row(
@@ -592,7 +663,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                       child: Center(
                         child: Text(
                           _initials(user),
-                          style: _t(size: 12, weight: FontWeight.w700, color: sc),
+                          style:
+                              _t(size: 12, weight: FontWeight.w700, color: sc),
                         ),
                       ),
                     ),
@@ -601,18 +673,20 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(user, style: _t(size: 13, weight: FontWeight.w600)),
+                          Text(user,
+                              style: _t(size: 13, weight: FontWeight.w600)),
                           Text(email, style: _t(size: 11, color: _muted)),
                           if ((r['user_phone'] ?? '').toString().isNotEmpty)
-                            Text(r['user_phone'].toString(), style: _t(size: 11, color: _muted)),
-                          Text('$bank • $norek', style: _t(size: 11, color: _blue)),
+                            Text(r['user_phone'].toString(),
+                                style: _t(size: 11, color: _muted)),
+                          Text('$bank • $norek',
+                              style: _t(size: 11, color: _blue)),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-              // Field & Order ID Info
               Expanded(
                 flex: 3,
                 child: Column(
@@ -626,7 +700,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                   ],
                 ),
               ),
-              // Time
               Expanded(
                 flex: 2,
                 child: Text(
@@ -636,7 +709,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // Total
               Expanded(
                 flex: 2,
                 child: Text(
@@ -646,13 +718,13 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // Status Badge
               Expanded(
                 flex: 2,
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: sc.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
@@ -663,19 +735,20 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                         Container(
                           width: 6,
                           height: 6,
-                          decoration: BoxDecoration(color: sc, shape: BoxShape.circle),
+                          decoration:
+                              BoxDecoration(color: sc, shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 5),
                         Text(
                           statusLabel,
-                          style: _t(size: 11, weight: FontWeight.w700, color: sc),
+                          style:
+                              _t(size: 11, weight: FontWeight.w700, color: sc),
                         ),
                       ],
                     ),
                   ),
                 ),
               ),
-              // Actions
               Expanded(
                 flex: 2,
                 child: Row(
@@ -684,14 +757,19 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                     ElevatedButton.icon(
                       onPressed: () => _showDetail(r),
                       icon: const Icon(Icons.visibility_outlined, size: 14),
-                      label: Text('Detail', style: _t(size: 12, weight: FontWeight.w600, color: Colors.white)),
+                      label: Text('Detail',
+                          style: _t(
+                              size: 12,
+                              weight: FontWeight.w600,
+                              color: Colors.white)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _blue,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                       ),
                     ),
                   ],
@@ -705,7 +783,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
     );
   }
 
-  // Action: Show Detail Dialog
   void _showDetail(Map<String, dynamic> r) {
     final bookingId = r['booking_id'] ?? '';
 
@@ -713,23 +790,28 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
       context: context,
       builder: (context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 550, maxHeight: 680),
             child: FutureBuilder<DocumentSnapshot>(
               future: _firestore.collection('bookings').doc(bookingId).get(),
               builder: (ctx, bookingSnap) {
-                final Map<String, dynamic> bData = bookingSnap.hasData && bookingSnap.data!.exists
-                    ? bookingSnap.data!.data() as Map<String, dynamic>
-                    : {};
+                final Map<String, dynamic> bData =
+                    bookingSnap.hasData && bookingSnap.data!.exists
+                        ? bookingSnap.data!.data() as Map<String, dynamic>
+                        : {};
 
-                final double totalHarga = double.tryParse(r['total_harga']?.toString() ?? '0') ?? 0;
+                final double totalHarga =
+                    double.tryParse(r['total_harga']?.toString() ?? '0') ?? 0;
                 final Timestamp? createdAt = r['created_at'] as Timestamp?;
-                final tanggalMain = bData['tanggal_main'] ?? r['tanggal_main'] ?? '';
-                final selectedTimes = bData['selected_times'] ?? bData['jam_main'] ?? '';
-                final String userPhone = r['user_phone'] ?? bData['phone'] ?? '';
+                final tanggalMain =
+                    bData['tanggal_main'] ?? r['tanggal_main'] ?? '';
+                final selectedTimes =
+                    bData['selected_times'] ?? bData['jam_main'] ?? '';
+                final String userPhone =
+                    r['user_phone'] ?? bData['phone'] ?? '';
 
-                // Calculate recommendation
                 final rec = _calculateRefundRecommendation(
                   tanggalMainRaw: tanggalMain,
                   selectedTimesRaw: selectedTimes,
@@ -737,7 +819,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                   totalHarga: totalHarga,
                 );
 
-                final status = (r['status_refund'] ?? 'menunggu').toString().toLowerCase();
+                final status =
+                    (r['status_refund'] ?? 'menunggu').toString().toLowerCase();
 
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(28),
@@ -747,7 +830,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                     children: [
                       Row(
                         children: [
-                          Text('Detail Pengajuan Refund', style: _t(size: 18, weight: FontWeight.w700)),
+                          Text('Detail Pengajuan Refund',
+                              style: _t(size: 18, weight: FontWeight.w700)),
                           const Spacer(),
                           IconButton(
                             icon: const Icon(Icons.close_rounded),
@@ -757,7 +841,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // User section
                       _buildDialogSectionHeader('Informasi Pelanggan'),
                       _detailRow('Nama Pemohon', r['nama_rekening'] ?? '-'),
                       _detailRow('Email Akun', r['user_email'] ?? '-'),
@@ -767,31 +850,37 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
 
                       const Divider(height: 20),
 
-                      // Booking Details
                       _buildDialogSectionHeader('Detail Lapangan & Jadwal'),
                       _detailRow('Nama Lapangan', r['nama_lapangan'] ?? '-'),
-                      _detailRow('Tanggal Main', _dateTime(tanggalMain).split(',').first),
-                      _detailRow('Slot Jam Main', selectedTimes.isNotEmpty ? selectedTimes.toString() : '-'),
+                      _detailRow('Tanggal Main',
+                          _dateTime(tanggalMain).split(',').first),
+                      _detailRow(
+                          'Slot Jam Main',
+                          selectedTimes.isNotEmpty
+                              ? selectedTimes.toString()
+                              : '-'),
                       _detailRow('Waktu Pengajuan', _dateTime(createdAt)),
 
                       const Divider(height: 20),
 
-                      // Bank Account Details
                       _buildDialogSectionHeader('Rekening Pengembalian Dana'),
                       _rekeningRow('Bank Tujuan', r['nama_bank'] ?? '-'),
                       _rekeningRow('Nomor Rekening', r['no_rekening'] ?? '-'),
-                      _rekeningRow('Atas Nama (Rek)', r['nama_rekening'] ?? '-'),
-                      _detailRow('Alasan Pembatalan', r['alasan_cancel'] ?? '-', isItalic: true),
+                      _rekeningRow(
+                          'Atas Nama (Rek)', r['nama_rekening'] ?? '-'),
+                      _detailRow('Alasan Pembatalan', r['alasan_cancel'] ?? '-',
+                          isItalic: true),
 
                       const Divider(height: 20),
 
-                      // Policy recommendation (Only show if pending)
                       if (status == 'menunggu') ...[
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: rec['isPenalty'] ? _orange.withOpacity(0.1) : _green.withOpacity(0.1),
+                            color: rec['isPenalty']
+                                ? _orange.withOpacity(0.1)
+                                : _green.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: rec['isPenalty']
@@ -813,11 +902,14 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    rec['isPenalty'] ? 'Kebijakan: Potongan 50%' : 'Kebijakan: Refund Penuh 100%',
+                                    rec['isPenalty']
+                                        ? 'Kebijakan: Potongan 50%'
+                                        : 'Kebijakan: Refund Penuh 100%',
                                     style: _t(
                                       size: 13,
                                       weight: FontWeight.w700,
-                                      color: rec['isPenalty'] ? _orange : _green,
+                                      color:
+                                          rec['isPenalty'] ? _orange : _green,
                                     ),
                                   ),
                                 ],
@@ -834,26 +926,35 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                               ),
                               const SizedBox(height: 10),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('Total Pembayaran Asli:', style: _t(size: 12, color: _muted)),
-                                  Text(_rp(totalHarga), style: _t(size: 12, weight: FontWeight.w600)),
+                                  Text('Total Pembayaran Asli:',
+                                      style: _t(size: 12, color: _muted)),
+                                  Text(_rp(totalHarga),
+                                      style: _t(
+                                          size: 12, weight: FontWeight.w600)),
                                 ],
                               ),
                               const SizedBox(height: 2),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     'Rekomendasi Nominal Refund:',
-                                    style: _t(size: 13, weight: FontWeight.w700, color: _text),
+                                    style: _t(
+                                        size: 13,
+                                        weight: FontWeight.w700,
+                                        color: _text),
                                   ),
                                   Text(
                                     _rp(rec['amount']),
                                     style: _t(
                                       size: 14,
                                       weight: FontWeight.w800,
-                                      color: rec['isPenalty'] ? _orange : _green,
+                                      color:
+                                          rec['isPenalty'] ? _orange : _green,
                                     ),
                                   ),
                                 ],
@@ -865,29 +966,43 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                       ] else ...[
                         _buildDialogSectionHeader('Status Penyelesaian'),
                         if (status == 'disetujui' || status == 'selesai') ...[
-                          _detailRow('Status Selesai', 'Disetujui & Uang Dikembalikan', color: _green, isBold: true),
-                          _detailRow('Jumlah yang Direfund', _rp(r['refund_amount']), color: _green, isBold: true),
-                          _detailRow('Diproses Pada', _dateTime(r['processed_at'])),
+                          _detailRow(
+                              'Status Selesai', 'Disetujui & Uang Dikembalikan',
+                              color: _green, isBold: true),
+                          _detailRow(
+                              'Jumlah yang Direfund', _rp(r['refund_amount']),
+                              color: _green, isBold: true),
+                          _detailRow(
+                              'Diproses Pada', _dateTime(r['processed_at'])),
                         ] else if (status == 'ditolak') ...[
-                          _detailRow('Status Selesai', 'Pengajuan Ditolak', color: _red, isBold: true),
-                          _detailRow('Alasan Penolakan', r['alasan_tolak'] ?? '-', color: _red),
-                          _detailRow('Diproses Pada', _dateTime(r['processed_at'])),
+                          _detailRow('Status Selesai', 'Pengajuan Ditolak',
+                              color: _red, isBold: true),
+                          _detailRow(
+                              'Alasan Penolakan', r['alasan_tolak'] ?? '-',
+                              color: _red),
+                          _detailRow(
+                              'Diproses Pada', _dateTime(r['processed_at'])),
                         ],
                         const SizedBox(height: 20),
                       ],
 
-                      // Actions buttons
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           OutlinedButton(
                             onPressed: () => Navigator.pop(context),
                             style: OutlinedButton.styleFrom(
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
                               side: const BorderSide(color: _border),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 14),
                             ),
-                            child: Text('Tutup', style: _t(size: 13, weight: FontWeight.w600, color: _muted)),
+                            child: Text('Tutup',
+                                style: _t(
+                                    size: 13,
+                                    weight: FontWeight.w600,
+                                    color: _muted)),
                           ),
                           if (status == 'menunggu') ...[
                             const SizedBox(width: 8),
@@ -900,10 +1015,16 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                                 backgroundColor: _red.withOpacity(0.1),
                                 foregroundColor: _red,
                                 elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 14),
                               ),
-                              child: Text('Tolak Refund', style: _t(size: 13, weight: FontWeight.w600, color: _red)),
+                              child: Text('Tolak Refund',
+                                  style: _t(
+                                      size: 13,
+                                      weight: FontWeight.w600,
+                                      color: _red)),
                             ),
                             const SizedBox(width: 8),
                             ElevatedButton(
@@ -914,12 +1035,17 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: _green,
                                 elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 18, vertical: 14),
                               ),
                               child: Text(
                                 'Setujui & Transfer',
-                                style: _t(size: 13, weight: FontWeight.w600, color: Colors.white),
+                                style: _t(
+                                    size: 13,
+                                    weight: FontWeight.w600,
+                                    color: Colors.white),
                               ),
                             ),
                           ],
@@ -941,7 +1067,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
       padding: const EdgeInsets.only(bottom: 10, top: 4),
       child: Text(
         title.toUpperCase(),
-        style: _t(size: 11, weight: FontWeight.w700, color: _muted, spacing: 0.5),
+        style:
+            _t(size: 11, weight: FontWeight.w700, color: _muted, spacing: 0.5),
       ),
     );
   }
@@ -969,7 +1096,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                 size: 13,
                 weight: isBold ? FontWeight.w700 : FontWeight.w500,
                 color: color ?? _text,
-              ).copyWith(fontStyle: isItalic ? FontStyle.italic : FontStyle.normal),
+              ).copyWith(
+                  fontStyle: isItalic ? FontStyle.italic : FontStyle.normal),
             ),
           ),
         ],
@@ -1039,7 +1167,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 14, color: _green),
+                  icon: const Icon(Icons.chat_bubble_outline_rounded,
+                      size: 14, color: _green),
                   onPressed: () => _openWhatsApp(value),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -1070,7 +1199,6 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
     html.window.open(url, '_blank');
   }
 
-  // Action: Reject Refund Dialog
   void _rejectRefundDialog(Map<String, dynamic> r) {
     final TextEditingController alasanCtrl = TextEditingController();
 
@@ -1078,8 +1206,10 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Tolak Permohonan Refund', style: _t(size: 16, weight: FontWeight.w700)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Tolak Permohonan Refund',
+              style: _t(size: 16, weight: FontWeight.w700)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1094,7 +1224,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                 maxLines: 3,
                 style: _t(size: 13),
                 decoration: InputDecoration(
-                  hintText: 'Contoh: Nomor rekening tidak valid, mohon ajukan kembali...',
+                  hintText:
+                      'Contoh: Nomor rekening tidak valid, mohon ajukan kembali...',
                   hintStyle: _t(size: 13, color: _muted),
                   filled: true,
                   fillColor: _bg,
@@ -1129,7 +1260,10 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
 
                 navigator.pop();
                 try {
-                  await _firestore.collection('refund_requests').doc(r['id']).update({
+                  await _firestore
+                      .collection('refund_requests')
+                      .doc(r['id'])
+                      .update({
                     'status_refund': 'ditolak',
                     'alasan_tolak': alasan,
                     'processed_at': FieldValue.serverTimestamp(),
@@ -1148,12 +1282,14 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _red,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
               child: Text(
                 'Tolak Sekarang',
-                style: _t(size: 14, weight: FontWeight.w600, color: Colors.white),
+                style:
+                    _t(size: 14, weight: FontWeight.w600, color: Colors.white),
               ),
             ),
           ],
@@ -1162,7 +1298,7 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
     );
   }
 
-  // Action: Approve Refund Dialog
+  // ── DIPERBAIKI: Approve refund + restore slot jadwal ──
   void _approveRefundDialog(Map<String, dynamic> r, double suggestedAmount) {
     final TextEditingController nominalCtrl =
         TextEditingController(text: suggestedAmount.toInt().toString());
@@ -1171,8 +1307,10 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Setujui & Selesaikan Refund', style: _t(size: 16, weight: FontWeight.w700)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Setujui & Selesaikan Refund',
+              style: _t(size: 16, weight: FontWeight.w700)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1184,7 +1322,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: _blueBg, borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(
+                    color: _blueBg, borderRadius: BorderRadius.circular(10)),
                 child: Column(
                   children: [
                     _rekeningRow('Bank Tujuan', r['nama_bank'] ?? '-'),
@@ -1194,7 +1333,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Text('Jumlah Nominal Transfer (Rp)', style: _t(size: 13, weight: FontWeight.w600)),
+              Text('Jumlah Nominal Transfer (Rp)',
+                  style: _t(size: 13, weight: FontWeight.w600)),
               const SizedBox(height: 6),
               TextField(
                 controller: nominalCtrl,
@@ -1202,7 +1342,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                 style: _t(size: 14, weight: FontWeight.w700),
                 decoration: InputDecoration(
                   prefixText: 'Rp ',
-                  prefixStyle: _t(size: 14, weight: FontWeight.w700, color: _blue),
+                  prefixStyle:
+                      _t(size: 14, weight: FontWeight.w700, color: _blue),
                   filled: true,
                   fillColor: _bg,
                   border: OutlineInputBorder(
@@ -1226,7 +1367,8 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                 if (finalAmount <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Nominal transfer harus lebih besar dari 0'),
+                      content:
+                          Text('Nominal transfer harus lebih besar dari 0'),
                       backgroundColor: Colors.redAccent,
                     ),
                   );
@@ -1240,8 +1382,9 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                 try {
                   final batch = _firestore.batch();
 
-                  // 1. Update status refund ke disetujui
-                  final refundRef = _firestore.collection('refund_requests').doc(r['id']);
+                  // 1. Update status refund → disetujui
+                  final refundRef =
+                      _firestore.collection('refund_requests').doc(r['id']);
                   batch.update(refundRef, {
                     'status_refund': 'disetujui',
                     'refund_amount': finalAmount,
@@ -1251,17 +1394,26 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
                   // 2. Update status pembayaran di bookings terkait
                   final bookingId = r['booking_id'] ?? '';
                   if (bookingId.isNotEmpty) {
-                    final bookingRef = _firestore.collection('bookings').doc(bookingId);
+                    final bookingRef =
+                        _firestore.collection('bookings').doc(bookingId);
                     batch.update(bookingRef, {
-                      'status_pembayaran': 'refunded',
+                      'refund_status': 'refunded',
+                      'refund_amount': finalAmount,
+                      'refund_processed_at': FieldValue.serverTimestamp(),
                     });
                   }
 
                   await batch.commit();
 
+                  // 3. BARU: Restore slot jadwal → tersedia
+                  if (bookingId.isNotEmpty) {
+                    await _restoreSlotJadwalFromBookingId(bookingId);
+                  }
+
                   messenger.showSnackBar(
                     const SnackBar(
-                      content: Text('Refund disetujui dan status berhasil diperbarui'),
+                      content: Text(
+                          'Refund disetujui, jadwal dikembalikan, dan status berhasil diperbarui'),
                       backgroundColor: _green,
                     ),
                   );
@@ -1273,12 +1425,14 @@ class _KelolaRefundScreenState extends State<KelolaRefundScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _green,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
               child: Text(
                 'Setujui & Selesai',
-                style: _t(size: 14, weight: FontWeight.w600, color: Colors.white),
+                style:
+                    _t(size: 14, weight: FontWeight.w600, color: Colors.white),
               ),
             ),
           ],
